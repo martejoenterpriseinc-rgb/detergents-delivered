@@ -33,6 +33,8 @@ Roles:
 
 Layouts are not enough for mutations. Every write API must call `requireApiRole` (or successor).
 
+The website builder (`/admin/website`, `/api/admin/site/*`) is ADMIN / SUPER_ADMIN only. INVENTORY and CPA can use the admin shell but cannot publish storefront sections.
+
 ## Secrets
 
 - Real secrets never belong in git. `.env*` is ignored except `.env.example`

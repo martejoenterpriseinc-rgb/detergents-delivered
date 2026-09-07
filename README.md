@@ -14,7 +14,7 @@ Shared business rules live in `lib/domain/`. UI route groups do not own money, t
 
 ## Status
 
-Phase 2 catalog, purchasing, receiving, and inventory are implemented. The public storefront is a **complete mockup** (shop, cart, demo checkout, account shell, legal pages) with honest “demo / not live” labeling.
+Phase 2 catalog, purchasing, receiving, inventory, and a section-based website builder are implemented. The public storefront is a **complete mockup** (shop, cart, demo checkout, account shell, legal pages) with honest “demo / not live” labeling. Home copy is published from Admin → Website → Builder (click-to-edit sections, not a drag-and-drop designer).
 
 Checkout, Stripe charges, live delivery routing, subscriptions, and QuickBooks are **not** complete. Do not treat the mock checkout as a paid order.
 
@@ -157,7 +157,7 @@ Google OAuth is optional. Credentials sign-in works without `GOOGLE_CLIENT_ID` /
 
 | Path                                                          | Mode                                   | Access                             |
 | ------------------------------------------------------------- | -------------------------------------- | ---------------------------------- |
-| `/`                                                           | Storefront home                        | Public                             |
+| `/`                                                           | Storefront home (published sections)   | Public                             |
 | `/shop`                                                       | Live catalog from the same DB          | Public                             |
 | `/cart`                                                       | Browser cart                           | Public                             |
 | `/checkout`                                                   | Demo checkout (no charges)             | Public                             |
@@ -167,6 +167,7 @@ Google OAuth is optional. Credentials sign-in works without `GOOGLE_CLIENT_ID` /
 | `/sign-in` `/register`                                        | Credentials (+ Google when configured) | Public                             |
 | `/account/change-credentials`                                 | Forced email + password rotation       | Authenticated bootstrap users      |
 | `/account/*`                                                  | Household account shell                | Authenticated                      |
+| `/admin/website`                                              | Website builder                        | ADMIN, SUPER_ADMIN                 |
 | `/admin/*`                                                    | Operations shell                       | ADMIN, INVENTORY, CPA, SUPER_ADMIN |
 | `/driver/*`                                                   | Driver shell                           | DRIVER, ADMIN, SUPER_ADMIN         |
 | `/api/health`                                                 | Liveness                               | Public                             |

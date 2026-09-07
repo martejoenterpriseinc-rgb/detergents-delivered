@@ -68,6 +68,14 @@ Weekly windows, cutoff hours, and enabled Chicagoland county codes persist on `S
 
 `Promotion`, `Referral`, `ExpenseCategory`, `Expense`, `AuditLog`, `Setting`.
 
+### Website builder
+
+`SitePage` (slug, e.g. `home`) has many `SiteSection` rows. Each section stores type, title, body, badge, primary/secondary CTA, visibility, sort order, style variant, admin intent notes, and `updatedBy` / `updatedAt`.
+
+Enabled Chicagoland counties remain on `Setting` key `delivery.settings` (see Delivery above). The website builder reads that list; it does not keep a second county table.
+
+Publishing a page writes `AuditLog` action `site.page.publish`. This is a section CMS, not a visual page designer.
+
 ## Indexes and uniqueness
 
 - Unique: user email, role code, permission code, product/category slugs, variant SKU, optional UPC, order/PO/receipt/route numbers, payment `externalId` / `idempotencyKey`

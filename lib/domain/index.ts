@@ -7,3 +7,4 @@ export * from "./authz";
 export * from "./delivery-schedule";
 export * from "./credentials";
 export * from "./bootstrap-admin";
+export * from "./site-content";

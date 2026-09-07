@@ -7,9 +7,20 @@ import { PurchasingError } from "@/lib/services/purchasing";
 import { ReceivingError } from "@/lib/services/receiving";
 import { VendorError } from "@/lib/services/vendors";
 import { CredentialsError } from "@/lib/services/credentials";
+import { SiteContentError } from "@/lib/services/site-content";
 
 function statusForMessage(message: string) {
   if (message.includes("not found")) return 404;
+  if (
+    message.includes("must") ||
+    message.includes("invalid") ||
+    message.includes("unknown") ||
+    message.includes("duplicate") ||
+    message.includes("too many") ||
+    message.includes("at least")
+  ) {
+    return 400;
+  }
   return 409;
 }
 
@@ -25,7 +36,8 @@ export function serviceErrorResponse(error: unknown) {
     error instanceof ReceivingError ||
     error instanceof AdjustmentError ||
     error instanceof InventoryError ||
-    error instanceof MoneyError
+    error instanceof MoneyError ||
+    error instanceof SiteContentError
   ) {
     return Response.json(
       { error: error.message },

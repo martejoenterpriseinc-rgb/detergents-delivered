@@ -2,11 +2,11 @@
 
 ## Layers
 
-| Layer       | Tool                           | What belongs here                              |
-| ----------- | ------------------------------ | ---------------------------------------------- |
-| Unit        | Vitest                         | `lib/domain` money, inventory, authz — no I/O  |
-| Integration | Vitest + Postgres (CI service) | Receiving → balance update, oversell rejection |
-| E2E         | Playwright (Phase 3+)          | Checkout, reserve, receive, deliver            |
+| Layer       | Tool                           | What belongs here                                                              |
+| ----------- | ------------------------------ | ------------------------------------------------------------------------------ |
+| Unit        | Vitest                         | `lib/domain` money, inventory, authz — no I/O                                  |
+| Integration | Vitest + Postgres (CI service) | Receiving → ledger; website builder read/publish + audit                       |
+| E2E         | Playwright (Phase 3+)          | Checkout, reserve, receive, deliver                                            |
 
 Phase 2 requires unit tests for money, landed cost, inventory `applyTransaction`, reorder, and authorization, plus a Postgres integration test for receive → ledger. CI also runs lint, typecheck, `prisma validate`, migrate, and `next build`.
 
@@ -48,6 +48,7 @@ Authz:
 - force-change gate (`mustChangeCredentials` blocks `/admin` and staff APIs)
 - bootstrap seed decision (no production seed; auto-seed staging/dev when no admin)
 - credential-change validation (min 12, new email, reject temp password)
+- website builder is ADMIN / SUPER_ADMIN only (`website.write`)
 
 Integration: rotate bootstrap credentials (hash update, flag cleared); ensure bootstrap user is not reset after rotation.
 
@@ -56,6 +57,12 @@ Delivery schedule:
 - default Tue/Thu windows and McHenry / Kane / Cook enablement
 - `nextDeliverySlot` given config + now (skip today; honor cutoff)
 - ZIP checker respects enabled counties and never claims same-day
+
+Website builder:
+
+- default home copy is weekly scheduled delivery, Chicagoland, no same-day or name-brand marketing
+- section validation rejects unsafe hrefs and duplicate ids
+- publish persists sections, hides unpublished blocks from the storefront read, and writes `audit_log`
 
 ## Failure cases to keep adding
 

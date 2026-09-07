@@ -55,6 +55,7 @@ Later phases stay unchecked until implemented.
 - [x] `applyTransaction` + reorder recommendation domain functions
 - [x] Demo seed path: vendor → variants → PO → receive → publish → `/shop`
 - [x] Integration test: receive updates balances; oversell rejected
+- [x] Admin website builder (section-based click-to-edit + publish; storefront home reads published sections). This is **not** a drag-and-drop / Figma-level designer.
 - [ ] CSV import prototype (optional — not done)
 
 ## Phase 3 — Customers, cart, Stripe, tax

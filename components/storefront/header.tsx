@@ -32,7 +32,7 @@ export function StorefrontHeader({ signedIn }: { signedIn: boolean }) {
               Detergents Delivered
             </p>
             <p className="hidden text-xs text-teal-700/80 sm:block">
-              Household staples, to your door
+              Weekly scheduled delivery · Chicagoland
             </p>
           </div>
         </Link>

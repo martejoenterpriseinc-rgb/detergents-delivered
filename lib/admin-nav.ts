@@ -1,10 +1,12 @@
 import type { Route } from "next";
+import { hasRole, type RoleCode } from "@/lib/domain/authz";
 
 export type AdminNavItem = {
   href: Route;
   label: string;
   phase: number;
   ready?: boolean;
+  roles?: RoleCode[];
 };
 
 export const ADMIN_NAV: AdminNavItem[] = [
@@ -18,6 +20,13 @@ export const ADMIN_NAV: AdminNavItem[] = [
   { href: "/admin/purchase-orders", label: "Purchase Orders", phase: 2, ready: true },
   { href: "/admin/receiving", label: "Receiving", phase: 2, ready: true },
   { href: "/admin/vendors", label: "Vendors", phase: 2, ready: true },
+  {
+    href: "/admin/website",
+    label: "Website",
+    phase: 2,
+    ready: true,
+    roles: ["ADMIN", "SUPER_ADMIN"],
+  },
   { href: "/admin/payments", label: "Payments", phase: 3 },
   { href: "/admin/expenses", label: "Expenses", phase: 6 },
   { href: "/admin/mileage", label: "Mileage", phase: 6 },
@@ -28,3 +37,7 @@ export const ADMIN_NAV: AdminNavItem[] = [
   { href: "/admin/integrations", label: "Integrations", phase: 7 },
   { href: "/admin/settings", label: "Settings", phase: 1, ready: true },
 ];
+
+export function visibleAdminNav(roles: readonly string[]) {
+  return ADMIN_NAV.filter((item) => !item.roles || hasRole(roles, item.roles));
+}
