@@ -8,7 +8,15 @@ import { prisma } from "@/lib/prisma";
 import type { RoleCode } from "@/lib/domain/authz";
 
 const credentialsSchema = z.object({
-  email: z.string().email(),
+  // Accepts local/dev addresses such as admin@localhost; production users
+  // still register with normal emails.
+  email: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .min(3)
+    .max(320)
+    .refine((value) => /^[^\s@]+@[^\s@]+$/.test(value), "Invalid email"),
   password: z.string().min(1),
 });
 

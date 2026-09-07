@@ -40,7 +40,7 @@ npm install
 npm run db:generate
 npm run db:migrate
 # optional, development only:
-# SEED_ADMIN_EMAIL=you@localhost SEED_ADMIN_PASSWORD=... APP_ENV=development npm run db:seed
+# SEED_ADMIN_EMAIL=admin@example.com SEED_ADMIN_PASSWORD=... APP_ENV=development npm run db:seed
 npm run dev
 ```
 
