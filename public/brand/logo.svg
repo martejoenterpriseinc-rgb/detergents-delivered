@@ -1,18 +1,20 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 220" role="img" aria-labelledby="title desc">
   <title id="title">Detergents Delivered</title>
-  <desc id="desc">A detergent bottle and delivery path on a clean circular badge.</desc>
+  <desc id="desc">Official mark: a water drop fused with a map pin, plus the Detergents Delivered wordmark.</desc>
   <defs>
-    <linearGradient id="badge" x1="20" y1="8" x2="108" y2="120" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#ECFEFF"/>
-      <stop offset="1" stop-color="#CCFBF1"/>
+    <linearGradient id="pinFill" x1="100" y1="16" x2="100" y2="196" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#5DE6F6"/>
+      <stop offset="0.32" stop-color="#2E86F3"/>
+      <stop offset="0.68" stop-color="#15408C"/>
+      <stop offset="1" stop-color="#0A1F5C"/>
     </linearGradient>
+    <style>text{font-family:Inter,ui-sans-serif,system-ui,sans-serif;}</style>
   </defs>
-  <circle cx="64" cy="64" r="60" fill="url(#badge)" stroke="#0F766E" stroke-width="4"/>
-  <path d="M54 28h20c3 0 5 2 5 5v8H49v-8c0-3 2-5 5-5z" fill="#0F766E"/>
-  <rect x="58" y="22" width="12" height="8" rx="2" fill="#14B8A6"/>
-  <path d="M46 41h36c4 0 8 4 8 9v40c0 8-6 14-14 14H52c-8 0-14-6-14-14V50c0-5 4-9 8-9z" fill="#0D9488"/>
-  <path d="M48 50h32c2 0 4 2 4 4v16c-12 8-28 8-40 0V54c0-2 2-4 4-4z" fill="#99F6E4"/>
-  <path d="M64 58c6 8 6 16 0 22-6-6-6-14 0-22z" fill="#0F766E"/>
-  <path d="M22 92c12 0 16-6 26-6s14 6 26 6 16-6 26-6" fill="none" stroke="#F59E0B" stroke-width="4" stroke-linecap="round"/>
-  <path d="M98 80l10 6-10 6" fill="none" stroke="#F59E0B" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <ellipse cx="100" cy="208" rx="30" ry="6" fill="#9ED0FF" opacity="0.4"/>
+  <path d="M 100,16 C 108,24 144,56 150,92 C 155,122 138,150 100,196 C 62,150 45,122 50,92 C 56,56 92,24 100,16 Z" fill="url(#pinFill)"/>
+  <path d="M 100.00,54.80 L 102.83,65.17 L 113.20,68.00 L 102.83,70.83 L 100.00,81.20 L 97.17,70.83 L 86.80,68.00 L 97.17,65.17 Z" fill="#FFFFFF"/>
+  <path d="M 76,104 Q 100,118 124,104" fill="none" stroke="#FFFFFF" stroke-width="3.5" stroke-linecap="round"/>
+  <circle cx="100" cy="152" r="14.5" fill="#FFFFFF"/>
+  <text x="184" y="102" font-size="56" font-weight="700" fill="#0A1F5C">Detergents</text>
+  <text x="184" y="166" font-size="56" font-weight="700" font-style="italic" fill="#2B7DEF">Delivered</text>
 </svg>

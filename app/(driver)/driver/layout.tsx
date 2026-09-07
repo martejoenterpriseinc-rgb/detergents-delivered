@@ -12,11 +12,16 @@ export default async function DriverLayout({ children }: { children: ReactNode }
   return (
     <div className="mx-auto flex min-h-full w-full max-w-lg flex-col bg-teal-50">
       <header className="flex items-center justify-between bg-teal-800 px-4 py-4 text-white">
-        <div className="flex items-center gap-3">
-          <BrandLogo size={36} />
-          <div>
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="rounded-lg bg-white px-2 py-1">
+            <BrandLogo
+              size={28}
+              className="h-7 max-w-[10.5rem] sm:h-8 sm:max-w-[12rem]"
+            />
+          </div>
+          <div className="min-w-0">
             <p className="text-sm font-semibold">Driver</p>
-            <p className="text-xs text-teal-100">{session.user.email}</p>
+            <p className="truncate text-xs text-teal-100">{session.user.email}</p>
           </div>
         </div>
         <Link href="/" className="text-xs font-medium text-teal-100">

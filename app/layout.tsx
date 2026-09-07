@@ -24,8 +24,8 @@ export const metadata: Metadata = {
   applicationName: "Detergents Delivered",
   manifest: "/manifest.webmanifest",
   icons: {
-    icon: "/brand/logo.svg",
-    apple: "/brand/logo.svg",
+    icon: "/brand/logo.png",
+    apple: "/brand/logo.png",
   },
 };
 
@@ -41,7 +41,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full bg-background font-sans text-foreground">
+      <body className="bg-background text-foreground min-h-full font-sans">
         <ServiceWorkerRegister />
         {children}
       </body>

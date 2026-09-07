@@ -12,7 +12,7 @@ Later phases stay unchecked until implemented.
 - [x] Development / staging / production documented; production protected; development blocked from production-looking DBs
 - [x] Dockerfile + docker-compose (app + Postgres)
 - [x] PWA manifest + minimal service worker hook
-- [x] Editable SVG logo at `public/brand/logo.svg`
+- [x] Official brand lockup at `public/brand/logo.png` (vector source `public/brand/logo.svg`)
 - [x] README and architecture / ops documentation
 - [x] Full core Prisma domain schema + initial migration
 - [x] Money stored as integer cents in schema and helpers
