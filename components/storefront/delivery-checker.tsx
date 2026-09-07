@@ -1,27 +1,43 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { checkDeliveryZip, DEMO_DELIVERY_ZIPS } from "@/lib/delivery-area";
+import { checkDeliveryZip, EXAMPLE_DELIVERY_ZIP } from "@/lib/delivery-area";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
+export type DeliveryCheckerConfig = {
+  enabledCountyCodes: readonly string[];
+  nextWindowLabel?: string | null;
+  exampleZip?: string;
+  exampleZips?: readonly string[];
+};
+
 export function DeliveryChecker({
   defaultZip = "",
   compact = false,
   onResult,
+  config,
 }: {
   defaultZip?: string;
   compact?: boolean;
   onResult?: (ok: boolean, zip: string) => void;
+  config?: DeliveryCheckerConfig;
 }) {
   const [zip, setZip] = useState(defaultZip);
   const [submitted, setSubmitted] = useState(defaultZip);
+  const enabledCountyCodes = config?.enabledCountyCodes;
+  const nextWindowLabel = config?.nextWindowLabel;
   const result = useMemo(
-    () => (submitted ? checkDeliveryZip(submitted) : null),
-    [submitted],
+    () =>
+      submitted
+        ? checkDeliveryZip(submitted, { enabledCountyCodes, nextWindowLabel })
+        : null,
+    [submitted, enabledCountyCodes, nextWindowLabel],
   );
+  const exampleZip = config?.exampleZip ?? EXAMPLE_DELIVERY_ZIP;
+  const previewZips = (config?.exampleZips ?? []).slice(0, 4);
 
   return (
     <form
@@ -29,7 +45,7 @@ export function DeliveryChecker({
       onSubmit={(event) => {
         event.preventDefault();
         setSubmitted(zip);
-        const next = checkDeliveryZip(zip);
+        const next = checkDeliveryZip(zip, { enabledCountyCodes, nextWindowLabel });
         onResult?.(next.ok, next.zip);
       }}
     >
@@ -43,7 +59,7 @@ export function DeliveryChecker({
             name="zip"
             inputMode="numeric"
             autoComplete="postal-code"
-            placeholder="50309"
+            placeholder={exampleZip}
             value={zip}
             onChange={(event) => setZip(event.target.value)}
           />
@@ -63,8 +79,11 @@ export function DeliveryChecker({
         </p>
       ) : (
         <p className="text-xs text-teal-700">
-          Demo ZIPs include {DEMO_DELIVERY_ZIPS.slice(0, 4).join(", ")}, and more on the
-          delivery area page.
+          Weekly delivery on scheduled route days
+          {config?.nextWindowLabel ? ` — next window ${config.nextWindowLabel}` : ""}.
+          {previewZips.length > 0
+            ? ` Listed ZIPs include ${previewZips.join(", ")}.`
+            : ` Try ${exampleZip}.`}
         </p>
       )}
     </form>

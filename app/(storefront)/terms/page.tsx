@@ -1,6 +1,9 @@
 import { LegalPage } from "@/components/storefront/legal-page";
+import { getPublicDeliveryInfo } from "@/lib/services/delivery-settings";
 
-export default function TermsPage() {
+export default async function TermsPage() {
+  const delivery = await getPublicDeliveryInfo();
+
   return (
     <LegalPage
       title="Terms of use"
@@ -26,10 +29,10 @@ export default function TermsPage() {
         <h2 className="text-lg font-semibold text-teal-950">Orders and delivery</h2>
         <p>
           When payments go live, an order is an offer to buy the listed SKUs at the prices
-          shown at checkout. We deliver only to addresses inside an active delivery zone
-          and may decline or reschedule a stop when a route is full. Until then, “Place
-          order (demo)” creates a browser-only confirmation and does not form a paid
-          contract.
+          shown at checkout. {delivery.serviceAreaSummary} {delivery.weeklySummary}{" "}
+          {delivery.noSameDaySummary} We may decline or reschedule a stop when a route is
+          full. Until then, “Place order (demo)” creates a browser-only confirmation and
+          does not form a paid contract.
         </p>
       </section>
       <section>

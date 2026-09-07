@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card";
 import { DeliveryChecker } from "@/components/storefront/delivery-checker";
 import { ProductCard } from "@/components/storefront/product-card";
 import { listFeaturedShopProducts } from "@/lib/catalog-public";
+import { getPublicDeliveryInfo } from "@/lib/services/delivery-settings";
 
 export const dynamic = "force-dynamic";
 
@@ -21,28 +22,32 @@ const VALUE_PROPS = [
   },
   {
     title: "Order once or set a rhythm",
-    body: "Grab what you need today. Subscriptions will refill the same SKUs on your cadence.",
+    body: "Order when the cabinet is running low. Subscriptions will refill the same SKUs on your cadence.",
     icon: Package,
   },
 ];
 
-const STEPS = [
-  {
-    title: "Check your ZIP",
-    body: "We deliver a defined metro area. Confirm your porch is on a route.",
-  },
-  {
-    title: "Fill the cart",
-    body: "Pick sizes and scents from the live catalog — the same stock we receive in the warehouse.",
-  },
-  {
-    title: "We bring it by",
-    body: "A local driver drops the order at your door. No warehouse-club parking lot.",
-  },
-];
-
 export default async function HomePage() {
-  const featured = await listFeaturedShopProducts(4);
+  const [featured, delivery] = await Promise.all([
+    listFeaturedShopProducts(4),
+    getPublicDeliveryInfo(),
+  ]);
+  const steps = [
+    {
+      title: "Check your ZIP",
+      body: delivery.serviceAreaSummary,
+    },
+    {
+      title: "Fill the cart",
+      body: "Pick sizes, scents, and types from the live catalog — the same stock we receive in the warehouse.",
+    },
+    {
+      title: "We bring it by",
+      body: `${delivery.weeklySummary} ${delivery.noSameDaySummary}${
+        delivery.nextWindowLabel ? ` Next window: ${delivery.nextWindowLabel}.` : ""
+      }`,
+    },
+  ];
 
   return (
     <div>
@@ -58,7 +63,8 @@ export default async function HomePage() {
             <p className="max-w-xl text-lg leading-8 text-teal-900/80">
               Detergents Delivered is a neighborhood store for liquids, powders, pods,
               dish, paper, and cleaning consumables. Skip the bulk-aisle haul. We pack the
-              heavy stuff and drop it on your porch.
+              heavy stuff and drop it on your porch. {delivery.weeklySummary}{" "}
+              {delivery.noSameDaySummary}
             </p>
             <div className="flex flex-wrap gap-3">
               <Link href="/shop">
@@ -76,10 +82,21 @@ export default async function HomePage() {
               <MapPinned className="h-6 w-6 text-teal-700" aria-hidden />
               <div>
                 <p className="font-semibold text-teal-950">Do we reach your porch?</p>
-                <p className="text-sm text-teal-800">Try a demo ZIP such as 50309.</p>
+                <p className="text-sm text-teal-800">
+                  Currently serving select towns in {delivery.countyListLabel}. Try{" "}
+                  {delivery.exampleZip}.
+                </p>
               </div>
             </div>
-            <DeliveryChecker compact />
+            <DeliveryChecker
+              compact
+              config={{
+                enabledCountyCodes: delivery.enabledCountyCodes,
+                nextWindowLabel: delivery.nextWindowLabel,
+                exampleZip: delivery.exampleZip,
+                exampleZips: delivery.exampleZips,
+              }}
+            />
           </Card>
         </div>
       </section>
@@ -132,7 +149,7 @@ export default async function HomePage() {
         <div className="mx-auto w-full max-w-6xl px-4 py-12">
           <h2 className="text-2xl font-semibold">How it works</h2>
           <div className="mt-6 grid gap-4 md:grid-cols-3">
-            {STEPS.map((step, index) => (
+            {steps.map((step, index) => (
               <div key={step.title} className="rounded-3xl bg-teal-900/60 p-5">
                 <p className="text-xs font-semibold tracking-[0.2em] text-teal-300 uppercase">
                   Step {index + 1}

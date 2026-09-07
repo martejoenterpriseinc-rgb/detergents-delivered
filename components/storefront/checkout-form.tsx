@@ -7,7 +7,10 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DemoBanner } from "@/components/storefront/demo-banner";
-import { DeliveryChecker } from "@/components/storefront/delivery-checker";
+import {
+  DeliveryChecker,
+  type DeliveryCheckerConfig,
+} from "@/components/storefront/delivery-checker";
 import { useCart } from "@/components/storefront/cart-provider";
 import {
   createDemoOrderId,
@@ -15,10 +18,23 @@ import {
   demoOrderTotals,
   type DemoOrder,
 } from "@/lib/cart";
-import { checkDeliveryZip, zoneNameForZip } from "@/lib/delivery-area";
+import {
+  checkDeliveryZip,
+  EXAMPLE_DELIVERY_CITY,
+  EXAMPLE_DELIVERY_REGION,
+  EXAMPLE_DELIVERY_ZIP,
+  zoneNameForZip,
+} from "@/lib/delivery-area";
 import { formatCents } from "@/lib/domain/money";
 
-export function CheckoutForm() {
+export function CheckoutForm({
+  delivery,
+}: {
+  delivery: DeliveryCheckerConfig & {
+    weeklySummary: string;
+    serviceAreaSummary: string;
+  };
+}) {
   const router = useRouter();
   const { ready, lines, subtotalCents, clear } = useCart();
   const totals = useMemo(() => demoOrderTotals(subtotalCents), [subtotalCents]);
@@ -56,7 +72,10 @@ export function CheckoutForm() {
         const city = String(data.get("city") ?? "").trim();
         const region = String(data.get("region") ?? "").trim();
         const postalCode = String(data.get("postalCode") ?? "").trim();
-        const area = checkDeliveryZip(postalCode);
+        const area = checkDeliveryZip(postalCode, {
+          enabledCountyCodes: delivery.enabledCountyCodes,
+          nextWindowLabel: delivery.nextWindowLabel,
+        });
         if (!name || !email || !line1 || !city || !region) {
           setError("Please fill in name, email, and a complete delivery address.");
           return;
@@ -80,7 +99,9 @@ export function CheckoutForm() {
             region,
             postalCode: area.zip,
           },
-          zoneName: zoneNameForZip(area.zip) ?? area.zoneName,
+          zoneName:
+            zoneNameForZip(area.zip, delivery.enabledCountyCodes) ?? area.zoneName,
+          nextWindowLabel: delivery.nextWindowLabel ?? undefined,
           lines,
           totals,
           note: "Demo confirmation only. No payment was collected.",
@@ -99,7 +120,8 @@ export function CheckoutForm() {
       <div className="space-y-4">
         <DemoBanner>
           <strong>Demo checkout — payments not live.</strong> Place order creates a local
-          confirmation only. We will not charge a card or send this to QuickBooks.
+          confirmation only. We will not charge a card or send this to QuickBooks.{" "}
+          {delivery.weeklySummary} {delivery.serviceAreaSummary}
         </DemoBanner>
         <Card className="space-y-4">
           <h2 className="text-lg font-semibold text-teal-950">Delivery details</h2>
@@ -126,7 +148,13 @@ export function CheckoutForm() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="city">City</Label>
-              <Input id="city" name="city" autoComplete="address-level2" required />
+              <Input
+                id="city"
+                name="city"
+                autoComplete="address-level2"
+                defaultValue={EXAMPLE_DELIVERY_CITY}
+                required
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="region">State</Label>
@@ -134,7 +162,7 @@ export function CheckoutForm() {
                 id="region"
                 name="region"
                 autoComplete="address-level1"
-                defaultValue="IA"
+                defaultValue={EXAMPLE_DELIVERY_REGION}
                 required
               />
             </div>
@@ -144,12 +172,16 @@ export function CheckoutForm() {
                 id="postalCode"
                 name="postalCode"
                 autoComplete="postal-code"
-                defaultValue="50309"
+                defaultValue={delivery.exampleZip ?? EXAMPLE_DELIVERY_ZIP}
                 required
               />
             </div>
           </div>
-          <DeliveryChecker defaultZip="50309" compact />
+          <DeliveryChecker
+            defaultZip={delivery.exampleZip ?? EXAMPLE_DELIVERY_ZIP}
+            compact
+            config={delivery}
+          />
         </Card>
         {error ? (
           <p className="rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-900">

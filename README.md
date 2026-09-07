@@ -74,16 +74,17 @@ DEMO_MODE=true SEED_DEMO_CATALOG=true npm run dev
 
 Then open:
 
-| Page                                                                                                                 | What you should see                                             |
-| -------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| [http://localhost:3000](http://localhost:3000)                                                                       | Hero, value props, featured products, how-it-works, ZIP checker |
-| [http://localhost:3000/shop](http://localhost:3000/shop)                                                             | Multiple detergent / household products from Postgres           |
-| [http://localhost:3000/shop/fresh-breeze-liquid-detergent](http://localhost:3000/shop/fresh-breeze-liquid-detergent) | Variants, prices, add to cart                                   |
-| [http://localhost:3000/cart](http://localhost:3000/cart)                                                             | Browser cart (localStorage)                                     |
-| [http://localhost:3000/checkout](http://localhost:3000/checkout)                                                     | Demo checkout — try ZIP `50309`, then **Place order (demo)**    |
-| [http://localhost:3000/delivery-area](http://localhost:3000/delivery-area)                                           | Delivery-area checker and listed demo ZIPs                      |
-| [http://localhost:3000/faq](http://localhost:3000/faq)                                                               | Brand FAQ                                                       |
-| [http://localhost:3000/register](http://localhost:3000/register)                                                     | Create a household account                                      |
+| Page                                                                                                                 | What you should see                                                          |
+| -------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| [http://localhost:3000](http://localhost:3000)                                                                       | Hero, value props, featured products, how-it-works, ZIP checker              |
+| [http://localhost:3000/shop](http://localhost:3000/shop)                                                             | Multiple detergent / household products from Postgres                        |
+| [http://localhost:3000/shop/fresh-breeze-liquid-detergent](http://localhost:3000/shop/fresh-breeze-liquid-detergent) | Variants, prices, add to cart                                                |
+| [http://localhost:3000/cart](http://localhost:3000/cart)                                                             | Browser cart (localStorage)                                                  |
+| [http://localhost:3000/checkout](http://localhost:3000/checkout)                                                     | Demo checkout — try ZIP `60014`, then **Place order (demo)**                 |
+| [http://localhost:3000/delivery-area](http://localhost:3000/delivery-area)                                           | ZIP checker for currently enabled Chicagoland counties (weekly, no same-day) |
+| [http://localhost:3000/admin/settings](http://localhost:3000/admin/settings)                                         | Delivery settings: county toggles + weekly windows                           |
+| [http://localhost:3000/faq](http://localhost:3000/faq)                                                               | Brand FAQ                                                                    |
+| [http://localhost:3000/register](http://localhost:3000/register)                                                     | Create a household account                                                   |
 
 `DEMO_MODE=true` in non-production also seeds the catalog **on boot** (and on the first `/shop` request) if the shop is empty. Staging can use that instead of a manual seed. Production never auto-seeds.
 
@@ -134,19 +135,19 @@ Google OAuth is optional. Credentials sign-in works without `GOOGLE_CLIENT_ID` /
 
 ## Scripts
 
-| Script                       | Purpose                              |
-| ---------------------------- | ------------------------------------ |
-| `npm run dev`                | Next.js dev server                   |
-| `npm run build`              | Prisma generate + production build   |
-| `npm run start`              | Bind `0.0.0.0:$PORT` (default 3000)  |
-| `npm run lint`               | ESLint                               |
-| `npm run typecheck`          | `tsc --noEmit`                       |
-| `npm run test` / `test:unit` | Vitest unit tests                    |
-| `npm run test:integration`   | Vitest + Postgres (receive → ledger) |
-| `npm run db:generate`        | Prisma client                        |
-| `npm run db:migrate`         | Apply migrations (`deploy`)          |
-| `npm run db:studio`          | Prisma Studio                        |
-| `npm run db:seed`            | Roles + optional SUPER_ADMIN         |
+| Script                       | Purpose                                                 |
+| ---------------------------- | ------------------------------------------------------- |
+| `npm run dev`                | Next.js dev server                                      |
+| `npm run build`              | Prisma generate + production build                      |
+| `npm run start`              | Bind `0.0.0.0:$PORT` (default 3000)                     |
+| `npm run lint`               | ESLint                                                  |
+| `npm run typecheck`          | `tsc --noEmit`                                          |
+| `npm run test` / `test:unit` | Vitest unit tests                                       |
+| `npm run test:integration`   | Vitest + Postgres (receive → ledger)                    |
+| `npm run db:generate`        | Prisma client                                           |
+| `npm run db:migrate`         | Apply migrations (`deploy`)                             |
+| `npm run db:studio`          | Prisma Studio                                           |
+| `npm run db:seed`            | Roles, delivery settings defaults, optional SUPER_ADMIN |
 
 ## App map
 
@@ -156,7 +157,8 @@ Google OAuth is optional. Credentials sign-in works without `GOOGLE_CLIENT_ID` /
 | `/shop`                                                       | Live catalog from the same DB          | Public                             |
 | `/cart`                                                       | Browser cart                           | Public                             |
 | `/checkout`                                                   | Demo checkout (no charges)             | Public                             |
-| `/delivery-area`                                              | ZIP checker                            | Public                             |
+| `/delivery-area`                                              | ZIP checker (enabled counties)         | Public                             |
+| `/api/delivery/settings`                                      | Delivery schedule + counties           | GET public; PUT ADMIN/SUPER_ADMIN  |
 | `/faq` `/contact` `/terms` `/privacy` `/refunds` `/referrals` | Content pages                          | Public                             |
 | `/sign-in` `/register`                                        | Credentials (+ Google when configured) | Public                             |
 | `/account/*`                                                  | Household account shell                | Authenticated                      |

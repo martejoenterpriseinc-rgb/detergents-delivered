@@ -139,6 +139,7 @@ export type DemoOrder = {
     postalCode: string;
   };
   zoneName: string;
+  nextWindowLabel?: string;
   lines: CartLine[];
   totals: ReturnType<typeof demoOrderTotals>;
   note?: string;
@@ -157,14 +158,14 @@ export const SAMPLE_ACCOUNT_ORDERS: DemoOrder[] = [
     status: "delivered",
     email: "jamie@household.example",
     name: "Jamie Cole",
-    phone: "515-555-0142",
+    phone: "815-555-0142",
     address: {
-      line1: "1842 Cottage Grove Ave",
-      city: "Des Moines",
-      region: "IA",
-      postalCode: "50314",
+      line1: "218 Virginia St",
+      city: "Crystal Lake",
+      region: "IL",
+      postalCode: "60014",
     },
-    zoneName: "Des Moines core",
+    zoneName: "McHenry County select",
     lines: [
       {
         variantId: "sample-fresh-64",
@@ -204,14 +205,14 @@ export const SAMPLE_ACCOUNT_ORDERS: DemoOrder[] = [
     status: "out_for_delivery",
     email: "jamie@household.example",
     name: "Jamie Cole",
-    phone: "515-555-0142",
+    phone: "815-555-0142",
     address: {
-      line1: "1842 Cottage Grove Ave",
-      city: "Des Moines",
-      region: "IA",
-      postalCode: "50314",
+      line1: "218 Virginia St",
+      city: "Crystal Lake",
+      region: "IL",
+      postalCode: "60014",
     },
-    zoneName: "Des Moines core",
+    zoneName: "McHenry County select",
     lines: [
       {
         variantId: "sample-dish",

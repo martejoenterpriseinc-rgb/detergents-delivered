@@ -2,11 +2,11 @@
 
 ## Layers
 
-| Layer | Tool | What belongs here |
-| --- | --- | --- |
-| Unit | Vitest | `lib/domain` money, inventory, authz — no I/O |
+| Layer       | Tool                           | What belongs here                              |
+| ----------- | ------------------------------ | ---------------------------------------------- |
+| Unit        | Vitest                         | `lib/domain` money, inventory, authz — no I/O  |
 | Integration | Vitest + Postgres (CI service) | Receiving → balance update, oversell rejection |
-| E2E | Playwright (Phase 3+) | Checkout, reserve, receive, deliver |
+| E2E         | Playwright (Phase 3+)          | Checkout, reserve, receive, deliver            |
 
 Phase 2 requires unit tests for money, landed cost, inventory `applyTransaction`, reorder, and authorization, plus a Postgres integration test for receive → ledger. CI also runs lint, typecheck, `prisma validate`, migrate, and `next build`.
 
@@ -46,17 +46,23 @@ Authz:
 - permission codes and `*`
 - role→permission mapping
 
+Delivery schedule:
+
+- default Tue/Thu windows and McHenry / Kane / Cook enablement
+- `nextDeliverySlot` given config + now (skip today; honor cutoff)
+- ZIP checker respects enabled counties and never claims same-day
+
 ## Failure cases to keep adding
 
-| Area | Must fail closed |
-| --- | --- |
-| Money | Float inputs, overflow beyond safe integers |
-| Inventory | Oversell, silent balance UPDATE, deleting a ledger row |
-| Auth | Missing session on `/admin`, CUSTOMER hitting write APIs, CPA POST |
-| Payments (P3) | Replay webhook, bad signature, double capture |
-| Tax (P7) | Missing snapshot, recomputing historical tax |
-| QBO (P7) | Duplicate sales receipt on retry |
-| Routing (P5) | Schedule over zone capacity without override |
+| Area          | Must fail closed                                                   |
+| ------------- | ------------------------------------------------------------------ |
+| Money         | Float inputs, overflow beyond safe integers                        |
+| Inventory     | Oversell, silent balance UPDATE, deleting a ledger row             |
+| Auth          | Missing session on `/admin`, CUSTOMER hitting write APIs, CPA POST |
+| Payments (P3) | Replay webhook, bad signature, double capture                      |
+| Tax (P7)      | Missing snapshot, recomputing historical tax                       |
+| QBO (P7)      | Duplicate sales receipt on retry                                   |
+| Routing (P5)  | Schedule over zone capacity without override                       |
 
 ## Commands
 

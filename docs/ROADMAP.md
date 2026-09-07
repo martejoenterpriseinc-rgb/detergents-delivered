@@ -68,7 +68,10 @@ Later phases stay unchecked until implemented.
 
 ## Phase 4 — Delivery, routes, POD
 
-- [ ] Delivery zones and daily capacity
+- [x] Weekly route-day + time-window settings (admin-configurable, persisted in `Setting`, unit-tested `nextDeliverySlot`)
+- [x] Chicagoland county enablement (full selectable list; seed defaults McHenry / Kane / Cook)
+- [x] Storefront ZIP checker and copy read enabled counties + next weekly window (no same-day claims)
+- [ ] Delivery zones and daily capacity (GeoJSON / `capacityPerDay` still later)
 - [ ] Auto-schedule paid orders onto routes
 - [ ] Driver stop list, attempts, photos
 - [ ] Maps geocoding / basic optimization
