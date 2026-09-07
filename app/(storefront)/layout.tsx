@@ -4,6 +4,8 @@ import { StorefrontFooter } from "@/components/storefront/footer";
 import { StorefrontHeader } from "@/components/storefront/header";
 import { getSession } from "@/lib/authz";
 
+export const dynamic = "force-dynamic";
+
 export default async function StorefrontLayout({ children }: { children: ReactNode }) {
   const session = await getSession();
 

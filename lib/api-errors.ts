@@ -1,5 +1,6 @@
 import { CatalogError } from "@/lib/services/catalog";
 import { InventoryError } from "@/lib/domain/inventory";
+import { DeliveryScheduleError } from "@/lib/domain/delivery-schedule";
 import { MoneyError } from "@/lib/domain/money";
 import { AdjustmentError } from "@/lib/services/inventory";
 import { PurchasingError } from "@/lib/services/purchasing";
@@ -12,6 +13,9 @@ function statusForMessage(message: string) {
 }
 
 export function serviceErrorResponse(error: unknown) {
+  if (error instanceof DeliveryScheduleError) {
+    return Response.json({ error: error.message }, { status: 400 });
+  }
   if (
     error instanceof CatalogError ||
     error instanceof VendorError ||
@@ -21,7 +25,10 @@ export function serviceErrorResponse(error: unknown) {
     error instanceof InventoryError ||
     error instanceof MoneyError
   ) {
-    return Response.json({ error: error.message }, { status: statusForMessage(error.message) });
+    return Response.json(
+      { error: error.message },
+      { status: statusForMessage(error.message) },
+    );
   }
   if (
     typeof error === "object" &&

@@ -30,6 +30,7 @@ Pure TypeScript. No HTTP, no Prisma, no Stripe. Unit-tested.
 - `reorder.ts` — low-stock / out-of-stock recommendations
 - `tax.ts` — `TaxService` interface; Stripe Tax will implement this later
 - `authz.ts` — role and permission predicates
+- `delivery-schedule.ts` — weekly route days, windows, cutoffs, next slot, Chicagoland county catalog
 
 Future integrations plug in **behind interfaces** in this layer or a thin `lib/integrations/` wrapper that the UI never calls directly:
 

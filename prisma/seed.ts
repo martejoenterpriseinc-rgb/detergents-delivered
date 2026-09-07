@@ -2,6 +2,7 @@ import { PrismaClient, RoleCode } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { seedDemoCatalog } from "./demo-catalog";
 import { canSeedDemoCatalog } from "../lib/demo-mode";
+import { ensureDeliverySettingsSeeded } from "../lib/services/delivery-settings";
 
 const prisma = new PrismaClient();
 
@@ -113,6 +114,7 @@ async function seedDevelopmentAdmin() {
 
 async function main() {
   await seedRoles();
+  await ensureDeliverySettingsSeeded();
   const adminId = await seedDevelopmentAdmin();
 
   if (canSeedDemoCatalog()) {

@@ -69,7 +69,10 @@ export function ConfirmationView({ orderId }: { orderId?: string }) {
         </h1>
         <p className="text-teal-800">
           We saved confirmation <span className="font-semibold">{order.id}</span> in this
-          browser. Delivery area: {order.zoneName}.
+          browser. Delivery area: {order.zoneName}. Weekly delivery on scheduled route
+          days
+          {order.nextWindowLabel ? ` — next window ${order.nextWindowLabel}` : ""}. Not
+          same-day.
         </p>
         <p className="text-sm text-teal-800">
           {order.address.line1}, {order.address.city}, {order.address.region}{" "}

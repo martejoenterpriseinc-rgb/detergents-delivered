@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { BrandLogo } from "@/components/brand/logo";
+import { getPublicDeliveryInfo } from "@/lib/services/delivery-settings";
 
 const FOOTER_LINKS = [
   { href: "/shop", label: "Shop" },
@@ -12,7 +13,9 @@ const FOOTER_LINKS = [
   { href: "/refunds", label: "Refunds" },
 ] as const;
 
-export function StorefrontFooter() {
+export async function StorefrontFooter() {
+  const delivery = await getPublicDeliveryInfo();
+
   return (
     <footer className="border-t border-teal-100 bg-white">
       <div className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-10 sm:grid-cols-[1.2fr_1fr]">
@@ -23,7 +26,9 @@ export function StorefrontFooter() {
           </div>
           <p className="max-w-md text-sm leading-6 text-teal-800">
             Household detergent, dish, paper, and cleaning staples — packed locally and
-            brought to your door. No warehouse-club haul. No membership required.
+            brought to your door. {delivery.weeklySummary} Currently serving select towns
+            in {delivery.countyListLabel}. {delivery.noSameDaySummary} No warehouse-club
+            haul. No membership required.
           </p>
         </div>
         <nav className="grid grid-cols-2 gap-2 text-sm">

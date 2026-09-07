@@ -4,15 +4,15 @@ PostgreSQL is the system of record. Prisma is the schema and migration tool. The
 
 ## Conventions
 
-| Topic | Rule |
-| --- | --- |
-| IDs | `cuid` strings |
-| Money | `Int` cents. Currency defaults to `USD`. Never `Float` / `Decimal` for money. |
-| Physical size | `Decimal` allowed for ounces/liters on variants — not money |
-| Inventory qty | Integers of sellable units |
-| Soft delete | `deletedAt` on users, customers, addresses, catalog, vendors |
+| Topic             | Rule                                                                                                                    |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| IDs               | `cuid` strings                                                                                                          |
+| Money             | `Int` cents. Currency defaults to `USD`. Never `Float` / `Decimal` for money.                                           |
+| Physical size     | `Decimal` allowed for ounces/liters on variants — not money                                                             |
+| Inventory qty     | Integers of sellable units                                                                                              |
+| Soft delete       | `deletedAt` on users, customers, addresses, catalog, vendors                                                            |
 | Financial history | No `deletedAt` on payments, events, refunds, tax snapshots, inventory transactions. Void or reverse with a **new** row. |
-| Time | `DateTime` stored in UTC |
+| Time              | `DateTime` stored in UTC                                                                                                |
 
 `lib/prisma.ts` refuses a production-looking `DATABASE_URL` when `APP_ENV=development`.
 
@@ -61,6 +61,8 @@ Landed cost = merchandise + freight + fees + tax + other, stored in cents on the
 ### Delivery
 
 `DeliveryZone`, `Vehicle`, `Route`, `RouteStop`, `DeliveryAttempt`, `DeliveryPhoto`, `MileageTrip`.
+
+Weekly windows, cutoff hours, and enabled Chicagoland county codes persist on `Setting` key `delivery.settings` (JSON). See [ROUTING.md](./ROUTING.md). Seed defaults enable McHenry, Kane, and Cook only; admins can enable more counties from the catalog. Same-day delivery is not offered.
 
 ### Other
 

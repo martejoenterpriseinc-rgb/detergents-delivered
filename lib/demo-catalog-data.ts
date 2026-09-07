@@ -41,9 +41,9 @@ export const DEMO_VENDOR = {
   email: "orders@midwest-household.example",
   phone: "555-0100",
   addressLine1: "100 Warehouse Rd",
-  city: "Des Moines",
-  region: "IA",
-  postalCode: "50309",
+  city: "Crystal Lake",
+  region: "IL",
+  postalCode: "60014",
   paymentTerms: "Net 15",
   notes: "Primary detergent wholesaler for the demo path.",
 } as const;
