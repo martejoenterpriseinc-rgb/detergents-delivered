@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   addCents,
   formatCents,
+  grossProfitCents,
   marginBps,
   marginPercent,
   MoneyError,
@@ -29,5 +30,11 @@ describe("money helpers", () => {
     expect(marginBps(1000, 600)).toBe(4000);
     expect(marginPercent(1000, 600)).toBe(40);
     expect(() => marginBps(0, 100)).toThrow(MoneyError);
+  });
+
+  it("computes gross profit dollars as integer cents", () => {
+    expect(grossProfitCents(1599, 900)).toBe(699);
+    expect(grossProfitCents(100, 100)).toBe(0);
+    expect(() => grossProfitCents(10.5, 4)).toThrow(MoneyError);
   });
 });

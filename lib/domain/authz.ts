@@ -34,6 +34,7 @@ export const ROLE_PERMISSIONS: Record<RoleCode, readonly string[]> = {
     "orders.read",
     "orders.write",
     "inventory.read",
+    "inventory.write",
     "routes.read",
     "routes.write",
     "finance.read",

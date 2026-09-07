@@ -51,7 +51,7 @@ When Stripe/QBO webhooks land:
 
 ## Private media
 
-Delivery photos and expense receipts use storage keys (`storageKey` / `receiptStorageKey`). They are **not** world-readable public URLs. Phase 4–5 will issue short-lived signed URLs after an authorization check. Do not put customer photos in `public/`.
+Product images, vendor files, invoices, and delivery photos use storage keys (`storageKey`). They are **not** world-readable public URLs. Admin reads go through `/api/media/*` after `requireApiRole`. Storefront may serve only images on website-visible products via `/api/catalog/media/[id]`. Do not put private files in `public/`.
 
 ## CSRF / XSS
 

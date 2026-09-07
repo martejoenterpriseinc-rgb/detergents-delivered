@@ -74,3 +74,8 @@ export function marginBps(sellingCents: Cents, costCents: Cents): number {
 export function marginPercent(sellingCents: Cents, costCents: Cents): number {
   return marginBps(sellingCents, costCents) / 100;
 }
+
+/** Gross profit in cents: selling price minus landed/cost. */
+export function grossProfitCents(sellingCents: Cents, costCents: Cents): Cents {
+  return subtractCents(sellingCents, costCents);
+}

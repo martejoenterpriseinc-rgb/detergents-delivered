@@ -6,7 +6,7 @@ export default function DriverHomePage() {
       <h1 className="text-2xl font-semibold text-teal-950">Today&apos;s route</h1>
       <Card>
         <p className="text-sm font-semibold uppercase tracking-wide text-amber-700">
-          Phase 5
+          Phase 4
         </p>
         <p className="mt-2 text-sm text-teal-800">
           Driver mode is a shell only. Stops, photos, and mileage capture are

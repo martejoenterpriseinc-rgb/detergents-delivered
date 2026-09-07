@@ -29,7 +29,7 @@ Purchasing cost is not “last vendor quote on the vendor SKU.”
 1. Record merchandise cents on the PO line.
 2. Record freight and other costs on the PO.
 3. On receive, allocate landed cost onto `ReceiptItem.landedUnitCostCents`.
-4. Inventory valuation uses receipt layers (implementation in Phase 4/7), never a silent overwrite of `VendorProduct.unitCostCents` as the only truth. That field is a convenience cache.
+4. Inventory valuation uses `InventoryCostLayer` rows written on receive. `VendorProduct.unitCostCents` is a convenience cache only — never the historical source of truth.
 
 COGS on a sale uses the layer assigned when the unit left on-hand. If a count adjustment is required, it is a dated `InventoryTransaction` with a reason — not an UPDATE of an old receipt.
 

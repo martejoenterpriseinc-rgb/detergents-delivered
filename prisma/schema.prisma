@@ -51,6 +51,7 @@ model User {
   mileageTrips         MileageTrip[]
   deliveryAttempts     DeliveryAttempt[]
   createdPurchaseOrders PurchaseOrder[]       @relation("PoCreatedBy")
+  createdReceipts      Receipt[]              @relation("ReceiptCreatedBy")
   createdOrders        Order[]                @relation("OrderCreatedBy")
   assignedRouteStops   RouteStop[]            @relation("StopDriver")
 
@@ -201,6 +202,12 @@ enum ProductForm {
   OTHER
 }
 
+enum PriceKind {
+  RETAIL
+  SUBSCRIPTION
+  SALE
+}
+
 model Category {
   id          String    @id @default(cuid())
   slug        String    @unique
@@ -222,63 +229,86 @@ model Category {
 }
 
 model Product {
-  id          String      @id @default(cuid())
-  slug        String      @unique
-  name        String
-  brand       String
-  description String?     @db.Text
-  categoryId  String?
-  category    Category?   @relation(fields: [categoryId], references: [id])
-  form        ProductForm @default(OTHER)
-  isActive    Boolean     @default(true)
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-  deletedAt   DateTime?
+  id                    String      @id @default(cuid())
+  slug                  String      @unique
+  name                  String
+  brand                 String
+  description           String?     @db.Text
+  categoryId            String?
+  category              Category?   @relation(fields: [categoryId], references: [id])
+  form                  ProductForm @default(OTHER)
+  taxCategory           String?
+  /// Units this product consumes against a route's daily capacity.
+  deliveryCapacityUnits Int         @default(1)
+  /// When false, storefront only lists variants with available > 0.
+  allowPreorder         Boolean     @default(false)
+  isActive              Boolean     @default(true)
+  websiteVisible        Boolean     @default(false)
+  featured              Boolean     @default(false)
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+  deletedAt             DateTime?
 
   variants ProductVariant[]
   images   ProductImage[]
 
   @@index([brand])
   @@index([categoryId])
-  @@index([isActive])
+  @@index([isActive, websiteVisible])
 }
 
 /// Sellable SKU. Do not duplicate the parent Product for each size/scent.
 model ProductVariant {
-  id         String  @id @default(cuid())
-  productId  String
-  product    Product @relation(fields: [productId], references: [id])
-  sku        String  @unique
-  upc        String? @unique
-  name       String
-  scent      String?
-  sizeLabel  String?
-  sizeValue  Decimal? @db.Decimal(12, 3)
-  sizeUnit   String?
-  isActive   Boolean @default(true)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-  deletedAt  DateTime?
+  id                    String    @id @default(cuid())
+  productId             String
+  product               Product   @relation(fields: [productId], references: [id])
+  sku                   String    @unique
+  upc                   String?   @unique
+  name                  String
+  scent                 String?
+  sizeLabel             String?
+  sizeValue             Decimal?  @db.Decimal(12, 3)
+  sizeUnit              String?
+  weightValue           Decimal?  @db.Decimal(12, 3)
+  weightUnit            String?
+  lengthIn              Decimal?  @db.Decimal(12, 3)
+  widthIn               Decimal?  @db.Decimal(12, 3)
+  heightIn              Decimal?  @db.Decimal(12, 3)
+  uom                   String?
+  casePack              Int?
+  taxCategory           String?
+  reorderPoint          Int?
+  reorderQty            Int?
+  deliveryCapacityUnits Int?
+  isActive              Boolean   @default(true)
+  websiteVisible        Boolean   @default(true)
+  featured              Boolean   @default(false)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  deletedAt             DateTime?
 
-  prices           ProductPrice[]
-  images           ProductImage[]
-  vendorProducts   VendorProduct[]
-  poItems          PurchaseOrderItem[]
-  receiptItems     ReceiptItem[]
-  inventoryTxns    InventoryTransaction[]
-  inventoryBalance InventoryBalance?
-  orderItems       OrderItem[]
+  prices            ProductPrice[]
+  images            ProductImage[]
+  vendorProducts    VendorProduct[]
+  poItems           PurchaseOrderItem[]
+  receiptItems      ReceiptItem[]
+  inventoryTxns     InventoryTransaction[]
+  inventoryBalance  InventoryBalance?
+  costLayers        InventoryCostLayer[]
+  orderItems        OrderItem[]
   subscriptionItems SubscriptionItem[]
 
   @@index([productId])
   @@index([isActive])
+  @@index([sku])
 }
 
-/// Time-bounded list price. Insert a new row to change price; do not rewrite history.
+/// Time-bounded list price. Insert a new row to change price; do not rewrite amount history.
 model ProductPrice {
   id               String         @id @default(cuid())
   productVariantId String
   productVariant   ProductVariant @relation(fields: [productVariantId], references: [id])
+  kind             PriceKind      @default(RETAIL)
   /// List price in cents.
   amountCents      Int
   currency         String         @default("USD")
@@ -286,7 +316,7 @@ model ProductPrice {
   endsAt           DateTime?
   createdAt        DateTime       @default(now())
 
-  @@index([productVariantId, startsAt])
+  @@index([productVariantId, kind, startsAt])
 }
 
 model ProductImage {
@@ -312,26 +342,36 @@ model ProductImage {
 enum PurchaseOrderStatus {
   DRAFT
   SUBMITTED
+  ORDERED
   PARTIALLY_RECEIVED
   RECEIVED
   CANCELLED
 }
 
 model Vendor {
-  id        String    @id @default(cuid())
-  name      String
-  email     String?
-  phone     String?
-  notes     String?   @db.Text
-  isActive  Boolean   @default(true)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
+  id            String    @id @default(cuid())
+  name          String
+  contactName   String?
+  email         String?
+  phone         String?
+  addressLine1  String?
+  addressLine2  String?
+  city          String?
+  region        String?
+  postalCode    String?
+  country       String    @default("US")
+  paymentTerms  String?
+  notes         String?   @db.Text
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
 
   products       VendorProduct[]
   purchaseOrders PurchaseOrder[]
 
   @@index([isActive])
+  @@index([name])
 }
 
 model VendorProduct {
@@ -361,8 +401,10 @@ model PurchaseOrder {
   /// Expected merchandise total in cents (snapshot).
   subtotalCents   Int                  @default(0)
   freightCents    Int                  @default(0)
+  feeCents        Int                  @default(0)
+  taxCents        Int                  @default(0)
   otherCostCents  Int                  @default(0)
-  /// Landed cost estimate = subtotal + freight + other (cents).
+  /// Landed cost estimate = merchandise + freight + fees + tax + other (cents).
   landedCostCents Int                  @default(0)
   currency        String               @default("USD")
   notes           String?              @db.Text
@@ -387,6 +429,11 @@ model PurchaseOrderItem {
   quantityOrdered  Int
   quantityReceived Int            @default(0)
   unitCostCents    Int
+  discountCents    Int            @default(0)
+  freightCents     Int            @default(0)
+  feeCents         Int            @default(0)
+  taxCents         Int            @default(0)
+  otherCostCents   Int            @default(0)
   lineTotalCents   Int
 
   receiptItems ReceiptItem[]
@@ -396,31 +443,40 @@ model PurchaseOrderItem {
 }
 
 model Receipt {
-  id              String        @id @default(cuid())
-  number          String        @unique
+  id              String         @id @default(cuid())
+  number          String         @unique
   purchaseOrderId String?
   purchaseOrder   PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
-  receivedAt      DateTime      @default(now())
-  notes           String?       @db.Text
-  createdAt       DateTime      @default(now())
+  receivedAt      DateTime       @default(now())
+  notes           String?        @db.Text
+  createdByUserId String?
+  createdBy       User?          @relation("ReceiptCreatedBy", fields: [createdByUserId], references: [id])
+  createdAt       DateTime       @default(now())
 
   items ReceiptItem[]
 
   @@index([purchaseOrderId])
+  @@index([number])
 }
 
 model ReceiptItem {
-  id                  String             @id @default(cuid())
-  receiptId           String
-  receipt             Receipt            @relation(fields: [receiptId], references: [id])
-  purchaseOrderItemId String?
-  purchaseOrderItem   PurchaseOrderItem? @relation(fields: [purchaseOrderItemId], references: [id])
-  productVariantId    String
-  productVariant      ProductVariant     @relation(fields: [productVariantId], references: [id])
-  quantityReceived    Int
-  unitCostCents       Int
-  /// Allocated landed cost for this line in cents.
-  landedUnitCostCents Int?
+  id                    String             @id @default(cuid())
+  receiptId             String
+  receipt               Receipt            @relation(fields: [receiptId], references: [id])
+  purchaseOrderItemId   String?
+  purchaseOrderItem     PurchaseOrderItem? @relation(fields: [purchaseOrderItemId], references: [id])
+  productVariantId      String
+  productVariant        ProductVariant     @relation(fields: [productVariantId], references: [id])
+  quantityReceived      Int
+  quantityDamaged       Int                @default(0)
+  quantityShortage      Int                @default(0)
+  quantityOverage       Int                @default(0)
+  unitCostCents         Int
+  /// Allocated landed unit cost for sellable units in cents.
+  landedUnitCostCents   Int?
+  costDiscrepancyNotes  String?            @db.Text
+
+  costLayers InventoryCostLayer[]
 
   @@index([receiptId])
   @@index([productVariantId])
@@ -432,13 +488,21 @@ model ReceiptItem {
 
 enum InventoryTxnType {
   RECEIPT
+  PURCHASE_RECEIPT
   SALE
   RESERVE
+  CUSTOMER_RESERVATION
   RELEASE
+  RESERVATION_RELEASE
+  ROUTE_ALLOCATION
+  ROUTE_LOAD
+  DELIVERY
   ADJUSTMENT
   RETURN
   DAMAGE
+  LOSS
   COUNT
+  TRANSFER
   TRANSFER_IN
   TRANSFER_OUT
 }
@@ -474,6 +538,38 @@ model InventoryBalance {
   damagedQty       Int            @default(0)
   inTransitQty     Int            @default(0)
   updatedAt        DateTime       @updatedAt
+}
+
+/// FIFO / receipt cost layer. Consume remaining qty at sale time (Phase 3); never rewrite historical unit cost.
+model InventoryCostLayer {
+  id                  String          @id @default(cuid())
+  productVariantId    String
+  productVariant      ProductVariant  @relation(fields: [productVariantId], references: [id])
+  receiptItemId       String?
+  receiptItem         ReceiptItem?    @relation(fields: [receiptItemId], references: [id])
+  quantityOriginal    Int
+  quantityRemaining   Int
+  landedUnitCostCents Int
+  receivedAt          DateTime
+  createdAt           DateTime        @default(now())
+
+  @@index([productVariantId, receivedAt])
+  @@index([receiptItemId])
+}
+
+/// Attachment metadata only. Bytes live in object storage (or the local/dev stub). Never store public unsigned URLs.
+model Attachment {
+  id          String   @id @default(cuid())
+  entityType  String
+  entityId    String
+  storageKey  String
+  filename    String
+  contentType String?
+  byteSize    Int?
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  @@index([entityType, entityId])
 }
 
 // ---------------------------------------------------------------------------
@@ -550,6 +646,8 @@ model OrderItem {
   skuSnapshot      String
   quantity         Int
   unitPriceCents   Int
+  /// Landed/COGS snapshot at sale time (Phase 3). Null until checkout consumes a cost layer.
+  landedUnitCostCents Int?
   discountCents    Int            @default(0)
   taxCents         Int            @default(0)
   lineTotalCents   Int

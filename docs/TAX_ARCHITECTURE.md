@@ -20,7 +20,7 @@ Outputs: provider name, taxable cents, tax cents, per-jurisdiction breakdown (ce
 
 ## Stripe Tax first
 
-Phase 7 implements `TaxService` with Stripe Tax (test mode in staging). Reasons:
+Phase 3 implements `TaxService` with Stripe Tax (test mode in staging). Reasons:
 
 - Matches Stripe Payments already planned for checkout
 - Handles destination nexus calculations we should not hardcode
@@ -56,4 +56,4 @@ Never use `price * 0.07` in application code.
 
 - No live Stripe Tax API calls
 - No hardcoded rate tables
-- Admin **Taxes** page is a Phase 7 placeholder
+- Admin **Taxes** page is a Phase 3 placeholder

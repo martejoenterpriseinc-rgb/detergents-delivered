@@ -5,10 +5,10 @@
 | Layer | Tool | What belongs here |
 | --- | --- | --- |
 | Unit | Vitest | `lib/domain` money, inventory, authz — no I/O |
-| Integration | Vitest + Postgres (CI service) | Prisma constraints, seed, authz against DB (later) |
+| Integration | Vitest + Postgres (CI service) | Receiving → balance update, oversell rejection |
 | E2E | Playwright (Phase 3+) | Checkout, reserve, receive, deliver |
 
-Phase 1 requires unit tests for money, inventory math, and authorization. CI also runs lint, typecheck, `prisma validate`, migrate, and `next build`.
+Phase 2 requires unit tests for money, landed cost, inventory `applyTransaction`, reorder, and authorization, plus a Postgres integration test for receive → ledger. CI also runs lint, typecheck, `prisma validate`, migrate, and `next build`.
 
 ## Phase 1 cases (implemented)
 
@@ -25,6 +25,19 @@ Inventory:
 - reject negative on-hand / reserved / available
 - reject oversell
 - reserve cannot exceed on-hand
+- `applyTransaction` for purchase receipt, reservation, delivery, inbound damage, loss
+
+Landed cost / margin:
+
+- header freight allocated by merchandise weight
+- remainder cents on the last positive-qty line
+- line extras stay on that line
+- gross profit $ and margin % from integer cents
+
+Reorder:
+
+- at or below point → low stock
+- zero available without a point → out of stock
 
 Authz:
 
@@ -49,6 +62,7 @@ Authz:
 
 ```bash
 npm run test:unit
+npm run test:integration
 npm run lint
 npm run typecheck
 npm run db:validate

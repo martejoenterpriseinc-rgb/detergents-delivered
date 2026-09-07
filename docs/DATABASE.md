@@ -30,9 +30,9 @@ PostgreSQL is the system of record. Prisma is the schema and migration tool. The
 
 `Address` belongs to a customer and may map to a `DeliveryZone`.
 
-`Category` (tree), `Product` (brand + form), `ProductVariant` (SKU/UPC/scent/size). Variants do **not** clone the whole product.
+`Category` (tree), `Product` (brand + form + website flags), `ProductVariant` (SKU/UPC/scent/size/weight/UOM/reorder). Variants do **not** clone the whole product.
 
-`ProductPrice` is time-bounded. Change price by inserting a row.
+`ProductPrice` is time-bounded (`RETAIL` / `SUBSCRIPTION` / `SALE`). Change price by inserting a row.
 
 `ProductImage` stores an object-storage key, not a public free-for-all URL.
 
@@ -40,13 +40,17 @@ PostgreSQL is the system of record. Prisma is the schema and migration tool. The
 
 `Vendor`, `VendorProduct`, `PurchaseOrder`, `PurchaseOrderItem`, `Receipt`, `ReceiptItem`.
 
-Landed cost = merchandise + freight + other, stored in cents on the PO and allocatable onto receipt lines.
+Landed cost = merchandise + freight + fees + tax + other, stored in cents on the PO and allocated onto receipt lines and `InventoryCostLayer` rows.
 
 ### Inventory
 
 `InventoryTransaction` — append-only ledger. Application code must not `UPDATE` or `DELETE`.
 
 `InventoryBalance` — derived projection (`onHandQty`, `reservedQty`, `damagedQty`, `inTransitQty`). Available quantity is computed: `onHand - reserved`. See [INVENTORY.md](./INVENTORY.md).
+
+`InventoryCostLayer` — remaining qty × landed unit cost for valuation and future sale-time COGS.
+
+`Attachment` — metadata (entity type/id + storage key) for vendor/PO/receipt files.
 
 ### Orders and money movement
 

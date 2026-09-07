@@ -4,7 +4,7 @@ export default function Page() {
   return (
     <PhasePlaceholder
       title="Expenses"
-      phase={7}
+      phase={6}
       summary="Expense capture and QBO mapping are planned for the accounting phase."
     />
   );

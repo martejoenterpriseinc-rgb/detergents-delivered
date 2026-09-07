@@ -44,3 +44,6 @@ yarn-error.log*
 
 # docker volumes
 /data
+
+# local/dev object-storage stub (private assets — never public/)
+/uploads

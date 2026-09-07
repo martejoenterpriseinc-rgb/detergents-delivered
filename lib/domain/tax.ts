@@ -1,8 +1,8 @@
 import type { Cents } from "./money";
 
 /**
- * TaxService — Phase 1 interface only.
- * Stripe Tax is the first planned implementation (Phase 7).
+ * TaxService — interface only until Phase 3.
+ * Stripe Tax is the first planned implementation.
  * Calculations must be snapshotted; never recompute historical invoices.
  */
 
@@ -48,7 +48,7 @@ export interface TaxService {
 export class UnimplementedTaxService implements TaxService {
   async quote(): Promise<TaxQuoteResult> {
     throw new Error(
-      "TaxService is not implemented in Phase 1. Stripe Tax will plug in behind this interface.",
+      "TaxService is not implemented. Stripe Tax will plug in behind this interface in Phase 3.",
     );
   }
 }

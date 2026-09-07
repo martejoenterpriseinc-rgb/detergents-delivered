@@ -24,8 +24,10 @@ app/(storefront)   app/(admin)   app/(driver)     presentation
 
 Pure TypeScript. No HTTP, no Prisma, no Stripe. Unit-tested.
 
-- `money.ts` — integer cents arithmetic and formatting
-- `inventory.ts` — available = on-hand − reserved; reject negatives and oversell
+- `money.ts` — integer cents arithmetic, formatting, gross profit, margin
+- `inventory.ts` — available = on-hand − reserved; `applyTransaction`; reject negatives and oversell
+- `landed-cost.ts` — allocate freight/fees/tax/other across PO lines
+- `reorder.ts` — low-stock / out-of-stock recommendations
 - `tax.ts` — `TaxService` interface; Stripe Tax will implement this later
 - `authz.ts` — role and permission predicates
 
@@ -34,14 +36,14 @@ Future integrations plug in **behind interfaces** in this layer or a thin `lib/i
 | Integration | Phase | Interface / notes |
 | --- | --- | --- |
 | Stripe Payments | 3 | Payment service; webhook → `PaymentEvent` append-only |
-| Stripe Tax | 7 | `TaxService.quote` → immutable `TaxCalculation` |
+| Stripe Tax | 3 | `TaxService.quote` → immutable `TaxCalculation` |
 | QuickBooks Online | 7 | Sync worker; operational DB remains source of truth |
-| Maps | 5 | Geocode + distance; never the inventory source |
+| Maps | 4 | Geocode + distance; never the inventory source |
 | Email | 3+ | Transactional only |
-| SMS | 5 | Delivery windows / exceptions |
-| Object storage (S3) | 4–5 | Private media (receipts, delivery photos) via signed URLs |
+| SMS | 4 | Delivery windows / exceptions |
+| Object storage (S3) | 2+ | Private media via storage keys; signed URLs later. Local stub writes `uploads/` |
 
-No live Stripe or QBO calls ship in Phase 1.
+No live Stripe or QBO calls ship in Phase 1 or Phase 2.
 
 ## Module boundaries
 
