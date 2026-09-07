@@ -24,8 +24,8 @@ export const metadata: Metadata = {
   applicationName: "Detergents Delivered",
   manifest: "/manifest.webmanifest",
   icons: {
-    icon: "/brand/logo.svg",
-    apple: "/brand/logo.svg",
+    icon: "/brand/logo.png",
+    apple: "/brand/logo.png",
   },
 };
 
