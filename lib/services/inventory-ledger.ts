@@ -67,6 +67,19 @@ export async function persistInventoryTransaction(
     createdByUserId?: string | null;
   },
 ) {
+  // Serialize all ledger writes for this SKU, including its first balance row.
+  // Locking the always-present parent avoids the "missing row" race that a
+  // FOR UPDATE on InventoryBalance cannot prevent.
+  const lockedVariants = await db.$queryRaw<Array<{ id: string }>>`
+    SELECT "id"
+    FROM "ProductVariant"
+    WHERE "id" = ${input.productVariantId}
+    FOR UPDATE
+  `;
+  if (lockedVariants.length !== 1) {
+    throw new InventoryError("product variant not found");
+  }
+
   const existing = await db.inventoryBalance.findUnique({
     where: { productVariantId: input.productVariantId },
   });
