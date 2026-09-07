@@ -14,7 +14,9 @@ Shared business rules live in `lib/domain/`. UI route groups do not own money, t
 
 ## Status
 
-Phase 2 catalog, purchasing, receiving, and inventory are implemented on this branch. Checkout, Stripe, delivery, subscriptions, and QuickBooks are **not** complete.
+Phase 2 catalog, purchasing, receiving, and inventory are implemented. The public storefront is a **complete mockup** (shop, cart, demo checkout, account shell, legal pages) with honest “demo / not live” labeling.
+
+Checkout, Stripe charges, live delivery routing, subscriptions, and QuickBooks are **not** complete. Do not treat the mock checkout as a paid order.
 
 ## Stack
 
@@ -47,6 +49,45 @@ npm run dev
 Open [http://localhost:3000](http://localhost:3000).
 
 Health check: [http://localhost:3000/api/health](http://localhost:3000/api/health).
+
+## Viewing the mockup locally
+
+Use this path when you want the public site to look like a finished household delivery store, including a seeded catalog.
+
+```bash
+cp .env.example .env.local
+# set AUTH_SECRET (openssl rand -base64 32)
+# keep DATABASE_URL on the local compose database
+
+# Required for the mockup catalog:
+#   APP_ENV=development
+#   DEMO_MODE=true
+#   SEED_DEMO_CATALOG=true
+
+docker compose up -d postgres
+npm install
+npm run db:generate
+npm run db:migrate
+APP_ENV=development DEMO_MODE=true SEED_DEMO_CATALOG=true npm run db:seed
+DEMO_MODE=true SEED_DEMO_CATALOG=true npm run dev
+```
+
+Then open:
+
+| Page                                                                                                                 | What you should see                                             |
+| -------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| [http://localhost:3000](http://localhost:3000)                                                                       | Hero, value props, featured products, how-it-works, ZIP checker |
+| [http://localhost:3000/shop](http://localhost:3000/shop)                                                             | Multiple detergent / household products from Postgres           |
+| [http://localhost:3000/shop/fresh-breeze-liquid-detergent](http://localhost:3000/shop/fresh-breeze-liquid-detergent) | Variants, prices, add to cart                                   |
+| [http://localhost:3000/cart](http://localhost:3000/cart)                                                             | Browser cart (localStorage)                                     |
+| [http://localhost:3000/checkout](http://localhost:3000/checkout)                                                     | Demo checkout — try ZIP `50309`, then **Place order (demo)**    |
+| [http://localhost:3000/delivery-area](http://localhost:3000/delivery-area)                                           | Delivery-area checker and listed demo ZIPs                      |
+| [http://localhost:3000/faq](http://localhost:3000/faq)                                                               | Brand FAQ                                                       |
+| [http://localhost:3000/register](http://localhost:3000/register)                                                     | Create a household account                                      |
+
+`DEMO_MODE=true` in non-production also seeds the catalog **on boot** (and on the first `/shop` request) if the shop is empty. Staging can use that instead of a manual seed. Production never auto-seeds.
+
+The cart and “Place order (demo)” path do **not** charge cards, reserve inventory, or write a paid `Order` row. Confirmations are stored in the browser so you can click through the brand site.
 
 ### Verify locally (same commands as CI)
 
@@ -81,11 +122,11 @@ Copy `.env.example`. It lists every integration placeholder:
 
 Rules:
 
-| Environment | Data | Secrets | Deploy |
-| --- | --- | --- | --- |
-| **development** | Local compose DB only. Seed admin allowed. | Test / sandbox keys. | Laptop or ephemeral preview. |
-| **staging** | Isolated staging database and Stripe test mode. | Staging secrets. | Docker image from `main` or a release candidate. |
-| **production** | Production database. Protected branch + review. | Production secrets in the host vault only. | After staging acceptance. |
+| Environment     | Data                                            | Secrets                                    | Deploy                                           |
+| --------------- | ----------------------------------------------- | ------------------------------------------ | ------------------------------------------------ |
+| **development** | Local compose DB only. Seed admin allowed.      | Test / sandbox keys.                       | Laptop or ephemeral preview.                     |
+| **staging**     | Isolated staging database and Stripe test mode. | Staging secrets.                           | Docker image from `main` or a release candidate. |
+| **production**  | Production database. Protected branch + review. | Production secrets in the host vault only. | After staging acceptance.                        |
 
 `APP_ENV=development` refuses a `DATABASE_URL` that looks like production. Do not seed production from `SEED_ADMIN_*`.
 
@@ -93,31 +134,35 @@ Google OAuth is optional. Credentials sign-in works without `GOOGLE_CLIENT_ID` /
 
 ## Scripts
 
-| Script | Purpose |
-| --- | --- |
-| `npm run dev` | Next.js dev server |
-| `npm run build` | Prisma generate + production build |
-| `npm run start` | Bind `0.0.0.0:$PORT` (default 3000) |
-| `npm run lint` | ESLint |
-| `npm run typecheck` | `tsc --noEmit` |
-| `npm run test` / `test:unit` | Vitest unit tests |
-| `npm run test:integration` | Vitest + Postgres (receive → ledger) |
-| `npm run db:generate` | Prisma client |
-| `npm run db:migrate` | Apply migrations (`deploy`) |
-| `npm run db:studio` | Prisma Studio |
-| `npm run db:seed` | Roles + optional SUPER_ADMIN |
+| Script                       | Purpose                              |
+| ---------------------------- | ------------------------------------ |
+| `npm run dev`                | Next.js dev server                   |
+| `npm run build`              | Prisma generate + production build   |
+| `npm run start`              | Bind `0.0.0.0:$PORT` (default 3000)  |
+| `npm run lint`               | ESLint                               |
+| `npm run typecheck`          | `tsc --noEmit`                       |
+| `npm run test` / `test:unit` | Vitest unit tests                    |
+| `npm run test:integration`   | Vitest + Postgres (receive → ledger) |
+| `npm run db:generate`        | Prisma client                        |
+| `npm run db:migrate`         | Apply migrations (`deploy`)          |
+| `npm run db:studio`          | Prisma Studio                        |
+| `npm run db:seed`            | Roles + optional SUPER_ADMIN         |
 
 ## App map
 
-| Path | Mode | Access |
-| --- | --- | --- |
-| `/` | Storefront home | Public |
-| `/shop` | Live catalog from the same DB | Public |
-| `/sign-in` | Credentials (+ Google when configured) | Public |
-| `/account/*` | Household account shell | Authenticated |
-| `/admin/*` | Operations shell | ADMIN, INVENTORY, CPA, SUPER_ADMIN |
-| `/driver/*` | Driver shell | DRIVER, ADMIN, SUPER_ADMIN |
-| `/api/health` | Liveness | Public |
+| Path                                                          | Mode                                   | Access                             |
+| ------------------------------------------------------------- | -------------------------------------- | ---------------------------------- |
+| `/`                                                           | Storefront home                        | Public                             |
+| `/shop`                                                       | Live catalog from the same DB          | Public                             |
+| `/cart`                                                       | Browser cart                           | Public                             |
+| `/checkout`                                                   | Demo checkout (no charges)             | Public                             |
+| `/delivery-area`                                              | ZIP checker                            | Public                             |
+| `/faq` `/contact` `/terms` `/privacy` `/refunds` `/referrals` | Content pages                          | Public                             |
+| `/sign-in` `/register`                                        | Credentials (+ Google when configured) | Public                             |
+| `/account/*`                                                  | Household account shell                | Authenticated                      |
+| `/admin/*`                                                    | Operations shell                       | ADMIN, INVENTORY, CPA, SUPER_ADMIN |
+| `/driver/*`                                                   | Driver shell                           | DRIVER, ADMIN, SUPER_ADMIN         |
+| `/api/health`                                                 | Liveness                               | Public                             |
 
 Roles: `CUSTOMER`, `ADMIN`, `INVENTORY`, `DRIVER`, `CPA`, `SUPER_ADMIN`.
 

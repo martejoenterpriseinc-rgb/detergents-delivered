@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,10 +18,10 @@ export default async function SignInPage({
 
   return (
     <div className="mx-auto flex w-full max-w-md flex-col px-4 py-16">
-      <h1 className="text-3xl font-semibold text-teal-950">Sign in</h1>
+      <h1 className="text-3xl font-semibold text-teal-950">Welcome back</h1>
       <p className="mt-2 text-sm text-teal-800">
-        Use your email and password. Google sign-in is available when OAuth env
-        vars are configured.
+        Sign in to see your household account. You can still shop and use demo checkout
+        without signing in.
       </p>
       {params.error ? (
         <p className="mt-4 rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-900">
@@ -59,10 +60,15 @@ export default async function SignInPage({
           </form>
         ) : (
           <p className="text-center text-xs text-teal-700">
-            Google OAuth is configured when GOOGLE_CLIENT_ID and
-            GOOGLE_CLIENT_SECRET are set.
+            Google sign-in appears here when OAuth keys are configured.
           </p>
         )}
+        <p className="text-center text-sm text-teal-800">
+          New household?{" "}
+          <Link href="/register" className="font-semibold text-teal-900 underline">
+            Create an account
+          </Link>
+        </p>
       </Card>
     </div>
   );

@@ -1,242 +1,193 @@
-import type { PrismaClient } from "@prisma/client";
-import { createCategory, createProduct, createProductPrice, createVariant, updateProduct } from "../lib/services/catalog";
+import type { PrismaClient, ProductForm } from "@prisma/client";
+import {
+  DEMO_CATEGORIES,
+  DEMO_PRODUCTS,
+  DEMO_VENDOR,
+  type DemoProductSpec,
+} from "../lib/demo-catalog-data";
+import {
+  createCategory,
+  createProduct,
+  createProductPrice,
+  createVariant,
+  updateProduct,
+} from "../lib/services/catalog";
 import { createVendor } from "../lib/services/vendors";
 import { createPurchaseOrder, transitionPurchaseOrder } from "../lib/services/purchasing";
 import { receiveAgainstPurchaseOrder } from "../lib/services/receiving";
 
-const VARIANTS = [
-  {
-    sku: "DD-LIQ-64-FRESH",
-    upc: "000000000001",
-    name: "64 oz Fresh Breeze",
-    scent: "Fresh Breeze",
-    sizeLabel: "64 oz",
-    sizeValue: 64,
-    sizeUnit: "oz",
-    uom: "bottle",
-    casePack: 6,
-    reorderPoint: 6,
-    reorderQty: 12,
-    unitCostCents: 650,
-    retailCents: 1299,
-    subscriptionCents: 1199,
-  },
-  {
-    sku: "DD-LIQ-100-LAV",
-    upc: "000000000002",
-    name: "100 oz Lavender",
-    scent: "Lavender",
-    sizeLabel: "100 oz",
-    sizeValue: 100,
-    sizeUnit: "oz",
-    uom: "bottle",
-    casePack: 4,
-    reorderPoint: 4,
-    reorderQty: 8,
-    unitCostCents: 890,
-    retailCents: 1699,
-    subscriptionCents: 1549,
-  },
-  {
-    sku: "DD-POD-42-FREE",
-    upc: "000000000003",
-    name: "42-count Free & Clear pods",
-    scent: "Free & Clear",
-    sizeLabel: "42 ct",
-    sizeValue: 42,
-    sizeUnit: "ct",
-    uom: "tub",
-    casePack: 6,
-    reorderPoint: 8,
-    reorderQty: 12,
-    unitCostCents: 720,
-    retailCents: 1499,
-    subscriptionCents: 1399,
-  },
-  {
-    sku: "DD-PWD-93-ORIG",
-    upc: "000000000004",
-    name: "93 oz Original powder",
-    scent: "Original",
-    sizeLabel: "93 oz",
-    sizeValue: 93,
-    sizeUnit: "oz",
-    uom: "box",
-    casePack: 3,
-    reorderPoint: 3,
-    reorderQty: 6,
-    unitCostCents: 540,
-    retailCents: 1099,
-    subscriptionCents: 999,
-  },
-] as const;
-
-async function finishDemoPurchasing(prisma: PrismaClient, productId: string, actorUserId?: string) {
-  const product = await prisma.product.findFirst({
-    where: { id: productId, deletedAt: null },
-    include: { variants: { where: { deletedAt: null }, include: { inventoryBalance: true } } },
+async function ensureVendor(prisma: PrismaClient, actorUserId?: string) {
+  const existing = await prisma.vendor.findFirst({
+    where: { name: DEMO_VENDOR.name, deletedAt: null },
   });
-  if (!product) return;
-
-  let vendor = await prisma.vendor.findFirst({
-    where: { name: "Midwest Household Supply", deletedAt: null },
-  });
-  if (!vendor) {
-    vendor = await createVendor(
-      {
-        name: "Midwest Household Supply",
-        contactName: "Alex Rivera",
-        email: "orders@midwest-household.example",
-        paymentTerms: "Net 15",
-      },
-      actorUserId,
-    );
-  }
-
-  const needsStock = product.variants.some(
-    (variant) => !variant.inventoryBalance || variant.inventoryBalance.onHandQty === 0,
-  );
-  if (needsStock) {
-    const specBySku = new Map<string, (typeof VARIANTS)[number]>(
-      VARIANTS.map((spec) => [spec.sku, spec]),
-    );
-    const po = await createPurchaseOrder(
-      {
-        vendorId: vendor.id,
-        freightCents: 1200,
-        feeCents: 200,
-        notes: "Demo starter load",
-        items: product.variants.map((variant) => ({
-          productVariantId: variant.id,
-          quantityOrdered: 12,
-          unitCostCents: specBySku.get(variant.sku)?.unitCostCents ?? 650,
-        })),
-      },
-      actorUserId,
-    );
-    await transitionPurchaseOrder(po.id, "ORDERED", actorUserId);
-    const ordered = await prisma.purchaseOrder.findUniqueOrThrow({
-      where: { id: po.id },
-      include: { items: true },
-    });
-    await receiveAgainstPurchaseOrder(
-      {
-        purchaseOrderId: ordered.id,
-        notes: "Demo full receipt",
-        lines: ordered.items.map((item) => ({
-          purchaseOrderItemId: item.id,
-          quantityReceived: item.quantityOrdered,
-        })),
-      },
-      actorUserId,
-    );
-  }
-
-  if (!product.websiteVisible) {
-    await updateProduct(product.id, { websiteVisible: true, featured: true }, actorUserId);
-  }
-  console.log("Demo catalog ready: vendor → variants → PO → receive → /shop");
+  if (existing) return existing;
+  return createVendor({ ...DEMO_VENDOR }, actorUserId);
 }
 
-export async function seedDemoCatalog(prisma: PrismaClient, actorUserId?: string) {
-  const existing = await prisma.productVariant.findUnique({
-    where: { sku: VARIANTS[0].sku },
+async function ensureCategories(prisma: PrismaClient, actorUserId?: string) {
+  const bySlug = new Map<string, string>();
+  for (const spec of DEMO_CATEGORIES) {
+    const existing = await prisma.category.findFirst({
+      where: { slug: spec.slug, deletedAt: null },
+    });
+    if (existing) {
+      bySlug.set(spec.slug, existing.id);
+      continue;
+    }
+    const created = await createCategory(
+      {
+        name: spec.name,
+        slug: spec.slug,
+        description: spec.description,
+        parentId: spec.parentSlug ? bySlug.get(spec.parentSlug) : undefined,
+      },
+      actorUserId,
+    );
+    bySlug.set(spec.slug, created.id);
+  }
+  return bySlug;
+}
+
+async function ensureProduct(
+  prisma: PrismaClient,
+  spec: DemoProductSpec,
+  categoryId: string | undefined,
+  actorUserId?: string,
+) {
+  const existingVariants = await prisma.productVariant.findMany({
+    where: { sku: { in: spec.variants.map((variant) => variant.sku) } },
   });
-  if (existing) {
-    await finishDemoPurchasing(prisma, existing.productId, actorUserId);
-    return { reused: true, productId: existing.productId };
+  const existingBySku = new Map(
+    existingVariants.map((variant) => [variant.sku, variant]),
+  );
+  const missing = spec.variants.filter((variant) => !existingBySku.has(variant.sku));
+
+  let product = await prisma.product.findFirst({
+    where: { slug: spec.slug, deletedAt: null },
+  });
+
+  if (!product && missing.length === 0) {
+    const ownerId = existingVariants[0]?.productId;
+    product = ownerId
+      ? await prisma.product.findFirst({ where: { id: ownerId, deletedAt: null } })
+      : null;
+    return {
+      product,
+      variants: existingVariants.map((variant) => ({
+        variant,
+        spec: spec.variants.find((item) => item.sku === variant.sku)!,
+      })),
+    };
   }
 
-  const vendor = await createVendor(
-    {
-      name: "Midwest Household Supply",
-      contactName: "Alex Rivera",
-      email: "orders@midwest-household.example",
-      phone: "555-0100",
-      addressLine1: "100 Warehouse Rd",
-      city: "Des Moines",
-      region: "IA",
-      postalCode: "50309",
-      paymentTerms: "Net 15",
-      notes: "Primary detergent wholesaler for the demo path.",
-    },
-    actorUserId,
-  );
+  if (!product) {
+    product = await createProduct(
+      {
+        name: spec.name,
+        brand: spec.brand,
+        slug: spec.slug,
+        description: spec.description,
+        categoryId,
+        form: spec.form as ProductForm,
+        taxCategory: "TAXABLE",
+        websiteVisible: false,
+        isActive: true,
+        featured: spec.featured,
+      },
+      actorUserId,
+    );
+  } else {
+    await updateProduct(
+      product.id,
+      {
+        name: spec.name,
+        brand: spec.brand,
+        description: spec.description,
+        categoryId,
+        form: spec.form as ProductForm,
+        featured: spec.featured,
+        isActive: true,
+      },
+      actorUserId,
+    );
+  }
 
-  const laundry = await createCategory(
-    { name: "Laundry", slug: "laundry", description: "Detergent and wash-day supplies" },
-    actorUserId,
-  );
-  await createCategory(
-    { name: "Liquid detergent", slug: "liquid-detergent", parentId: laundry.id },
-    actorUserId,
-  );
+  const variants = existingVariants
+    .filter((variant) => variant.productId === product!.id)
+    .map((variant) => ({
+      variant,
+      spec: spec.variants.find((item) => item.sku === variant.sku)!,
+    }));
 
-  const product = await createProduct(
-    {
-      name: "House detergent lineup",
-      brand: "Detergents Delivered",
-      slug: "house-detergent-lineup",
-      description: "Core liquids, pods, and powder stocked for local delivery.",
-      categoryId: laundry.id,
-      form: "OTHER",
-      taxCategory: "TAXABLE",
-      websiteVisible: false,
-      isActive: true,
-    },
-    actorUserId,
-  );
-
-  const createdVariants = [];
-  for (const spec of VARIANTS) {
+  for (const variantSpec of missing) {
     const variant = await createVariant(
       product.id,
       {
-        sku: spec.sku,
-        upc: spec.upc,
-        name: spec.name,
-        scent: spec.scent,
-        sizeLabel: spec.sizeLabel,
-        sizeValue: spec.sizeValue,
-        sizeUnit: spec.sizeUnit,
-        uom: spec.uom,
-        casePack: spec.casePack,
-        reorderPoint: spec.reorderPoint,
-        reorderQty: spec.reorderQty,
+        sku: variantSpec.sku,
+        upc: variantSpec.upc,
+        name: variantSpec.name,
+        scent: variantSpec.scent,
+        sizeLabel: variantSpec.sizeLabel,
+        sizeValue: variantSpec.sizeValue,
+        sizeUnit: variantSpec.sizeUnit,
+        uom: variantSpec.uom,
+        casePack: variantSpec.casePack,
+        reorderPoint: variantSpec.reorderPoint,
+        reorderQty: variantSpec.reorderQty,
       },
       actorUserId,
     );
-    await createProductPrice(variant.id, { amountCents: spec.retailCents, kind: "RETAIL" }, actorUserId);
     await createProductPrice(
       variant.id,
-      { amountCents: spec.subscriptionCents, kind: "SUBSCRIPTION" },
+      { amountCents: variantSpec.retailCents, kind: "RETAIL" },
       actorUserId,
     );
-    createdVariants.push({ variant, spec });
+    await createProductPrice(
+      variant.id,
+      { amountCents: variantSpec.subscriptionCents, kind: "SUBSCRIPTION" },
+      actorUserId,
+    );
+    variants.push({ variant, spec: variantSpec });
   }
+
+  return { product, variants };
+}
+
+async function receiveMissingStock(
+  prisma: PrismaClient,
+  vendorId: string,
+  variantIds: string[],
+  costByVariantId: Map<string, number>,
+  actorUserId?: string,
+) {
+  const variants = await prisma.productVariant.findMany({
+    where: { id: { in: variantIds }, deletedAt: null },
+    include: { inventoryBalance: true },
+  });
+  const needsStock = variants.filter(
+    (variant) => !variant.inventoryBalance || variant.inventoryBalance.onHandQty === 0,
+  );
+  if (needsStock.length === 0) return;
 
   const po = await createPurchaseOrder(
     {
-      vendorId: vendor.id,
-      freightCents: 1200,
-      feeCents: 200,
-      notes: "Demo starter load",
-      items: createdVariants.map((row) => ({
-        productVariantId: row.variant.id,
-        quantityOrdered: 12,
-        unitCostCents: row.spec.unitCostCents,
+      vendorId,
+      freightCents: 1800,
+      feeCents: 300,
+      notes: "Demo storefront starter load",
+      items: needsStock.map((variant) => ({
+        productVariantId: variant.id,
+        quantityOrdered: 18,
+        unitCostCents: costByVariantId.get(variant.id) ?? 650,
       })),
     },
     actorUserId,
   );
-
   await transitionPurchaseOrder(po.id, "ORDERED", actorUserId);
-
   const ordered = await prisma.purchaseOrder.findUniqueOrThrow({
     where: { id: po.id },
     include: { items: true },
   });
-
   await receiveAgainstPurchaseOrder(
     {
       purchaseOrderId: ordered.id,
@@ -248,9 +199,58 @@ export async function seedDemoCatalog(prisma: PrismaClient, actorUserId?: string
     },
     actorUserId,
   );
+}
 
-  await updateProduct(product.id, { websiteVisible: true, featured: true }, actorUserId);
+export async function seedDemoCatalog(prisma: PrismaClient, actorUserId?: string) {
+  const vendor = await ensureVendor(prisma, actorUserId);
+  const categories = await ensureCategories(prisma, actorUserId);
 
-  console.log("Demo catalog seeded: vendor → variants → PO → receive → /shop");
-  return { reused: false, productId: product.id, vendorId: vendor.id, purchaseOrderId: po.id };
+  const costByVariantId = new Map<string, number>();
+  const variantIds: string[] = [];
+  const productIds: string[] = [];
+
+  for (const spec of DEMO_PRODUCTS) {
+    const { product, variants } = await ensureProduct(
+      prisma,
+      spec,
+      categories.get(spec.categorySlug),
+      actorUserId,
+    );
+    if (!product) continue;
+    productIds.push(product.id);
+    for (const row of variants) {
+      if (!row.spec) continue;
+      variantIds.push(row.variant.id);
+      costByVariantId.set(row.variant.id, row.spec.unitCostCents);
+    }
+  }
+
+  await receiveMissingStock(prisma, vendor.id, variantIds, costByVariantId, actorUserId);
+
+  for (const productId of productIds) {
+    await updateProduct(productId, { websiteVisible: true, isActive: true }, actorUserId);
+  }
+
+  // Legacy single-product seed from Phase 2 still works if it already exists.
+  const legacy = await prisma.product.findFirst({
+    where: { slug: "house-detergent-lineup", deletedAt: null },
+  });
+  if (legacy && !legacy.websiteVisible) {
+    await updateProduct(legacy.id, { websiteVisible: true, featured: true }, actorUserId);
+  }
+
+  console.log(
+    `Demo catalog ready: ${DEMO_PRODUCTS.length} household products published to /shop`,
+  );
+  return {
+    productCount: DEMO_PRODUCTS.length,
+    vendorId: vendor.id,
+    productIds,
+  };
+}
+
+export async function countVisibleShopProducts(prisma: PrismaClient) {
+  return prisma.product.count({
+    where: { deletedAt: null, isActive: true, websiteVisible: true },
+  });
 }

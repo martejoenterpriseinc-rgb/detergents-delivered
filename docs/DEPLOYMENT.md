@@ -26,12 +26,13 @@ Filesystem is ephemeral. Uploads go to object storage (S3 placeholders). Do not 
 
 ## Environment matrix
 
-| | development | staging | production |
-| --- | --- | --- | --- |
-| Database | compose `detergents_delivered_dev` | isolated staging cluster | production cluster |
-| Stripe / QBO | unset or sandbox | test / sandbox | live (Phase 3/7) |
-| Seed admin | allowed | optional break-glass | forbidden via seed script |
-| Backups | optional | daily | daily + PITR if the host offers it |
+|              | development                        | staging                           | production                         |
+| ------------ | ---------------------------------- | --------------------------------- | ---------------------------------- |
+| Database     | compose `detergents_delivered_dev` | isolated staging cluster          | production cluster                 |
+| Stripe / QBO | unset or sandbox                   | test / sandbox                    | live (Phase 3/7)                   |
+| Seed admin   | allowed                            | optional break-glass              | forbidden via seed script          |
+| Demo catalog | `SEED_DEMO_CATALOG` / `DEMO_MODE`  | `DEMO_MODE=true` if shop is empty | never auto-seed                    |
+| Backups      | optional                           | daily                             | daily + PITR if the host offers it |
 
 ## Backups
 

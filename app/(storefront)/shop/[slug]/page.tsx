@@ -1,6 +1,7 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Card } from "@/components/ui/card";
-import { formatCents } from "@/lib/domain/money";
+import { AddToCart } from "@/components/storefront/add-to-cart";
+import { ProductMedia } from "@/components/storefront/product-media";
 import { getShopProduct } from "@/lib/catalog-public";
 
 export const dynamic = "force-dynamic";
@@ -14,47 +15,54 @@ export default async function ShopProductPage({
   const product = await getShopProduct(slug);
   if (!product) notFound();
 
+  const image = product.images[0] ?? product.variants[0]?.images[0];
+
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 py-12">
-      <p className="text-sm uppercase tracking-wide text-teal-700">{product.brand}</p>
-      <h1 className="mt-2 text-3xl font-semibold text-teal-950">{product.name}</h1>
-      {product.description ? (
-        <p className="mt-3 max-w-2xl text-teal-800">{product.description}</p>
-      ) : null}
-      <div className="mt-8 grid gap-4">
-        {product.variants.map((variant) => {
-          const selling = variant.salePrice ?? variant.retailPrice;
-          return (
-            <Card key={variant.id} className="space-y-2">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <p className="font-semibold text-teal-950">{variant.name}</p>
-                  <p className="text-xs text-teal-700">
-                    SKU {variant.sku}
-                    {variant.upc ? ` · UPC ${variant.upc}` : ""}
-                    {variant.sizeLabel ? ` · ${variant.sizeLabel}` : ""}
-                    {variant.scent ? ` · ${variant.scent}` : ""}
-                  </p>
-                </div>
-                <div className="text-right">
-                  {selling ? (
-                    <p className="text-xl font-semibold text-teal-950">
-                      {formatCents(selling.amountCents)}
-                    </p>
-                  ) : (
-                    <p className="text-sm text-teal-700">Price coming soon</p>
-                  )}
-                  {variant.subscriptionPrice ? (
-                    <p className="text-xs text-teal-700">
-                      Subscribe {formatCents(variant.subscriptionPrice.amountCents)}
-                    </p>
-                  ) : null}
-                </div>
-              </div>
-              <p className="text-sm text-teal-800">{variant.available} available</p>
-            </Card>
-          );
-        })}
+    <div className="mx-auto w-full max-w-6xl px-4 py-10">
+      <p className="text-sm text-teal-700">
+        <Link href="/shop" className="hover:text-teal-950">
+          Shop
+        </Link>
+        {" / "}
+        {product.category?.name ?? "Household"}
+      </p>
+      <div className="mt-6 grid gap-8 lg:grid-cols-[0.9fr_1.1fr]">
+        <ProductMedia
+          name={product.name}
+          brand={product.brand}
+          form={product.form}
+          imageId={image?.id}
+          className="h-72 min-h-72 lg:h-full"
+        />
+        <div className="space-y-5">
+          <p className="text-sm tracking-wide text-teal-700 uppercase">{product.brand}</p>
+          <h1 className="text-3xl font-semibold text-teal-950">{product.name}</h1>
+          {product.description ? (
+            <p className="max-w-2xl text-teal-800">{product.description}</p>
+          ) : null}
+          <AddToCart
+            productId={product.id}
+            slug={product.slug}
+            productName={product.name}
+            brand={product.brand}
+            variants={product.variants
+              .map((variant) => {
+                const selling = variant.salePrice ?? variant.retailPrice;
+                return {
+                  id: variant.id,
+                  name: variant.name,
+                  sku: variant.sku,
+                  sizeLabel: variant.sizeLabel,
+                  scent: variant.scent,
+                  available: variant.available,
+                  unitPriceCents: selling?.amountCents ?? null,
+                  subscriptionCents: variant.subscriptionPrice?.amountCents ?? null,
+                  imageId: variant.images[0]?.id ?? image?.id ?? null,
+                };
+              })
+              .sort((a, b) => (a.unitPriceCents ?? 0) - (b.unitPriceCents ?? 0))}
+          />
+        </div>
       </div>
     </div>
   );

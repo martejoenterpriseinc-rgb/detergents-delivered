@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { availableQty } from "@/lib/domain/inventory";
 import { pickCurrentPrice } from "@/lib/prices";
+import { canSeedDemoCatalog } from "@/lib/demo-mode";
+import { ensureDemoCatalogOnBoot } from "@/lib/demo-boot";
 
 export type ShopFilters = {
   q?: string;
@@ -15,6 +17,10 @@ function variantAvailable(balance: { onHandQty: number; reservedQty: number } | 
 }
 
 export async function listShopProducts(filters: ShopFilters = {}) {
+  if (canSeedDemoCatalog()) {
+    await ensureDemoCatalogOnBoot();
+  }
+
   const products = await prisma.product.findMany({
     where: {
       deletedAt: null,
@@ -34,7 +40,9 @@ export async function listShopProducts(filters: ShopFilters = {}) {
             OR: [
               { name: { contains: filters.q, mode: "insensitive" } },
               { brand: { contains: filters.q, mode: "insensitive" } },
-              { variants: { some: { sku: { contains: filters.q, mode: "insensitive" } } } },
+              {
+                variants: { some: { sku: { contains: filters.q, mode: "insensitive" } } },
+              },
             ],
           }
         : {}),
@@ -65,14 +73,20 @@ export async function listShopProducts(filters: ShopFilters = {}) {
             available,
             retailPrice: pickCurrentPrice(variant.prices, new Date(), "RETAIL"),
             salePrice: pickCurrentPrice(variant.prices, new Date(), "SALE"),
-            subscriptionPrice: pickCurrentPrice(variant.prices, new Date(), "SUBSCRIPTION"),
+            subscriptionPrice: pickCurrentPrice(
+              variant.prices,
+              new Date(),
+              "SUBSCRIPTION",
+            ),
           };
         })
         .filter((variant) => product.allowPreorder || variant.available > 0);
       return { ...product, variants };
     })
     .filter((product) => product.variants.length > 0)
-    .filter((product) => (filters.inStock ? product.variants.some((variant) => variant.available > 0) : true));
+    .filter((product) =>
+      filters.inStock ? product.variants.some((variant) => variant.available > 0) : true,
+    );
 }
 
 export async function getShopProduct(slug: string) {
@@ -85,6 +99,12 @@ export async function listShopCategories() {
     where: { deletedAt: null, isActive: true },
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
   });
+}
+
+export async function listFeaturedShopProducts(limit = 4) {
+  const products = await listShopProducts();
+  const featured = products.filter((product) => product.featured);
+  return (featured.length > 0 ? featured : products).slice(0, limit);
 }
 
 export async function listShopBrands() {
