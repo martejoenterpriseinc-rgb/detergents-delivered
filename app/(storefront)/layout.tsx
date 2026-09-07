@@ -7,14 +7,8 @@ export default function StorefrontLayout({ children }: { children: ReactNode }) 
     <div className="flex min-h-full flex-col">
       <header className="border-b border-teal-100 bg-white/90 backdrop-blur">
         <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 py-4">
-          <Link href="/" className="flex items-center gap-3">
-            <BrandLogo size={40} />
-            <div>
-              <p className="text-sm font-semibold tracking-tight text-teal-900">
-                Detergents Delivered
-              </p>
-              <p className="text-xs text-teal-700/80">Clean home, local drop-off</p>
-            </div>
+          <Link href="/" className="flex min-w-0 items-center gap-3">
+            <BrandLogo size={32} />
           </Link>
           <nav className="flex items-center gap-3 text-sm font-medium">
             <Link href="/shop" className="text-teal-800 hover:text-teal-950">

@@ -12,13 +12,10 @@ export function AdminShell({
 }) {
   return (
     <div className="min-h-full bg-teal-50/60 lg:grid lg:grid-cols-[16rem_1fr]">
-      <aside className="border-b border-teal-100 bg-white lg:min-h-full lg:border-b-0 lg:border-r">
+      <aside className="border-b border-teal-100 bg-white lg:min-h-full lg:border-r lg:border-b-0">
         <div className="flex items-center gap-3 px-4 py-4">
-          <BrandLogo size={36} />
-          <div>
-            <p className="text-sm font-semibold text-teal-950">Admin</p>
-            <p className="text-xs text-teal-700">Detergents Delivered</p>
-          </div>
+          <BrandLogo size={32} className="max-w-[11rem] sm:max-w-[13rem]" />
+          <p className="text-sm font-semibold text-teal-950">Admin</p>
         </div>
         <nav className="grid max-h-[50vh] grid-cols-2 gap-1 overflow-auto px-3 pb-4 sm:grid-cols-3 lg:max-h-none lg:grid-cols-1">
           {ADMIN_NAV.map((item) => (
@@ -29,7 +26,7 @@ export function AdminShell({
             >
               <span>{item.label}</span>
               {!item.ready ? (
-                <span className="ml-2 text-[10px] uppercase tracking-wide text-teal-600">
+                <span className="ml-2 text-[10px] tracking-wide text-teal-600 uppercase">
                   Phase {item.phase}
                 </span>
               ) : null}
