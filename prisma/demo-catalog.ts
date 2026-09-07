@@ -11,6 +11,7 @@ import {
   createProductPrice,
   createVariant,
   updateProduct,
+  updateVariant,
 } from "../lib/services/catalog";
 import { createVendor } from "../lib/services/vendors";
 import { createPurchaseOrder, transitionPurchaseOrder } from "../lib/services/purchasing";
@@ -71,13 +72,37 @@ async function ensureProduct(
     product = ownerId
       ? await prisma.product.findFirst({ where: { id: ownerId, deletedAt: null } })
       : null;
-    return {
-      product,
-      variants: existingVariants.map((variant) => ({
-        variant,
-        spec: spec.variants.find((item) => item.sku === variant.sku)!,
-      })),
-    };
+    if (product) {
+      await updateProduct(
+        product.id,
+        {
+          name: spec.name,
+          brand: spec.brand,
+          description: spec.description,
+          form: spec.form as ProductForm,
+          featured: spec.featured,
+          isActive: true,
+        },
+        actorUserId,
+      );
+      const variants = [];
+      for (const existing of existingVariants) {
+        const variantSpec = spec.variants.find((item) => item.sku === existing.sku);
+        if (!variantSpec) continue;
+        const variant = await updateVariant(
+          existing.id,
+          {
+            name: variantSpec.name,
+            scent: variantSpec.scent,
+            sizeLabel: variantSpec.sizeLabel,
+          },
+          actorUserId,
+        );
+        variants.push({ variant, spec: variantSpec });
+      }
+      return { product, variants };
+    }
+    return { product, variants: [] };
   }
 
   if (!product) {
@@ -112,12 +137,25 @@ async function ensureProduct(
     );
   }
 
-  const variants = existingVariants
-    .filter((variant) => variant.productId === product!.id)
-    .map((variant) => ({
-      variant,
-      spec: spec.variants.find((item) => item.sku === variant.sku)!,
-    }));
+  const variants = [];
+  for (const existing of existingVariants.filter(
+    (variant) => variant.productId === product.id,
+  )) {
+    const variantSpec = spec.variants.find((item) => item.sku === existing.sku);
+    if (!variantSpec) continue;
+    const variant = await updateVariant(
+      existing.id,
+      {
+        name: variantSpec.name,
+        scent: variantSpec.scent,
+        sizeLabel: variantSpec.sizeLabel,
+        sizeValue: variantSpec.sizeValue,
+        sizeUnit: variantSpec.sizeUnit,
+      },
+      actorUserId,
+    );
+    variants.push({ variant, spec: variantSpec });
+  }
 
   for (const variantSpec of missing) {
     const variant = await createVariant(

@@ -144,8 +144,8 @@ export function ProductEditor({
     try {
       const upload = new FormData();
       upload.set("file", file);
-      const stored = await fetch("/api/uploads", { method: "POST", body: upload }).then((res) =>
-        res.json(),
+      const stored = await fetch("/api/uploads", { method: "POST", body: upload }).then(
+        (res) => res.json(),
       );
       if (!stored.storageKey) throw new Error(stored.error || "upload failed");
       await adminFetch(`/api/products/${product.id}/images`, {
@@ -165,17 +165,29 @@ export function ProductEditor({
   return (
     <div className="space-y-6">
       {error ? (
-        <p className="rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-900">{error}</p>
+        <p className="rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          {error}
+        </p>
       ) : null}
       <form action={saveProduct} className="space-y-6">
         <Card className="space-y-4">
           <h2 className="text-lg font-semibold text-teal-950">Basics</h2>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Name">
-              <Input name="name" required defaultValue={product?.name} placeholder="Fresh Breeze detergent" />
+              <Input
+                name="name"
+                required
+                defaultValue={product?.name}
+                placeholder="Liquid Detergent · Lavender · 100 oz"
+              />
             </Field>
             <Field label="Brand">
-              <Input name="brand" required defaultValue={product?.brand} placeholder="Detergents Delivered" />
+              <Input
+                name="brand"
+                required
+                defaultValue={product?.brand}
+                placeholder="Generic"
+              />
             </Field>
             <Field label="Category">
               <Select name="categoryId" defaultValue={product?.categoryId ?? ""}>
@@ -207,25 +219,45 @@ export function ProductEditor({
           <h2 className="text-lg font-semibold text-teal-950">Website & tax</h2>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="flex items-center gap-2 text-sm text-teal-900">
-              <input type="checkbox" name="isActive" defaultChecked={product?.isActive ?? true} />
+              <input
+                type="checkbox"
+                name="isActive"
+                defaultChecked={product?.isActive ?? true}
+              />
               Active
             </label>
             <label className="flex items-center gap-2 text-sm text-teal-900">
-              <input type="checkbox" name="websiteVisible" defaultChecked={product?.websiteVisible ?? false} />
+              <input
+                type="checkbox"
+                name="websiteVisible"
+                defaultChecked={product?.websiteVisible ?? false}
+              />
               Visible on website
             </label>
             <label className="flex items-center gap-2 text-sm text-teal-900">
-              <input type="checkbox" name="featured" defaultChecked={product?.featured ?? false} />
+              <input
+                type="checkbox"
+                name="featured"
+                defaultChecked={product?.featured ?? false}
+              />
               Featured
             </label>
             <label className="flex items-center gap-2 text-sm text-teal-900">
-              <input type="checkbox" name="allowPreorder" defaultChecked={product?.allowPreorder ?? false} />
+              <input
+                type="checkbox"
+                name="allowPreorder"
+                defaultChecked={product?.allowPreorder ?? false}
+              />
               Allow preorder (show at 0 stock)
             </label>
           </div>
           <div className="grid gap-4 sm:grid-cols-3">
             <Field label="Tax category">
-              <Input name="taxCategory" defaultValue={product?.taxCategory ?? ""} placeholder="TAXABLE" />
+              <Input
+                name="taxCategory"
+                defaultValue={product?.taxCategory ?? ""}
+                placeholder="TAXABLE"
+              />
             </Field>
             <Field label="Delivery capacity units">
               <Input
@@ -250,10 +282,13 @@ export function ProductEditor({
           <Card className="space-y-4">
             <h2 className="text-lg font-semibold text-teal-950">Image</h2>
             <p className="text-sm text-teal-800">
-              Stored as an object key (local stub in development). Private assets are never given
-              public unsigned URLs.
+              Stored as an object key (local stub in development). Private assets are
+              never given public unsigned URLs.
             </p>
-            <form action={uploadImage} className="flex flex-col gap-3 sm:flex-row sm:items-end">
+            <form
+              action={uploadImage}
+              className="flex flex-col gap-3 sm:flex-row sm:items-end"
+            >
               <Field label="File">
                 <Input name="file" type="file" accept="image/*" />
               </Field>
@@ -265,20 +300,28 @@ export function ProductEditor({
           <Card className="space-y-4">
             <h2 className="text-lg font-semibold text-teal-950">Variants</h2>
             <p className="text-sm text-teal-800">
-              Scent, size, and form live on the variant so you do not duplicate the product.
+              Scent, size, and form live on the variant so you do not duplicate the
+              product.
             </p>
             <div className="space-y-4">
               {product.variants.map((variant) => {
                 const onHand = variant.inventoryBalance?.onHandQty ?? 0;
                 const reserved = variant.inventoryBalance?.reservedQty ?? 0;
                 const layerValue = variant.costLayers.reduce(
-                  (sum, layer) => sum + layer.quantityRemaining * layer.landedUnitCostCents,
+                  (sum, layer) =>
+                    sum + layer.quantityRemaining * layer.landedUnitCostCents,
                   0,
                 );
-                const remaining = variant.costLayers.reduce((sum, layer) => sum + layer.quantityRemaining, 0);
+                const remaining = variant.costLayers.reduce(
+                  (sum, layer) => sum + layer.quantityRemaining,
+                  0,
+                );
                 const landed = remaining > 0 ? Math.round(layerValue / remaining) : null;
                 return (
-                  <div key={variant.id} className="rounded-2xl border border-teal-100 p-4">
+                  <div
+                    key={variant.id}
+                    className="rounded-2xl border border-teal-100 p-4"
+                  >
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div>
                         <p className="font-semibold text-teal-950">{variant.name}</p>
@@ -302,7 +345,10 @@ export function ProductEditor({
                         </li>
                       ))}
                     </ul>
-                    <form action={(formData) => addPrice(variant.id, formData)} className="mt-3 grid gap-3 sm:grid-cols-3">
+                    <form
+                      action={(formData) => addPrice(variant.id, formData)}
+                      className="mt-3 grid gap-3 sm:grid-cols-3"
+                    >
                       <Select name="kind" defaultValue="RETAIL">
                         <option value="RETAIL">Retail</option>
                         <option value="SUBSCRIPTION">Subscription</option>
@@ -322,7 +368,11 @@ export function ProductEditor({
                 <Input name="sku" required placeholder="DD-LIQ-64-FRESH" />
               </Field>
               <Field label="Variant name">
-                <Input name="variantName" required placeholder="64 oz Fresh Breeze" />
+                <Input
+                  name="variantName"
+                  required
+                  placeholder="Liquid Detergent · Fresh · 64 oz"
+                />
               </Field>
               <Field label="UPC / barcode">
                 <Input name="upc" inputMode="numeric" />

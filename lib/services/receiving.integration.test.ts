@@ -19,7 +19,7 @@ describe("receiving integration", () => {
     const vendor = await createVendor({ name: `IT Vendor ${suffix}` });
     const product = await createProduct({
       name: `IT Detergent ${suffix}`,
-      brand: "IT Brand",
+      brand: "Generic",
       slug: `it-detergent-${suffix}`,
     });
     const variant = await createVariant(product.id, {
@@ -84,7 +84,7 @@ describe("receiving integration", () => {
   it("rejects an oversell reservation against the updated balance", async () => {
     const product = await createProduct({
       name: `IT Oversell ${suffix}`,
-      brand: "IT Brand",
+      brand: "Generic",
       slug: `it-oversell-${suffix}`,
     });
     const variant = await createVariant(product.id, {
@@ -122,7 +122,7 @@ describe("receiving integration", () => {
   it("serializes concurrent reservations so stock cannot be double-booked", async () => {
     const product = await createProduct({
       name: `IT Concurrent ${suffix}`,
-      brand: "IT Brand",
+      brand: "Generic",
       slug: `it-concurrent-${suffix}`,
     });
     const variant = await createVariant(product.id, {
@@ -188,7 +188,7 @@ describe("receiving integration", () => {
     const vendor = await createVendor({ name: `IT Draft ${suffix}` });
     const product = await createProduct({
       name: `IT Draft Product ${suffix}`,
-      brand: "IT Brand",
+      brand: "Generic",
       slug: `it-draft-${suffix}`,
     });
     const variant = await createVariant(product.id, {

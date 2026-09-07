@@ -40,7 +40,7 @@ Later phases stay unchecked until implemented.
 - [x] Catalog / purchasing / receiving APIs secured with `requireApiRole` (`ADMIN` / `INVENTORY` / `SUPER_ADMIN` writes; CPA read)
 - [x] Storefront `/shop` + product detail from the **same** Postgres catalog
 - [x] Shop lists published + active products with available inventory (or preorder)
-- [x] Category browse + search / brand / in-stock filters
+- [x] Category browse + search / type / scent / in-stock filters
 - [x] Vendor CRUD (contact, address, terms, notes, attachment metadata)
 - [x] Purchase order lifecycle: `DRAFT` → `ORDERED` → `PARTIALLY_RECEIVED` → `RECEIVED` / `CANCELLED`
 - [x] PO lines with qty, unit cost, discounts, freight, fees, taxes, other landed costs

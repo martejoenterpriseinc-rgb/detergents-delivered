@@ -29,13 +29,14 @@ export default async function ShopProductPage({
       <div className="mt-6 grid gap-8 lg:grid-cols-[0.9fr_1.1fr]">
         <ProductMedia
           name={product.name}
-          brand={product.brand}
           form={product.form}
           imageId={image?.id}
           className="h-72 min-h-72 lg:h-full"
         />
         <div className="space-y-5">
-          <p className="text-sm tracking-wide text-teal-700 uppercase">{product.brand}</p>
+          <p className="text-sm tracking-wide text-teal-700 uppercase">
+            {product.variants[0]?.scent ?? product.category?.name ?? "Household"}
+          </p>
           <h1 className="text-3xl font-semibold text-teal-950">{product.name}</h1>
           {product.description ? (
             <p className="max-w-2xl text-teal-800">{product.description}</p>
