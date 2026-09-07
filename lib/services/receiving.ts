@@ -36,6 +36,11 @@ export async function receiveAgainstPurchaseOrder(
     throw new ReceivingError("receive at least one line");
   }
 
+  const purchaseOrderItemIds = input.lines.map((line) => line.purchaseOrderItemId);
+  if (new Set(purchaseOrderItemIds).size !== purchaseOrderItemIds.length) {
+    throw new ReceivingError("each purchase order line may appear only once per receipt");
+  }
+
   try {
     const receipt = await prisma.$transaction(async (tx) => {
       const po = await tx.purchaseOrder.findUnique({
