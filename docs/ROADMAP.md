@@ -1,6 +1,6 @@
 # Roadmap
 
-Authoritative checklist for Detergents Delivered. A Phase 1 box is checked only when the work exists in this repo **with tests** (or an explicit non-testable artifact such as documentation or Docker files).
+Authoritative checklist for Detergents Delivered. A box is checked only when the work exists in this repo **with tests** (or an explicit non-testable artifact such as documentation or Docker files) **and** a working UI plus server-side security where the item is a product feature.
 
 Later phases stay unchecked until implemented.
 
@@ -13,7 +13,7 @@ Later phases stay unchecked until implemented.
 - [x] Dockerfile + docker-compose (app + Postgres)
 - [x] PWA manifest + minimal service worker hook
 - [x] Editable SVG logo at `public/brand/logo.svg`
-- [x] README and architecture / ops documentation (all files listed in the Phase 1 brief)
+- [x] README and architecture / ops documentation
 - [x] Full core Prisma domain schema + initial migration
 - [x] Money stored as integer cents in schema and helpers
 - [x] Email/password sign-in + session
@@ -28,70 +28,73 @@ Later phases stay unchecked until implemented.
 - [x] Unit tests: inventory available / reject negative / oversell
 - [x] Unit tests: authorization helpers
 - [x] `lib/domain` money + inventory + `TaxService` stub interface
-- [ ] Storefront catalog, cart, and checkout (not Phase 1)
-- [ ] Inventory receiving UI and live stock movements (not Phase 1)
-- [ ] Live Stripe / QuickBooks calls (never in Phase 1)
+- [ ] Live Stripe / QuickBooks calls (never a Phase 1 or Phase 2 item)
 
-### Phase 2 scaffold started (incomplete vs MVP)
+## Phase 2 — Products, categories, website catalog, inventory, PO, receiving, COGS
 
-- [x] Product / Category Prisma CRUD API stubs (`GET`/`POST` `/api/products`, `/api/categories`)
-- [x] Admin products list page wired to the database
-- [ ] Admin create/edit forms, variants, prices, images
-- [ ] Public shop listing from the catalog
+- [x] Category tree admin (category + subcategory CRUD)
+- [x] Product + variant CRUD (SKU, UPC, scent, size, form, weight, dimensions, UOM, case pack, vendor link, tax category, reorder, active, website visibility, featured, delivery capacity)
+- [x] Time-bounded `ProductPrice` rows (retail / subscription / sale). New rows for changes; amounts are not rewritten in place
+- [x] Images via object-storage keys + local/dev upload stub; no public unsigned URLs for private assets
+- [x] Admin create/edit forms (mobile-friendly, sectioned)
+- [x] Catalog / purchasing / receiving APIs secured with `requireApiRole` (`ADMIN` / `INVENTORY` / `SUPER_ADMIN` writes; CPA read)
+- [x] Storefront `/shop` + product detail from the **same** Postgres catalog
+- [x] Shop lists published + active products with available inventory (or preorder)
+- [x] Category browse + search / brand / in-stock filters
+- [x] Vendor CRUD (contact, address, terms, notes, attachment metadata)
+- [x] Purchase order lifecycle: `DRAFT` → `ORDERED` → `PARTIALLY_RECEIVED` → `RECEIVED` / `CANCELLED`
+- [x] PO lines with qty, unit cost, discounts, freight, fees, taxes, other landed costs
+- [x] Receiving: partial / shortage / overage / damage / cost notes; SKU / UPC / PO search
+- [x] Receiving writes `Receipt` + `ReceiptItem` + `InventoryTransaction` and updates `InventoryBalance` from ledger rules
+- [x] Negative on-hand and oversell rejected with clear errors
+- [x] Inventory dashboard: value (landed layers), on-hand, available, reserved, low stock, out of stock, reorder recommendations
+- [x] Adjustments require employee, datetime, qty, reason, notes + `audit_log`
+- [x] Cost layers stored on receive for later sale-time COGS snapshots
+- [x] Landed cost allocation + gross profit $ / margin % helpers (integer cents) with unit tests
+- [x] `applyTransaction` + reorder recommendation domain functions
+- [x] Demo seed path: vendor → variants → PO → receive → publish → `/shop`
+- [x] Integration test: receive updates balances; oversell rejected
+- [ ] CSV import prototype (optional — not done)
 
-## Phase 2 — Catalog
-
-- [ ] Category tree admin
-- [ ] Product + variant CRUD (SKU, UPC, scent, size, form)
-- [ ] Time-bounded `ProductPrice` rows (no in-place price history rewrite)
-- [ ] Images via object storage keys
-- [ ] Storefront browse / search (basic)
-- [ ] CSV import prototype (optional)
-
-## Phase 3 — Cart, checkout, orders, payments
+## Phase 3 — Customers, cart, Stripe, tax
 
 - [ ] Cart and checkout
-- [ ] Order + order item price snapshots
+- [ ] Customer admin / account order history
+- [ ] Order + order item price snapshots (and `landedUnitCostCents` at sale)
 - [ ] Stripe test-mode payments and webhooks → `PaymentEvent`
 - [ ] Refund records (new rows, not payment overwrites)
-- [ ] Customer account order history
 - [ ] Inventory reservation on paid order
+- [ ] Stripe Tax behind `TaxService` (still a stub today)
 
-## Phase 4 — Purchasing and inventory operations
-
-- [ ] Vendors and vendor SKUs
-- [ ] Purchase orders and receiving
-- [ ] Ledger-only stock changes
-- [ ] Cycle counts and adjustments with reason codes
-- [ ] Prevent negative on-hand and oversell at the service layer
-
-## Phase 5 — Delivery and driver
+## Phase 4 — Delivery, routes, POD
 
 - [ ] Delivery zones and daily capacity
 - [ ] Auto-schedule paid orders onto routes
 - [ ] Driver stop list, attempts, photos
-- [ ] Mileage trips
 - [ ] Maps geocoding / basic optimization
 
-## Phase 6 — Subscriptions
+## Phase 5 — Subscriptions, referrals, promotions
 
 - [ ] Cadence, next-order date, pause/cancel
 - [ ] Generate orders from subscriptions
 - [ ] Skip / swap variant
 - [ ] Dunning / past-due handling (with Stripe)
+- [ ] Promotions and referrals
 
-## Phase 7 — Tax, expenses, QuickBooks
+## Phase 6 — Expenses, mileage, CPA
 
-- [ ] Stripe Tax behind `TaxService`
-- [ ] Immutable tax snapshots
-- [ ] Expenses and mileage posting
-- [ ] Idempotent QBO sync (see [QUICKBOOKS.md](./QUICKBOOKS.md))
+- [ ] Expense capture
+- [ ] Mileage trips
 - [ ] CPA Center read models
 
-## Phase 8 — Promotions, reports, polish
+## Phase 7 — Import/export, QuickBooks
 
-- [ ] Promotions and referrals
-- [ ] Operational + financial reports
 - [ ] Import/export hardening
+- [ ] Idempotent QBO sync (see [QUICKBOOKS.md](./QUICKBOOKS.md))
+
+## Phase 8 — Reconciliation and hardening
+
+- [ ] Operational + financial reports
+- [ ] Reconciliation tools
 - [ ] PWA offline improvements
 - [ ] Production runbooks and backup drills

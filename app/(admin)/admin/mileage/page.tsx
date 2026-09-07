@@ -4,7 +4,7 @@ export default function Page() {
   return (
     <PhasePlaceholder
       title="Mileage"
-      phase={5}
+      phase={6}
       summary="Vehicle trips and odometer records are in the schema for delivery ops."
     />
   );

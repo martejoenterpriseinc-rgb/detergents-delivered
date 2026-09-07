@@ -1,0 +1,98 @@
+import { prisma } from "@/lib/prisma";
+import { availableQty } from "@/lib/domain/inventory";
+import { pickCurrentPrice } from "@/lib/prices";
+
+export type ShopFilters = {
+  q?: string;
+  brand?: string;
+  category?: string;
+  inStock?: boolean;
+};
+
+function variantAvailable(balance: { onHandQty: number; reservedQty: number } | null) {
+  if (!balance) return 0;
+  return availableQty(balance);
+}
+
+export async function listShopProducts(filters: ShopFilters = {}) {
+  const products = await prisma.product.findMany({
+    where: {
+      deletedAt: null,
+      isActive: true,
+      websiteVisible: true,
+      ...(filters.brand ? { brand: { equals: filters.brand, mode: "insensitive" } } : {}),
+      ...(filters.category
+        ? {
+            category: {
+              OR: [{ slug: filters.category }, { id: filters.category }],
+              deletedAt: null,
+            },
+          }
+        : {}),
+      ...(filters.q
+        ? {
+            OR: [
+              { name: { contains: filters.q, mode: "insensitive" } },
+              { brand: { contains: filters.q, mode: "insensitive" } },
+              { variants: { some: { sku: { contains: filters.q, mode: "insensitive" } } } },
+            ],
+          }
+        : {}),
+    },
+    include: {
+      category: true,
+      images: { orderBy: [{ isPrimary: "desc" }, { sortOrder: "asc" }] },
+      variants: {
+        where: { deletedAt: null, isActive: true, websiteVisible: true },
+        include: {
+          prices: true,
+          inventoryBalance: true,
+          images: { orderBy: [{ isPrimary: "desc" }, { sortOrder: "asc" }] },
+        },
+        orderBy: { sku: "asc" },
+      },
+    },
+    orderBy: [{ featured: "desc" }, { name: "asc" }],
+  });
+
+  return products
+    .map((product) => {
+      const variants = product.variants
+        .map((variant) => {
+          const available = variantAvailable(variant.inventoryBalance);
+          return {
+            ...variant,
+            available,
+            retailPrice: pickCurrentPrice(variant.prices, new Date(), "RETAIL"),
+            salePrice: pickCurrentPrice(variant.prices, new Date(), "SALE"),
+            subscriptionPrice: pickCurrentPrice(variant.prices, new Date(), "SUBSCRIPTION"),
+          };
+        })
+        .filter((variant) => product.allowPreorder || variant.available > 0);
+      return { ...product, variants };
+    })
+    .filter((product) => product.variants.length > 0)
+    .filter((product) => (filters.inStock ? product.variants.some((variant) => variant.available > 0) : true));
+}
+
+export async function getShopProduct(slug: string) {
+  const products = await listShopProducts();
+  return products.find((product) => product.slug === slug) ?? null;
+}
+
+export async function listShopCategories() {
+  return prisma.category.findMany({
+    where: { deletedAt: null, isActive: true },
+    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+  });
+}
+
+export async function listShopBrands() {
+  const rows = await prisma.product.findMany({
+    where: { deletedAt: null, isActive: true, websiteVisible: true },
+    distinct: ["brand"],
+    select: { brand: true },
+    orderBy: { brand: "asc" },
+  });
+  return rows.map((row) => row.brand);
+}

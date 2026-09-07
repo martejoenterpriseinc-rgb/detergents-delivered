@@ -14,7 +14,7 @@ Shared business rules live in `lib/domain/`. UI route groups do not own money, t
 
 ## Status
 
-Phase 1 foundation is in progress on this branch. Catalog, checkout, inventory workflows, and live Stripe/QuickBooks calls are **not** complete.
+Phase 2 catalog, purchasing, receiving, and inventory are implemented on this branch. Checkout, Stripe, delivery, subscriptions, and QuickBooks are **not** complete.
 
 ## Stack
 
@@ -40,7 +40,7 @@ npm install
 npm run db:generate
 npm run db:migrate
 # optional, development only:
-# SEED_ADMIN_EMAIL=admin@example.com SEED_ADMIN_PASSWORD=... APP_ENV=development npm run db:seed
+# APP_ENV=development SEED_ADMIN_EMAIL=admin@example.com SEED_ADMIN_PASSWORD=... SEED_DEMO_CATALOG=true npm run db:seed
 npm run dev
 ```
 
@@ -54,11 +54,24 @@ Health check: [http://localhost:3000/api/health](http://localhost:3000/api/healt
 npm run lint
 npm run typecheck
 npm run test:unit
+npm run test:integration
 npm run db:validate
 npm run build
 ```
 
 If Docker is unavailable, point `DATABASE_URL` at any empty Postgres 16 database and run `npm run db:migrate`.
+
+### Phase 2 demo path (vendor → shop)
+
+With `APP_ENV=development` and `SEED_DEMO_CATALOG=true`, `npm run db:seed` will:
+
+1. Create vendor **Midwest Household Supply**
+2. Create several detergent variants (different SKUs, costs, prices, sizes)
+3. Create a PO, mark it **ORDERED**, and receive it
+4. Publish the product (`websiteVisible`)
+5. List those SKUs on `/shop` from the same database
+
+You can also do the same steps in admin: Categories → Products → Vendors → Purchase Orders → Receiving → toggle website visible.
 
 ## Environment
 
@@ -87,7 +100,8 @@ Google OAuth is optional. Credentials sign-in works without `GOOGLE_CLIENT_ID` /
 | `npm run start` | Bind `0.0.0.0:$PORT` (default 3000) |
 | `npm run lint` | ESLint |
 | `npm run typecheck` | `tsc --noEmit` |
-| `npm run test` / `test:unit` | Vitest once |
+| `npm run test` / `test:unit` | Vitest unit tests |
+| `npm run test:integration` | Vitest + Postgres (receive → ledger) |
 | `npm run db:generate` | Prisma client |
 | `npm run db:migrate` | Apply migrations (`deploy`) |
 | `npm run db:studio` | Prisma Studio |
@@ -98,7 +112,7 @@ Google OAuth is optional. Credentials sign-in works without `GOOGLE_CLIENT_ID` /
 | Path | Mode | Access |
 | --- | --- | --- |
 | `/` | Storefront home | Public |
-| `/shop` | Catalog placeholder | Public |
+| `/shop` | Live catalog from the same DB | Public |
 | `/sign-in` | Credentials (+ Google when configured) | Public |
 | `/account/*` | Household account shell | Authenticated |
 | `/admin/*` | Operations shell | ADMIN, INVENTORY, CPA, SUPER_ADMIN |

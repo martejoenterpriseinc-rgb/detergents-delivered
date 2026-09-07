@@ -36,7 +36,7 @@ export default function StorefrontLayout({ children }: { children: ReactNode }) 
       <footer className="border-t border-teal-100 bg-white">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-2 px-4 py-6 text-xs text-teal-800 sm:flex-row sm:items-center sm:justify-between">
           <p>Detergents Delivered — household products, brought to your door.</p>
-          <p>Phase 1 foundation · catalog and checkout come next.</p>
+          <p>Household products, local delivery.</p>
         </div>
       </footer>
     </div>

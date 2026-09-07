@@ -1,5 +1,6 @@
 import { PrismaClient, RoleCode } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { seedDemoCatalog } from "./demo-catalog";
 
 const prisma = new PrismaClient();
 
@@ -104,6 +105,10 @@ async function main() {
   });
 
   console.log(`Seeded SUPER_ADMIN for ${email}`);
+
+  if (process.env.SEED_DEMO_CATALOG === "true") {
+    await seedDemoCatalog(prisma, user.id);
+  }
 }
 
 main()
