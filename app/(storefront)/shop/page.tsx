@@ -1,17 +1,24 @@
-import Link from "next/link";
-import type { Route } from "next";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { formatCents } from "@/lib/domain/money";
-import { listShopBrands, listShopCategories, listShopProducts } from "@/lib/catalog-public";
+import { ProductCard } from "@/components/storefront/product-card";
+import {
+  listShopBrands,
+  listShopCategories,
+  listShopProducts,
+} from "@/lib/catalog-public";
 
 export const dynamic = "force-dynamic";
 
 export default async function ShopPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; brand?: string; category?: string; stock?: string }>;
+  searchParams: Promise<{
+    q?: string;
+    brand?: string;
+    category?: string;
+    stock?: string;
+  }>;
 }) {
   const params = await searchParams;
   const [products, categories, brands] = await Promise.all([
@@ -26,13 +33,13 @@ export default async function ShopPage({
   ]);
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 py-12">
-      <h1 className="text-3xl font-semibold text-teal-950">Shop</h1>
+    <div className="mx-auto w-full max-w-6xl px-4 py-10">
+      <h1 className="text-3xl font-semibold text-teal-950">Shop household staples</h1>
       <p className="mt-2 max-w-2xl text-teal-800">
-        Live catalog from the same inventory database. Products appear after they are received and
-        published.
+        In-stock detergent, dish, paper, and cleaners from the same warehouse we receive
+        into. Filter by category, brand, or search a SKU.
       </p>
-      <form className="mt-8 grid gap-3 sm:grid-cols-4" method="get">
+      <form className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4" method="get">
         <Input name="q" defaultValue={params.q} placeholder="Search products or SKU" />
         <Select name="category" defaultValue={params.category ?? ""}>
           <option value="">All categories</option>
@@ -56,52 +63,24 @@ export default async function ShopPage({
         </Select>
         <button
           type="submit"
-          className="h-11 rounded-full bg-teal-700 px-5 text-sm font-semibold text-white sm:col-span-4 sm:w-fit"
+          className="h-11 rounded-full bg-teal-700 px-5 text-sm font-semibold text-white sm:col-span-2 lg:col-span-4 lg:w-fit"
         >
-          Filter
+          Apply filters
         </button>
       </form>
       {products.length === 0 ? (
         <Card className="mt-8">
-          <p className="text-sm font-medium text-teal-900">Nothing in the shop yet</p>
+          <p className="text-sm font-medium text-teal-900">Nothing matches yet</p>
           <p className="mt-2 text-sm text-teal-800">
-            Receive inventory and mark the product website-visible in admin.
+            Try another filter, or seed the demo catalog with DEMO_MODE=true /
+            SEED_DEMO_CATALOG=true so the shop has household products to show.
           </p>
         </Card>
       ) : (
         <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {products.map((product) => {
-            const price =
-              product.variants[0]?.salePrice ??
-              product.variants[0]?.retailPrice ??
-              null;
-            const image = product.images[0] ?? product.variants[0]?.images[0];
-            return (
-              <Link key={product.id} href={`/shop/${product.slug}` as Route}>
-                <Card className="h-full space-y-3">
-                  {image ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={`/api/catalog/media/${image.id}`}
-                      alt={image.alt ?? product.name}
-                      className="h-40 w-full rounded-2xl object-cover bg-teal-50"
-                    />
-                  ) : (
-                    <div className="flex h-40 items-center justify-center rounded-2xl bg-teal-50 text-sm text-teal-700">
-                      {product.brand}
-                    </div>
-                  )}
-                  <p className="text-xs uppercase tracking-wide text-teal-700">{product.brand}</p>
-                  <p className="text-lg font-semibold text-teal-950">{product.name}</p>
-                  <p className="text-sm text-teal-800">
-                    {price ? formatCents(price.amountCents) : "See details"}
-                    {" · "}
-                    {product.variants.reduce((sum, variant) => sum + variant.available, 0)} in stock
-                  </p>
-                </Card>
-              </Link>
-            );
-          })}
+          {products.map((product) => (
+            <ProductCard key={product.id} product={product} />
+          ))}
         </div>
       )}
     </div>

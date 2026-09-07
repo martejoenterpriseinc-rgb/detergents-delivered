@@ -20,3 +20,8 @@ body {
   color: var(--foreground);
   font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
 }
+
+::selection {
+  background: #99f6e4;
+  color: #134e4a;
+}

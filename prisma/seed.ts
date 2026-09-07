@@ -1,6 +1,7 @@
 import { PrismaClient, RoleCode } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { seedDemoCatalog } from "./demo-catalog";
+import { canSeedDemoCatalog } from "../lib/demo-mode";
 
 const prisma = new PrismaClient();
 
@@ -50,7 +51,7 @@ const PERMISSIONS = [
   { code: "settings.write", name: "Write settings" },
 ];
 
-async function main() {
+async function seedRoles() {
   for (const role of ROLES) {
     await prisma.role.upsert({
       where: { code: role.code },
@@ -66,10 +67,12 @@ async function main() {
       create: permission,
     });
   }
+}
 
+async function seedDevelopmentAdmin() {
   if (process.env.APP_ENV !== "development") {
     console.log("Skipping SUPER_ADMIN seed outside development.");
-    return;
+    return undefined;
   }
 
   const email = process.env.SEED_ADMIN_EMAIL?.trim().toLowerCase();
@@ -78,7 +81,7 @@ async function main() {
     console.log(
       "SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD not set — roles seeded, no admin user created.",
     );
-    return;
+    return undefined;
   }
 
   const passwordHash = await bcrypt.hash(password, 12);
@@ -105,9 +108,17 @@ async function main() {
   });
 
   console.log(`Seeded SUPER_ADMIN for ${email}`);
+  return user.id;
+}
 
-  if (process.env.SEED_DEMO_CATALOG === "true") {
-    await seedDemoCatalog(prisma, user.id);
+async function main() {
+  await seedRoles();
+  const adminId = await seedDevelopmentAdmin();
+
+  if (canSeedDemoCatalog()) {
+    await seedDemoCatalog(prisma, adminId);
+  } else if (process.env.SEED_DEMO_CATALOG === "true") {
+    console.log("Refusing demo catalog seed in production.");
   }
 }
 

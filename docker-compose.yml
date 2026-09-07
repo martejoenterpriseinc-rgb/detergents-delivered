@@ -33,6 +33,8 @@ services:
       AUTH_SECRET: ${AUTH_SECRET:-dev-only-change-me-not-for-production}
       NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
       AUTH_URL: ${AUTH_URL:-http://localhost:3000}
+      DEMO_MODE: ${DEMO_MODE:-true}
+      SEED_DEMO_CATALOG: ${SEED_DEMO_CATALOG:-true}
     ports:
       - "3000:3000"
     command: >
