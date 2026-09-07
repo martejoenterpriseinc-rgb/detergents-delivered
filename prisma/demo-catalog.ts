@@ -97,7 +97,9 @@ async function finishDemoPurchasing(prisma: PrismaClient, productId: string, act
     (variant) => !variant.inventoryBalance || variant.inventoryBalance.onHandQty === 0,
   );
   if (needsStock) {
-    const specBySku = new Map(VARIANTS.map((spec) => [spec.sku, spec]));
+    const specBySku = new Map<string, (typeof VARIANTS)[number]>(
+      VARIANTS.map((spec) => [spec.sku, spec]),
+    );
     const po = await createPurchaseOrder(
       {
         vendorId: vendor.id,
