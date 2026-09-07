@@ -9,12 +9,22 @@ import {
   requireRoleSync,
   type RoleCode,
 } from "@/lib/domain/authz";
+import { CHANGE_CREDENTIALS_PATH } from "@/lib/domain/credentials";
+import { prisma } from "@/lib/prisma";
 
 export { hasPermission, hasRole, requirePermissionSync, requireRoleSync, AuthzError };
 export type { RoleCode };
 
 export async function getSession() {
   return auth();
+}
+
+export async function userMustChangeCredentials(userId: string): Promise<boolean> {
+  const row = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { mustChangeCredentials: true },
+  });
+  return Boolean(row?.mustChangeCredentials);
 }
 
 export async function requireAuth() {
@@ -25,8 +35,15 @@ export async function requireAuth() {
   return session;
 }
 
+async function enforceCurrentCredentials(userId: string) {
+  if (await userMustChangeCredentials(userId)) {
+    redirect(CHANGE_CREDENTIALS_PATH);
+  }
+}
+
 export async function requireRole(...allowed: RoleCode[]) {
   const session = await requireAuth();
+  await enforceCurrentCredentials(session.user.id);
   if (!hasRole(session.user.roles, allowed)) {
     redirect("/sign-in?error=forbidden");
   }
@@ -35,6 +52,7 @@ export async function requireRole(...allowed: RoleCode[]) {
 
 export async function requirePermission(permission: string) {
   const session = await requireAuth();
+  await enforceCurrentCredentials(session.user.id);
   const granted = permissionsForRoles(session.user.roles);
   if (!hasPermission(granted, permission)) {
     redirect("/sign-in?error=forbidden");

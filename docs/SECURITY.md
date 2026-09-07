@@ -10,17 +10,17 @@ Auth.js (NextAuth v5) issues JWT sessions.
 - `AUTH_SECRET` is required. Rotate independently per environment
 - `NEXTAUTH_URL` / `AUTH_URL` must match the public origin
 
-Seed a SUPER_ADMIN only when `APP_ENV=development` and `SEED_ADMIN_*` are present. Never seed production this way.
+Seed a bootstrap SUPER_ADMIN (`admin@detergentsdelivered.com`) in development/staging when no admin exists, or when `SEED_BOOTSTRAP_ADMIN=true`. Optional custom `SEED_ADMIN_*` remains development-only. Never seed production this way. The bootstrap user has `mustChangeCredentials=true` and cannot use `/admin` until email and password are rotated. See [DEPLOYMENT.md](./DEPLOYMENT.md).
 
 ## Authorization
 
 | Helper | Where | Behavior |
 | --- | --- | --- |
-| `proxy.ts` | Edge-adjacent request gate | Redirects unauthenticated users away from `/admin`, `/driver`, `/account` |
-| `requireAuth` | Server | Session required |
-| `requireRole` | Server | Role allow-list; `SUPER_ADMIN` passes all |
-| `requirePermission` | Server | Role→permission map; `*` for super admin |
-| `requireApiRole` | Route handlers | 401 / 403 JSON |
+| `proxy.ts` | Edge-adjacent request gate | Redirects unauthenticated users away from `/admin`, `/driver`, `/account`; sends `mustChangeCredentials` users to `/account/change-credentials` |
+| `requireAuth` | Server | Session required (does not bypass the credential gate) |
+| `requireRole` | Server | Role allow-list; `SUPER_ADMIN` passes roles but not the credential-change gate |
+| `requirePermission` | Server | Role→permission map; `*` for super admin; same credential gate |
+| `requireApiRole` | Route handlers | 401 / 403 JSON, including `credentials_change_required` |
 
 Roles:
 

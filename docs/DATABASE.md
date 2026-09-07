@@ -20,7 +20,7 @@ PostgreSQL is the system of record. Prisma is the schema and migration tool. The
 
 ### Identity
 
-`User`, `Account`, `Session`, `VerificationToken` — Auth.js compatible.
+`User`, `Account`, `Session`, `VerificationToken` — Auth.js compatible. `User.mustChangeCredentials` (default `false`) forces a login-email + password rotation before staff routes.
 
 `Role`, `Permission`, `RolePermission`, `UserRole` — RBAC. Role codes are the enum `CUSTOMER | ADMIN | INVENTORY | DRIVER | CPA | SUPER_ADMIN`.
 

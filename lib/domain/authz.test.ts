@@ -7,6 +7,7 @@ import {
   requirePermissionSync,
   requireRoleSync,
 } from "./authz";
+import { staffAccessDeniedReason } from "./credentials";
 
 describe("authorization helpers", () => {
   it("grants SUPER_ADMIN every role check", () => {
@@ -23,6 +24,23 @@ describe("authorization helpers", () => {
   it("derives permissions from roles including SUPER_ADMIN wildcard", () => {
     expect(permissionsForRoles(["CPA"])).toContain("finance.read");
     expect(permissionsForRoles(["SUPER_ADMIN"])).toContain("*");
+  });
+
+  it("blocks SUPER_ADMIN until bootstrap credentials are changed", () => {
+    expect(
+      staffAccessDeniedReason({
+        authenticated: true,
+        hasAllowedRole: true,
+        mustChangeCredentials: true,
+      }),
+    ).toBe("credentials_change_required");
+    expect(
+      staffAccessDeniedReason({
+        authenticated: true,
+        hasAllowedRole: false,
+        mustChangeCredentials: false,
+      }),
+    ).toBe("forbidden");
   });
 
   it("checks permission codes including wildcard", () => {

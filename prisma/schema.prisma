@@ -38,6 +38,8 @@ model User {
   image         String?
   /// Null for OAuth-only accounts. Never log or expose this value.
   passwordHash  String?
+  /// When true, the user must rotate login email and password before staff routes.
+  mustChangeCredentials Boolean @default(false)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   deletedAt     DateTime?

@@ -45,6 +45,11 @@ Authz:
 - role allow-list
 - permission codes and `*`
 - role→permission mapping
+- force-change gate (`mustChangeCredentials` blocks `/admin` and staff APIs)
+- bootstrap seed decision (no production seed; auto-seed staging/dev when no admin)
+- credential-change validation (min 12, new email, reject temp password)
+
+Integration: rotate bootstrap credentials (hash update, flag cleared); ensure bootstrap user is not reset after rotation.
 
 Delivery schedule:
 
