@@ -57,6 +57,7 @@ No live Stripe or QBO calls ship in Phase 1 or Phase 2.
 | Delivery   | Zones, routes, stops, attempts         | Change order money                         |
 | Accounting | Expenses, COGS views, QBO export       | Be the operational inventory source        |
 | Identity   | Users, roles, sessions                 | Bypass `requireRole` / `requirePermission` |
+| Website    | `SitePage` / `SiteSection` CMS         | Promise same-day delivery in default copy  |
 
 ## UI modes
 

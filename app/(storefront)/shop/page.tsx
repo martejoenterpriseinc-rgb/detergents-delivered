@@ -37,7 +37,7 @@ export default async function ShopPage({
       <h1 className="text-3xl font-semibold text-teal-950">Shop household staples</h1>
       <p className="mt-2 max-w-2xl text-teal-800">
         In-stock detergent, dish, paper, and cleaners from the same warehouse we receive
-        into. Filter by category, brand, or search a SKU.
+        into — delivered on weekly Chicagoland routes. Filter by category, brand, or search a SKU.
       </p>
       <form className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4" method="get">
         <Input name="q" defaultValue={params.q} placeholder="Search products or SKU" />

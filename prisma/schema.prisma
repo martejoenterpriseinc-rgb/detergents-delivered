@@ -56,6 +56,7 @@ model User {
   createdReceipts      Receipt[]              @relation("ReceiptCreatedBy")
   createdOrders        Order[]                @relation("OrderCreatedBy")
   assignedRouteStops   RouteStop[]            @relation("StopDriver")
+  updatedSiteSections  SiteSection[]          @relation("SiteSectionUpdatedBy")
 
   @@index([deletedAt])
 }
@@ -983,4 +984,47 @@ model Setting {
   key       String   @unique
   valueJson Json
   updatedAt DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// Website builder (section-based CMS — not a visual drag-drop designer)
+// ---------------------------------------------------------------------------
+
+model SitePage {
+  id        String   @id @default(cuid())
+  slug      String   @unique
+  title     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sections SiteSection[]
+}
+
+model SiteSection {
+  id                String   @id @default(cuid())
+  pageId            String
+  page              SitePage @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  /// Stable key within the page (e.g. "hero"). Unique per page.
+  sectionId         String
+  type              String
+  title             String?
+  body              String?  @db.Text
+  badgeText         String?
+  ctaLabel          String?
+  ctaHref           String?
+  secondaryCtaLabel String?
+  secondaryCtaHref  String?
+  visible           Boolean  @default(true)
+  sortOrder         Int      @default(0)
+  styleVariant      String?
+  /// Admin notes: what this section should do (not shown on the storefront).
+  intentNotes       String?  @db.Text
+  updatedByUserId   String?
+  updatedBy         User?    @relation("SiteSectionUpdatedBy", fields: [updatedByUserId], references: [id])
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([pageId, sectionId])
+  @@index([pageId, sortOrder])
+  @@index([updatedByUserId])
 }

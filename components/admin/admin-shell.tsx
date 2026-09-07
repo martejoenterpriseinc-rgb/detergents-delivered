@@ -1,14 +1,16 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { BrandLogo } from "@/components/brand/logo";
-import { ADMIN_NAV } from "@/lib/admin-nav";
+import { visibleAdminNav } from "@/lib/admin-nav";
 
 export function AdminShell({
   children,
   email,
+  roles = [],
 }: {
   children: ReactNode;
   email?: string | null;
+  roles?: readonly string[];
 }) {
   return (
     <div className="min-h-full bg-teal-50/60 lg:grid lg:grid-cols-[16rem_1fr]">
@@ -21,7 +23,7 @@ export function AdminShell({
           </div>
         </div>
         <nav className="grid max-h-[50vh] grid-cols-2 gap-1 overflow-auto px-3 pb-4 sm:grid-cols-3 lg:max-h-none lg:grid-cols-1">
-          {ADMIN_NAV.map((item) => (
+          {visibleAdminNav(roles).map((item) => (
             <Link
               key={item.href}
               href={item.href}

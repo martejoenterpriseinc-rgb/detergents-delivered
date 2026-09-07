@@ -23,6 +23,8 @@ describe("authorization helpers", () => {
 
   it("derives permissions from roles including SUPER_ADMIN wildcard", () => {
     expect(permissionsForRoles(["CPA"])).toContain("finance.read");
+    expect(permissionsForRoles(["ADMIN"])).toContain("website.write");
+    expect(permissionsForRoles(["INVENTORY"])).not.toContain("website.write");
     expect(permissionsForRoles(["SUPER_ADMIN"])).toContain("*");
   });
 

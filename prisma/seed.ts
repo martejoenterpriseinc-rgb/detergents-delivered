@@ -9,6 +9,7 @@ import {
   resolveBootstrapPassword,
 } from "../lib/domain/bootstrap-admin";
 import { ensureBootstrapAdmin } from "../lib/services/bootstrap-admin";
+import { ensureDefaultSiteContent } from "../lib/services/site-content";
 
 const prisma = new PrismaClient();
 
@@ -56,6 +57,8 @@ const PERMISSIONS = [
   { code: "routes.write", name: "Write routes" },
   { code: "finance.read", name: "Read finance" },
   { code: "settings.write", name: "Write settings" },
+  { code: "website.read", name: "Read website builder" },
+  { code: "website.write", name: "Publish website builder" },
 ];
 
 async function seedRoles() {
@@ -148,6 +151,8 @@ async function seedBootstrapAdmin() {
 async function main() {
   await seedRoles();
   await ensureDeliverySettingsSeeded();
+  await ensureDefaultSiteContent(prisma);
+  console.log("Seeded default home page sections.");
   await seedDevelopmentAdmin();
   await seedBootstrapAdmin();
 
