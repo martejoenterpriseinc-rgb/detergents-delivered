@@ -103,8 +103,8 @@ export function AccountDashboard({ email, roles }: { email: string; roles: strin
           <p className="font-semibold text-teal-950">Coming with Phase 5</p>
           <p className="text-sm text-teal-800">
             You will pause, skip, or swap a detergent here. For this mockup, imagine a
-            4-week Fresh Breeze 64 oz subscription at the subscribe price — no billing is
-            attached.
+            4-week Liquid Detergent · Fresh · 64 oz subscription at the subscribe price —
+            no billing is attached.
           </p>
           <div className="flex flex-wrap gap-2">
             <Button type="button" variant="outline" disabled>

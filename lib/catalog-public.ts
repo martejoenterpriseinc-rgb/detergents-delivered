@@ -3,10 +3,12 @@ import { availableQty } from "@/lib/domain/inventory";
 import { pickCurrentPrice } from "@/lib/prices";
 import { canSeedDemoCatalog } from "@/lib/demo-mode";
 import { ensureDemoCatalogOnBoot } from "@/lib/demo-boot";
+import { isShopProductForm, type ShopProductForm } from "@/lib/product-display";
 
 export type ShopFilters = {
   q?: string;
-  brand?: string;
+  form?: ShopProductForm;
+  scent?: string;
   category?: string;
   inStock?: boolean;
 };
@@ -26,7 +28,17 @@ export async function listShopProducts(filters: ShopFilters = {}) {
       deletedAt: null,
       isActive: true,
       websiteVisible: true,
-      ...(filters.brand ? { brand: { equals: filters.brand, mode: "insensitive" } } : {}),
+      ...(filters.form && isShopProductForm(filters.form) ? { form: filters.form } : {}),
+      ...(filters.scent
+        ? {
+            variants: {
+              some: {
+                scent: { equals: filters.scent, mode: "insensitive" },
+                deletedAt: null,
+              },
+            },
+          }
+        : {}),
       ...(filters.category
         ? {
             category: {
@@ -39,9 +51,17 @@ export async function listShopProducts(filters: ShopFilters = {}) {
         ? {
             OR: [
               { name: { contains: filters.q, mode: "insensitive" } },
-              { brand: { contains: filters.q, mode: "insensitive" } },
               {
-                variants: { some: { sku: { contains: filters.q, mode: "insensitive" } } },
+                variants: {
+                  some: {
+                    OR: [
+                      { sku: { contains: filters.q, mode: "insensitive" } },
+                      { scent: { contains: filters.q, mode: "insensitive" } },
+                      { sizeLabel: { contains: filters.q, mode: "insensitive" } },
+                      { name: { contains: filters.q, mode: "insensitive" } },
+                    ],
+                  },
+                },
               },
             ],
           }
@@ -107,12 +127,28 @@ export async function listFeaturedShopProducts(limit = 4) {
   return (featured.length > 0 ? featured : products).slice(0, limit);
 }
 
-export async function listShopBrands() {
+export async function listShopForms() {
   const rows = await prisma.product.findMany({
     where: { deletedAt: null, isActive: true, websiteVisible: true },
-    distinct: ["brand"],
-    select: { brand: true },
-    orderBy: { brand: "asc" },
+    distinct: ["form"],
+    select: { form: true },
+    orderBy: { form: "asc" },
   });
-  return rows.map((row) => row.brand);
+  return rows.map((row) => row.form);
+}
+
+export async function listShopScents() {
+  const rows = await prisma.productVariant.findMany({
+    where: {
+      deletedAt: null,
+      isActive: true,
+      websiteVisible: true,
+      scent: { not: null },
+      product: { deletedAt: null, isActive: true, websiteVisible: true },
+    },
+    distinct: ["scent"],
+    select: { scent: true },
+    orderBy: { scent: "asc" },
+  });
+  return rows.map((row) => row.scent).filter((scent): scent is string => Boolean(scent));
 }

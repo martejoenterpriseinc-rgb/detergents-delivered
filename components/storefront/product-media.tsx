@@ -11,13 +11,11 @@ const FORM_TINT: Record<string, string> = {
 
 export function ProductMedia({
   name,
-  brand,
   form,
   imageId,
   className,
 }: {
   name: string;
-  brand?: string | null;
   form?: string | null;
   imageId?: string | null;
   className?: string;
@@ -47,11 +45,6 @@ export function ProductMedia({
       <p className="relative mt-3 px-4 text-center text-sm font-semibold text-teal-950">
         {name}
       </p>
-      {brand ? (
-        <p className="relative mt-1 text-xs tracking-wide text-teal-700 uppercase">
-          {brand}
-        </p>
-      ) : null}
     </div>
   );
 }

@@ -78,7 +78,7 @@ Then open:
 | -------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
 | [http://localhost:3000](http://localhost:3000)                                                                       | Hero, value props, featured products, how-it-works, ZIP checker |
 | [http://localhost:3000/shop](http://localhost:3000/shop)                                                             | Multiple detergent / household products from Postgres           |
-| [http://localhost:3000/shop/fresh-breeze-liquid-detergent](http://localhost:3000/shop/fresh-breeze-liquid-detergent) | Variants, prices, add to cart                                   |
+| [http://localhost:3000/shop/fresh-breeze-liquid-detergent](http://localhost:3000/shop/fresh-breeze-liquid-detergent) | Liquid Detergent · Fresh variants, prices, add to cart          |
 | [http://localhost:3000/cart](http://localhost:3000/cart)                                                             | Browser cart (localStorage)                                     |
 | [http://localhost:3000/checkout](http://localhost:3000/checkout)                                                     | Demo checkout — try ZIP `50309`, then **Place order (demo)**    |
 | [http://localhost:3000/delivery-area](http://localhost:3000/delivery-area)                                           | Delivery-area checker and listed demo ZIPs                      |
@@ -87,7 +87,7 @@ Then open:
 
 `DEMO_MODE=true` in non-production also seeds the catalog **on boot** (and on the first `/shop` request) if the shop is empty. Staging can use that instead of a manual seed. Production never auto-seeds.
 
-The cart and “Place order (demo)” path do **not** charge cards, reserve inventory, or write a paid `Order` row. Confirmations are stored in the browser so you can click through the brand site.
+The cart and “Place order (demo)” path do **not** charge cards, reserve inventory, or write a paid `Order` row. Confirmations are stored in the browser so you can click through the storefront. Catalog names are type + scent + size only — no consumer brands.
 
 ### Verify locally (same commands as CI)
 

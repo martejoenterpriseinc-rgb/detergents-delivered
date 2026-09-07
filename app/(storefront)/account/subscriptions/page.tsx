@@ -17,7 +17,9 @@ export default async function AccountSubscriptionsPage() {
         Subscription management is a placeholder. No cadence is billed.
       </DemoBanner>
       <Card className="mt-6 space-y-3">
-        <p className="font-semibold text-teal-950">Fresh Breeze 64 oz · every 4 weeks</p>
+        <p className="font-semibold text-teal-950">
+          Liquid Detergent · Fresh · 64 oz · every 4 weeks
+        </p>
         <p className="text-sm text-teal-800">
           Preview only. Next order date, skip, and variant swap are not connected to
           inventory or Stripe.

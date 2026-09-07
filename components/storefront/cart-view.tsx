@@ -38,7 +38,6 @@ export function CartView() {
           <Card key={line.variantId} className="grid gap-4 p-4 sm:grid-cols-[7rem_1fr]">
             <ProductMedia
               name={line.productName}
-              brand={line.brand}
               imageId={line.imageId}
               className="h-28"
             />
@@ -46,7 +45,8 @@ export function CartView() {
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
                   <p className="text-xs tracking-wide text-teal-700 uppercase">
-                    {line.brand}
+                    {[line.scent, line.sizeLabel].filter(Boolean).join(" · ") ||
+                      "Household"}
                   </p>
                   <p className="font-semibold text-teal-950">{line.productName}</p>
                   <p className="text-sm text-teal-800">{line.variantName}</p>
