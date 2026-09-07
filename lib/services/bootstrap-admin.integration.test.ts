@@ -24,6 +24,16 @@ async function ensureRoles() {
   });
 }
 
+async function deleteBootstrapEmailUser() {
+  const existing = await prisma.user.findUnique({
+    where: { email: BOOTSTRAP_ADMIN_EMAIL },
+  });
+  if (!existing) return;
+  await prisma.userRole.deleteMany({ where: { userId: existing.id } });
+  await prisma.auditLog.deleteMany({ where: { actorUserId: existing.id } });
+  await prisma.user.delete({ where: { id: existing.id } });
+}
+
 describe("ensureBootstrapAdmin", () => {
   beforeAll(async () => {
     await ensureRoles();
@@ -33,18 +43,12 @@ describe("ensureBootstrapAdmin", () => {
     await prisma.$disconnect();
   });
 
-  it("creates a SUPER_ADMIN with mustChangeCredentials in development when none exists", async () => {
-    const existing = await prisma.user.findUnique({
-      where: { email: BOOTSTRAP_ADMIN_EMAIL },
-    });
-    if (existing) {
-      await prisma.userRole.deleteMany({ where: { userId: existing.id } });
-      await prisma.user.delete({ where: { id: existing.id } });
-    }
+  it("creates a SUPER_ADMIN with mustChangeCredentials when the flag is set", async () => {
+    await deleteBootstrapEmailUser();
 
     const created = await ensureBootstrapAdmin(prisma, {
       appEnv: "development",
-      seedBootstrapFlag: false,
+      seedBootstrapFlag: true,
       password: `Temp-${suffix}-password`,
     });
     expect(created).toBe("created");
@@ -63,9 +67,20 @@ describe("ensureBootstrapAdmin", () => {
   });
 
   it("does not reset a bootstrap user who already changed credentials", async () => {
-    const user = await prisma.user.findUniqueOrThrow({
+    let user = await prisma.user.findUnique({
       where: { email: BOOTSTRAP_ADMIN_EMAIL },
     });
+    if (!user) {
+      await ensureBootstrapAdmin(prisma, {
+        appEnv: "staging",
+        seedBootstrapFlag: true,
+        password: `Temp-${suffix}-password`,
+      });
+      user = await prisma.user.findUniqueOrThrow({
+        where: { email: BOOTSTRAP_ADMIN_EMAIL },
+      });
+    }
+
     const rotatedHash = await bcrypt.hash("Already-Changed-Now!", 12);
     await prisma.user.update({
       where: { id: user.id },
@@ -81,9 +96,7 @@ describe("ensureBootstrapAdmin", () => {
       seedBootstrapFlag: true,
       password: "Should-Not-Apply-This!",
     });
-    expect(result === "created" || result === "ensured" || result === "skipped").toBe(
-      true,
-    );
+    expect(["created", "ensured", "skipped"]).toContain(result);
 
     const rotated = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
     expect(rotated.mustChangeCredentials).toBe(false);
