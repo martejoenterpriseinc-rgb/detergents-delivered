@@ -100,10 +100,12 @@ export function allocateLandedCost(
 ): LandedCostAllocation {
   if (lines.length === 0) {
     const headerCostCents = headerAcquisitionCents(header);
-    if (headerCostCents !== 0) {
-      throw new MoneyError("cannot allocate header costs with no purchase lines");
-    }
-    return { lines: [], merchandiseCents: 0, headerCostCents: 0, landedTotalCents: 0 };
+    return {
+      lines: [],
+      merchandiseCents: 0,
+      headerCostCents,
+      landedTotalCents: headerCostCents,
+    };
   }
 
   const headerCostCents = headerAcquisitionCents(header);

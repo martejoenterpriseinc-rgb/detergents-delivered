@@ -50,6 +50,13 @@ describe("landed cost allocation", () => {
     expect(result.landedTotalCents).toBe(2070);
   });
 
+  it("keeps header costs on an empty draft with no lines yet", () => {
+    const result = allocateLandedCost([], { freightCents: 250 });
+    expect(result.lines).toEqual([]);
+    expect(result.headerCostCents).toBe(250);
+    expect(result.landedTotalCents).toBe(250);
+  });
+
   it("rejects float money and discounts larger than merchandise", () => {
     expect(() => lineMerchandiseCents({ id: "a", quantity: 1, unitCostCents: 1.2 })).toThrow(
       MoneyError,

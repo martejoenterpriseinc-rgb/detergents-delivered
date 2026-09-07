@@ -1,7 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 import { createCategory, createProduct, createProductPrice, createVariant, updateProduct } from "../lib/services/catalog";
 import { createVendor } from "../lib/services/vendors";
-import { addPurchaseOrderItem, createPurchaseOrder, transitionPurchaseOrder } from "../lib/services/purchasing";
+import { createPurchaseOrder, transitionPurchaseOrder } from "../lib/services/purchasing";
 import { receiveAgainstPurchaseOrder } from "../lib/services/receiving";
 
 const VARIANTS = [
@@ -71,12 +71,77 @@ const VARIANTS = [
   },
 ] as const;
 
+async function finishDemoPurchasing(prisma: PrismaClient, productId: string, actorUserId?: string) {
+  const product = await prisma.product.findFirst({
+    where: { id: productId, deletedAt: null },
+    include: { variants: { where: { deletedAt: null }, include: { inventoryBalance: true } } },
+  });
+  if (!product) return;
+
+  let vendor = await prisma.vendor.findFirst({
+    where: { name: "Midwest Household Supply", deletedAt: null },
+  });
+  if (!vendor) {
+    vendor = await createVendor(
+      {
+        name: "Midwest Household Supply",
+        contactName: "Alex Rivera",
+        email: "orders@midwest-household.example",
+        paymentTerms: "Net 15",
+      },
+      actorUserId,
+    );
+  }
+
+  const needsStock = product.variants.some(
+    (variant) => !variant.inventoryBalance || variant.inventoryBalance.onHandQty === 0,
+  );
+  if (needsStock) {
+    const specBySku = new Map(VARIANTS.map((spec) => [spec.sku, spec]));
+    const po = await createPurchaseOrder(
+      {
+        vendorId: vendor.id,
+        freightCents: 1200,
+        feeCents: 200,
+        notes: "Demo starter load",
+        items: product.variants.map((variant) => ({
+          productVariantId: variant.id,
+          quantityOrdered: 12,
+          unitCostCents: specBySku.get(variant.sku)?.unitCostCents ?? 650,
+        })),
+      },
+      actorUserId,
+    );
+    await transitionPurchaseOrder(po.id, "ORDERED", actorUserId);
+    const ordered = await prisma.purchaseOrder.findUniqueOrThrow({
+      where: { id: po.id },
+      include: { items: true },
+    });
+    await receiveAgainstPurchaseOrder(
+      {
+        purchaseOrderId: ordered.id,
+        notes: "Demo full receipt",
+        lines: ordered.items.map((item) => ({
+          purchaseOrderItemId: item.id,
+          quantityReceived: item.quantityOrdered,
+        })),
+      },
+      actorUserId,
+    );
+  }
+
+  if (!product.websiteVisible) {
+    await updateProduct(product.id, { websiteVisible: true, featured: true }, actorUserId);
+  }
+  console.log("Demo catalog ready: vendor → variants → PO → receive → /shop");
+}
+
 export async function seedDemoCatalog(prisma: PrismaClient, actorUserId?: string) {
   const existing = await prisma.productVariant.findUnique({
     where: { sku: VARIANTS[0].sku },
   });
   if (existing) {
-    console.log("Demo catalog already present — skipping recreate.");
+    await finishDemoPurchasing(prisma, existing.productId, actorUserId);
     return { reused: true, productId: existing.productId };
   }
 
@@ -154,21 +219,14 @@ export async function seedDemoCatalog(prisma: PrismaClient, actorUserId?: string
       freightCents: 1200,
       feeCents: 200,
       notes: "Demo starter load",
-    },
-    actorUserId,
-  );
-
-  for (const row of createdVariants) {
-    await addPurchaseOrderItem(
-      po.id,
-      {
+      items: createdVariants.map((row) => ({
         productVariantId: row.variant.id,
         quantityOrdered: 12,
         unitCostCents: row.spec.unitCostCents,
-      },
-      actorUserId,
-    );
-  }
+      })),
+    },
+    actorUserId,
+  );
 
   await transitionPurchaseOrder(po.id, "ORDERED", actorUserId);
 
