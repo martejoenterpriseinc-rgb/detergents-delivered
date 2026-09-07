@@ -6,6 +6,7 @@ import { AdjustmentError } from "@/lib/services/inventory";
 import { PurchasingError } from "@/lib/services/purchasing";
 import { ReceivingError } from "@/lib/services/receiving";
 import { VendorError } from "@/lib/services/vendors";
+import { CredentialsError } from "@/lib/services/credentials";
 
 function statusForMessage(message: string) {
   if (message.includes("not found")) return 404;
@@ -19,6 +20,7 @@ export function serviceErrorResponse(error: unknown) {
   if (
     error instanceof CatalogError ||
     error instanceof VendorError ||
+    error instanceof CredentialsError ||
     error instanceof PurchasingError ||
     error instanceof ReceivingError ||
     error instanceof AdjustmentError ||

@@ -68,8 +68,8 @@ Route groups do not change URLs; they keep layouts isolated.
 
 Authorization is enforced twice:
 
-1. `proxy.ts` — optimistic session cookie check (redirect to `/sign-in`)
-2. Server layouts / `lib/authz.ts` — authoritative role and permission checks
+1. `proxy.ts` — optimistic session cookie check (redirect to `/sign-in`, or `/account/change-credentials` when `mustChangeCredentials`)
+2. Server layouts / `lib/authz.ts` — authoritative role, permission, and credential-change checks
 
 CPA is read-focused: allowed into the admin shell, denied write APIs.
 

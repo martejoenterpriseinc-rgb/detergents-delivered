@@ -41,7 +41,9 @@ docker compose up -d postgres
 npm install
 npm run db:generate
 npm run db:migrate
-# optional, development only:
+# optional, development / staging:
+# APP_ENV=development npm run db:seed
+#   → creates bootstrap SUPER_ADMIN admin@detergentsdelivered.com when no admin exists
 # APP_ENV=development SEED_ADMIN_EMAIL=admin@example.com SEED_ADMIN_PASSWORD=... SEED_DEMO_CATALOG=true npm run db:seed
 npm run dev
 ```
@@ -129,25 +131,27 @@ Rules:
 | **staging**     | Isolated staging database and Stripe test mode. | Staging secrets.                           | Docker image from `main` or a release candidate. |
 | **production**  | Production database. Protected branch + review. | Production secrets in the host vault only. | After staging acceptance.                        |
 
-`APP_ENV=development` refuses a `DATABASE_URL` that looks like production. Do not seed production from `SEED_ADMIN_*`.
+`APP_ENV=development` refuses a `DATABASE_URL` that looks like production. Do not seed production from `SEED_ADMIN_*` or `SEED_BOOTSTRAP_ADMIN`.
+
+On a fresh development or staging database, `npm run db:seed` creates bootstrap SUPER_ADMIN `admin@detergentsdelivered.com` (temporary password from `SEED_BOOTSTRAP_ADMIN_PASSWORD` or the documented default in `docs/DEPLOYMENT.md`). First login requires a new email and password at `/account/change-credentials` before `/admin` is available.
 
 Google OAuth is optional. Credentials sign-in works without `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`.
 
 ## Scripts
 
-| Script                       | Purpose                                                 |
-| ---------------------------- | ------------------------------------------------------- |
-| `npm run dev`                | Next.js dev server                                      |
-| `npm run build`              | Prisma generate + production build                      |
-| `npm run start`              | Bind `0.0.0.0:$PORT` (default 3000)                     |
-| `npm run lint`               | ESLint                                                  |
-| `npm run typecheck`          | `tsc --noEmit`                                          |
-| `npm run test` / `test:unit` | Vitest unit tests                                       |
-| `npm run test:integration`   | Vitest + Postgres (receive → ledger)                    |
-| `npm run db:generate`        | Prisma client                                           |
-| `npm run db:migrate`         | Apply migrations (`deploy`)                             |
-| `npm run db:studio`          | Prisma Studio                                           |
-| `npm run db:seed`            | Roles, delivery settings defaults, optional SUPER_ADMIN |
+| Script                       | Purpose                                                                              |
+| ---------------------------- | ------------------------------------------------------------------------------------ |
+| `npm run dev`                | Next.js dev server                                                                   |
+| `npm run build`              | Prisma generate + production build                                                   |
+| `npm run start`              | Bind `0.0.0.0:$PORT` (default 3000)                                                  |
+| `npm run lint`               | ESLint                                                                               |
+| `npm run typecheck`          | `tsc --noEmit`                                                                       |
+| `npm run test` / `test:unit` | Vitest unit tests                                                                    |
+| `npm run test:integration`   | Vitest + Postgres (receive → ledger)                                                 |
+| `npm run db:generate`        | Prisma client                                                                        |
+| `npm run db:migrate`         | Apply migrations (`deploy`)                                                          |
+| `npm run db:studio`          | Prisma Studio                                                                        |
+| `npm run db:seed`            | Roles, delivery settings, bootstrap SUPER_ADMIN (dev/staging), optional `SEED_ADMIN_*` |
 
 ## App map
 
@@ -161,6 +165,7 @@ Google OAuth is optional. Credentials sign-in works without `GOOGLE_CLIENT_ID` /
 | `/api/delivery/settings`                                      | Delivery schedule + counties           | GET public; PUT ADMIN/SUPER_ADMIN  |
 | `/faq` `/contact` `/terms` `/privacy` `/refunds` `/referrals` | Content pages                          | Public                             |
 | `/sign-in` `/register`                                        | Credentials (+ Google when configured) | Public                             |
+| `/account/change-credentials`                                 | Forced email + password rotation       | Authenticated bootstrap users      |
 | `/account/*`                                                  | Household account shell                | Authenticated                      |
 | `/admin/*`                                                    | Operations shell                       | ADMIN, INVENTORY, CPA, SUPER_ADMIN |
 | `/driver/*`                                                   | Driver shell                           | DRIVER, ADMIN, SUPER_ADMIN         |

@@ -3,6 +3,12 @@ import bcrypt from "bcryptjs";
 import { seedDemoCatalog } from "./demo-catalog";
 import { canSeedDemoCatalog } from "../lib/demo-mode";
 import { ensureDeliverySettingsSeeded } from "../lib/services/delivery-settings";
+import {
+  BOOTSTRAP_ADMIN_EMAIL,
+  parseSeedFlag,
+  resolveBootstrapPassword,
+} from "../lib/domain/bootstrap-admin";
+import { ensureBootstrapAdmin } from "../lib/services/bootstrap-admin";
 
 const prisma = new PrismaClient();
 
@@ -72,7 +78,7 @@ async function seedRoles() {
 
 async function seedDevelopmentAdmin() {
   if (process.env.APP_ENV !== "development") {
-    console.log("Skipping SUPER_ADMIN seed outside development.");
+    console.log("Skipping custom SEED_ADMIN_* user outside development.");
     return undefined;
   }
 
@@ -80,19 +86,25 @@ async function seedDevelopmentAdmin() {
   const password = process.env.SEED_ADMIN_PASSWORD;
   if (!email || !password) {
     console.log(
-      "SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD not set — roles seeded, no admin user created.",
+      "SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD not set — custom dev admin skipped.",
     );
     return undefined;
   }
 
   const passwordHash = await bcrypt.hash(password, 12);
+  const isBootstrap = email === BOOTSTRAP_ADMIN_EMAIL;
   const user = await prisma.user.upsert({
     where: { email },
-    update: { passwordHash, deletedAt: null },
+    update: {
+      passwordHash,
+      deletedAt: null,
+      ...(isBootstrap ? { mustChangeCredentials: true } : {}),
+    },
     create: {
       email,
-      name: "Detergents Delivered Admin",
+      name: isBootstrap ? "Bootstrap Super Admin" : "Detergents Delivered Admin",
       passwordHash,
+      mustChangeCredentials: isBootstrap,
     },
   });
 
@@ -112,13 +124,42 @@ async function seedDevelopmentAdmin() {
   return user.id;
 }
 
+async function seedBootstrapAdmin() {
+  const { password: bootstrapPassword, source } = resolveBootstrapPassword(
+    process.env.SEED_BOOTSTRAP_ADMIN_PASSWORD,
+  );
+  const bootstrapResult = await ensureBootstrapAdmin(prisma, {
+    appEnv: process.env.APP_ENV ?? "development",
+    seedBootstrapFlag: parseSeedFlag(process.env.SEED_BOOTSTRAP_ADMIN),
+    password: bootstrapPassword,
+  });
+
+  if (bootstrapResult === "created") {
+    console.log(
+      `Seeded bootstrap SUPER_ADMIN ${BOOTSTRAP_ADMIN_EMAIL} (mustChangeCredentials=true). Password source: ${source}. See docs/DEPLOYMENT.md.`,
+    );
+  } else if (bootstrapResult === "ensured") {
+    console.log(`Ensured bootstrap SUPER_ADMIN ${BOOTSTRAP_ADMIN_EMAIL}.`);
+  } else {
+    console.log("Bootstrap SUPER_ADMIN seed skipped.");
+  }
+}
+
 async function main() {
   await seedRoles();
   await ensureDeliverySettingsSeeded();
-  const adminId = await seedDevelopmentAdmin();
+  await seedDevelopmentAdmin();
+  await seedBootstrapAdmin();
 
   if (canSeedDemoCatalog()) {
-    await seedDemoCatalog(prisma, adminId);
+    const actor = await prisma.user.findFirst({
+      where: {
+        deletedAt: null,
+        userRoles: { some: { role: { code: "SUPER_ADMIN" } } },
+      },
+      orderBy: { createdAt: "asc" },
+    });
+    await seedDemoCatalog(prisma, actor?.id);
   } else if (process.env.SEED_DEMO_CATALOG === "true") {
     console.log("Refusing demo catalog seed in production.");
   }

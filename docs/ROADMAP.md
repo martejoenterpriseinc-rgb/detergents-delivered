@@ -22,6 +22,7 @@ Later phases stay unchecked until implemented.
 - [x] Protected `/admin/*`, `/driver/*`, `/account/*`
 - [x] Google OAuth ready when env vars are set
 - [x] Dev-only SUPER_ADMIN seed from `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD`
+- [x] Bootstrap SUPER_ADMIN (`admin@detergentsdelivered.com`) with `mustChangeCredentials` and forced email+password change before `/admin`
 - [x] Storefront home, admin nav shell, driver shell, `GET /api/health`
 - [x] GitHub Actions: install, lint, typecheck, unit tests, prisma validate, build
 - [x] Unit tests: money helpers

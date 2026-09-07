@@ -5,6 +5,7 @@ import bcrypt from "bcryptjs";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { signIn, signOut } from "@/auth";
+import { CHANGE_CREDENTIALS_PATH } from "@/lib/domain/credentials";
 import { prisma } from "@/lib/prisma";
 
 const registerSchema = z.object({
@@ -24,11 +25,19 @@ export async function signInWithCredentials(formData: FormData) {
   const password = String(formData.get("password") ?? "");
   const callbackUrl = String(formData.get("callbackUrl") ?? "/account");
 
+  const pending = await prisma.user.findFirst({
+    where: { email: email.trim().toLowerCase(), deletedAt: null },
+    select: { mustChangeCredentials: true },
+  });
+  const redirectTo = pending?.mustChangeCredentials
+    ? CHANGE_CREDENTIALS_PATH
+    : callbackUrl;
+
   try {
     await signIn("credentials", {
       email,
       password,
-      redirectTo: callbackUrl,
+      redirectTo,
     });
   } catch (error) {
     if (error instanceof AuthError) {

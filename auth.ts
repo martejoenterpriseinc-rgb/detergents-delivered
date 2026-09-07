@@ -28,6 +28,17 @@ async function loadRoles(userId: string): Promise<RoleCode[]> {
   return rows.map((row) => row.role.code as RoleCode);
 }
 
+async function loadCredentialGate(userId: string) {
+  const row = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { mustChangeCredentials: true, email: true },
+  });
+  return {
+    mustChangeCredentials: Boolean(row?.mustChangeCredentials),
+    email: row?.email,
+  };
+}
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
   adapter: PrismaAdapter(prisma),
@@ -63,17 +74,27 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           email: user.email,
           name: user.name,
           image: user.image,
+          mustChangeCredentials: user.mustChangeCredentials,
         };
       },
     }),
   ],
   callbacks: {
     async jwt({ token, user }) {
-      if (user?.id) {
-        token.sub = user.id;
-        token.roles = await loadRoles(user.id);
-      } else if (token.sub && !token.roles) {
-        token.roles = await loadRoles(token.sub);
+      const userId = user?.id ?? token.sub;
+      if (!userId) {
+        return token;
+      }
+
+      token.sub = userId;
+      if (user?.id || !token.roles) {
+        token.roles = await loadRoles(userId);
+      }
+
+      const gate = await loadCredentialGate(userId);
+      token.mustChangeCredentials = gate.mustChangeCredentials;
+      if (gate.email) {
+        token.email = gate.email;
       }
       return token;
     },
@@ -81,6 +102,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (session.user) {
         session.user.id = token.sub ?? "";
         session.user.roles = (token.roles ?? []) as RoleCode[];
+        session.user.mustChangeCredentials = Boolean(token.mustChangeCredentials);
+        if (token.email) {
+          session.user.email = token.email;
+        }
       }
       return session;
     },
