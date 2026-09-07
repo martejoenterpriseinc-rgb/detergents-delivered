@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+  <title id="title">Detergents Delivered</title>
+  <desc id="desc">A detergent bottle and delivery path on a clean circular badge.</desc>
+  <defs>
+    <linearGradient id="badge" x1="20" y1="8" x2="108" y2="120" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ECFEFF"/>
+      <stop offset="1" stop-color="#CCFBF1"/>
+    </linearGradient>
+  </defs>
+  <circle cx="64" cy="64" r="60" fill="url(#badge)" stroke="#0F766E" stroke-width="4"/>
+  <path d="M54 28h20c3 0 5 2 5 5v8H49v-8c0-3 2-5 5-5z" fill="#0F766E"/>
+  <rect x="58" y="22" width="12" height="8" rx="2" fill="#14B8A6"/>
+  <path d="M46 41h36c4 0 8 4 8 9v40c0 8-6 14-14 14H52c-8 0-14-6-14-14V50c0-5 4-9 8-9z" fill="#0D9488"/>
+  <path d="M48 50h32c2 0 4 2 4 4v16c-12 8-28 8-40 0V54c0-2 2-4 4-4z" fill="#99F6E4"/>
+  <path d="M64 58c6 8 6 16 0 22-6-6-6-14 0-22z" fill="#0F766E"/>
+  <path d="M22 92c12 0 16-6 26-6s14 6 26 6 16-6 26-6" fill="none" stroke="#F59E0B" stroke-width="4" stroke-linecap="round"/>
+  <path d="M98 80l10 6-10 6" fill="none" stroke="#F59E0B" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

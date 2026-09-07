@@ -1,0 +1,77 @@
+# Security
+
+## Authentication
+
+Auth.js (NextAuth v5) issues JWT sessions.
+
+- **Credentials**: email + bcrypt password hash on `User.passwordHash`
+- **Google OAuth**: enabled only when `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` (or `AUTH_GOOGLE_*`) are set
+- Pages: `/sign-in`. Callbacks default to `/account`
+- `AUTH_SECRET` is required. Rotate independently per environment
+- `NEXTAUTH_URL` / `AUTH_URL` must match the public origin
+
+Seed a SUPER_ADMIN only when `APP_ENV=development` and `SEED_ADMIN_*` are present. Never seed production this way.
+
+## Authorization
+
+| Helper | Where | Behavior |
+| --- | --- | --- |
+| `proxy.ts` | Edge-adjacent request gate | Redirects unauthenticated users away from `/admin`, `/driver`, `/account` |
+| `requireAuth` | Server | Session required |
+| `requireRole` | Server | Role allow-list; `SUPER_ADMIN` passes all |
+| `requirePermission` | Server | Role→permission map; `*` for super admin |
+| `requireApiRole` | Route handlers | 401 / 403 JSON |
+
+Roles:
+
+- **CUSTOMER** — storefront account
+- **ADMIN** — operations
+- **INVENTORY** — stock and purchasing writes
+- **DRIVER** — driver mode
+- **CPA** — read-focused finance (admin shell, no write APIs)
+- **SUPER_ADMIN** — full access
+
+Layouts are not enough for mutations. Every write API must call `requireApiRole` (or successor).
+
+## Secrets
+
+- Real secrets never belong in git. `.env*` is ignored except `.env.example`
+- Stripe, QBO, Maps, email, SMS, and S3 keys are placeholders until their phase
+- Production secrets live in the host secret manager, not in images
+- Different `AUTH_SECRET` and database credentials per environment
+
+## Webhooks (future)
+
+When Stripe/QBO webhooks land:
+
+- Verify signatures with the environment’s webhook secret
+- Reject replayed `externalId`s (`PaymentEvent.externalId` is unique)
+- Treat the payload as untrusted input
+- Idempotent handlers only — insert events, then derive payment status
+
+## Private media
+
+Delivery photos and expense receipts use storage keys (`storageKey` / `receiptStorageKey`). They are **not** world-readable public URLs. Phase 4–5 will issue short-lived signed URLs after an authorization check. Do not put customer photos in `public/`.
+
+## CSRF / XSS
+
+- Auth.js cookie settings + same-site cookies for session
+- Server Actions and App Router form posts
+- React escapes rendered text
+- Do not use `dangerouslySetInnerHTML` for catalog or customer notes
+- Validate API bodies with Zod
+
+## Rate limits
+
+Phase 1 does not ship a redis-backed limiter. Before public launch:
+
+- Rate-limit `/api/auth/*` and `/sign-in` at the reverse proxy
+- Rate-limit webhook endpoints by IP + signature failure count
+- Lock out repeated credential failures (or use Auth.js / provider tooling)
+
+## Production protection
+
+- Protected `main`
+- Required CI
+- No production database access from development (`lib/env.ts` guard)
+- Least-privilege DB roles for the app vs migrations vs backups

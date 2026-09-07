@@ -1,0 +1,69 @@
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import { signInWithCredentials, signInWithGoogle } from "../actions";
+
+export default async function SignInPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ callbackUrl?: string; error?: string }>;
+}) {
+  const params = await searchParams;
+  const callbackUrl = params.callbackUrl ?? "/account";
+  const googleEnabled = Boolean(
+    process.env.GOOGLE_CLIENT_ID || process.env.AUTH_GOOGLE_ID,
+  );
+
+  return (
+    <div className="mx-auto flex w-full max-w-md flex-col px-4 py-16">
+      <h1 className="text-3xl font-semibold text-teal-950">Sign in</h1>
+      <p className="mt-2 text-sm text-teal-800">
+        Use your email and password. Google sign-in is available when OAuth env
+        vars are configured.
+      </p>
+      {params.error ? (
+        <p className="mt-4 rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          {params.error === "forbidden"
+            ? "You do not have access to that area."
+            : "Sign-in failed. Check your credentials and try again."}
+        </p>
+      ) : null}
+      <Card className="mt-8 space-y-4">
+        <form action={signInWithCredentials} className="space-y-4">
+          <input type="hidden" name="callbackUrl" value={callbackUrl} />
+          <div className="space-y-2">
+            <Label htmlFor="email">Email</Label>
+            <Input id="email" name="email" type="email" autoComplete="email" required />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="password">Password</Label>
+            <Input
+              id="password"
+              name="password"
+              type="password"
+              autoComplete="current-password"
+              required
+            />
+          </div>
+          <Button type="submit" className="w-full">
+            Sign in
+          </Button>
+        </form>
+        {googleEnabled ? (
+          <form action={signInWithGoogle}>
+            <input type="hidden" name="callbackUrl" value={callbackUrl} />
+            <Button type="submit" variant="outline" className="w-full">
+              Continue with Google
+            </Button>
+          </form>
+        ) : (
+          <p className="text-center text-xs text-teal-700">
+            Google OAuth is configured when GOOGLE_CLIENT_ID and
+            GOOGLE_CLIENT_SECRET are set.
+          </p>
+        )}
+      </Card>
+    </div>
+  );
+}

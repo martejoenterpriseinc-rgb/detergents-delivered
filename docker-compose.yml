@@ -1,0 +1,42 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: dd-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: dd_dev
+      POSTGRES_PASSWORD: dd_dev_password
+      POSTGRES_DB: detergents_delivered_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - dd_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dd_dev -d detergents_delivered_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dd-app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      PORT: 3000
+      DATABASE_URL: postgresql://dd_dev:dd_dev_password@postgres:5432/detergents_delivered_dev?schema=public
+      AUTH_SECRET: ${AUTH_SECRET:-dev-only-change-me-not-for-production}
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
+      AUTH_URL: ${AUTH_URL:-http://localhost:3000}
+    ports:
+      - "3000:3000"
+    command: >
+      sh -c "npx prisma migrate deploy && node server.js"
+
+volumes:
+  dd_pgdata:
