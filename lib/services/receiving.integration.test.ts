@@ -119,6 +119,71 @@ describe("receiving integration", () => {
     expect(balance.reservedQty).toBe(0);
   });
 
+  it("serializes concurrent reservations so stock cannot be double-booked", async () => {
+    const product = await createProduct({
+      name: `IT Concurrent ${suffix}`,
+      brand: "IT Brand",
+      slug: `it-concurrent-${suffix}`,
+    });
+    const variant = await createVariant(product.id, {
+      sku: `IT-CONCURRENT-${suffix}`,
+      name: "single unit",
+    });
+
+    await prisma.$transaction(async (tx) => {
+      await persistInventoryTransaction(tx, {
+        productVariantId: variant.id,
+        type: "PURCHASE_RECEIPT",
+        quantity: 1,
+        reason: "concurrency setup",
+      });
+    });
+
+    const attempts = await Promise.allSettled([
+      prisma.$transaction((tx) =>
+        persistInventoryTransaction(tx, {
+          productVariantId: variant.id,
+          type: "CUSTOMER_RESERVATION",
+          quantity: 1,
+          reason: "concurrent reservation A",
+        }),
+      ),
+      prisma.$transaction((tx) =>
+        persistInventoryTransaction(tx, {
+          productVariantId: variant.id,
+          type: "CUSTOMER_RESERVATION",
+          quantity: 1,
+          reason: "concurrent reservation B",
+        }),
+      ),
+    ]);
+
+    expect(attempts.filter((attempt) => attempt.status === "fulfilled")).toHaveLength(1);
+    expect(attempts.filter((attempt) => attempt.status === "rejected")).toHaveLength(1);
+
+    const balance = await prisma.inventoryBalance.findUniqueOrThrow({
+      where: { productVariantId: variant.id },
+    });
+    const reservations = await prisma.inventoryTransaction.count({
+      where: { productVariantId: variant.id, type: "CUSTOMER_RESERVATION" },
+    });
+    expect(balance.onHandQty).toBe(1);
+    expect(balance.reservedQty).toBe(1);
+    expect(reservations).toBe(1);
+  });
+
+  it("rejects duplicate purchase order lines before writing a receipt", async () => {
+    await expect(
+      receiveAgainstPurchaseOrder({
+        purchaseOrderId: "not-read",
+        lines: [
+          { purchaseOrderItemId: "same-line", quantityReceived: 1 },
+          { purchaseOrderItemId: "same-line", quantityReceived: 1 },
+        ],
+      }),
+    ).rejects.toThrow(/only once per receipt/);
+  });
+
   it("rejects receiving a draft purchase order", async () => {
     const vendor = await createVendor({ name: `IT Draft ${suffix}` });
     const product = await createProduct({
