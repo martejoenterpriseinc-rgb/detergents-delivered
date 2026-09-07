@@ -20,8 +20,10 @@ type ShopProductCard = {
 };
 
 export function ProductCard({ product }: { product: ShopProductCard }) {
-  const price =
-    product.variants[0]?.salePrice ?? product.variants[0]?.retailPrice ?? null;
+  const priceCents = product.variants
+    .map((variant) => variant.salePrice?.amountCents ?? variant.retailPrice?.amountCents)
+    .filter((amount): amount is number => typeof amount === "number");
+  const lowest = priceCents.length > 0 ? Math.min(...priceCents) : null;
   const image = product.images[0] ?? product.variants[0]?.images[0];
   const available = product.variants.reduce((sum, variant) => sum + variant.available, 0);
 
@@ -40,7 +42,7 @@ export function ProductCard({ product }: { product: ShopProductCard }) {
         </p>
         <p className="text-lg leading-snug font-semibold text-teal-950">{product.name}</p>
         <p className="mt-auto text-sm text-teal-800">
-          {price ? `From ${formatCents(price.amountCents)}` : "See details"}
+          {lowest !== null ? `From ${formatCents(lowest)}` : "See details"}
           {" · "}
           {available > 0 ? `${available} in stock` : "See availability"}
         </p>

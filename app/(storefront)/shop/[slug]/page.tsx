@@ -45,20 +45,22 @@ export default async function ShopProductPage({
             slug={product.slug}
             productName={product.name}
             brand={product.brand}
-            variants={product.variants.map((variant) => {
-              const selling = variant.salePrice ?? variant.retailPrice;
-              return {
-                id: variant.id,
-                name: variant.name,
-                sku: variant.sku,
-                sizeLabel: variant.sizeLabel,
-                scent: variant.scent,
-                available: variant.available,
-                unitPriceCents: selling?.amountCents ?? null,
-                subscriptionCents: variant.subscriptionPrice?.amountCents ?? null,
-                imageId: variant.images[0]?.id ?? image?.id ?? null,
-              };
-            })}
+            variants={product.variants
+              .map((variant) => {
+                const selling = variant.salePrice ?? variant.retailPrice;
+                return {
+                  id: variant.id,
+                  name: variant.name,
+                  sku: variant.sku,
+                  sizeLabel: variant.sizeLabel,
+                  scent: variant.scent,
+                  available: variant.available,
+                  unitPriceCents: selling?.amountCents ?? null,
+                  subscriptionCents: variant.subscriptionPrice?.amountCents ?? null,
+                  imageId: variant.images[0]?.id ?? image?.id ?? null,
+                };
+              })
+              .sort((a, b) => (a.unitPriceCents ?? 0) - (b.unitPriceCents ?? 0))}
           />
         </div>
       </div>
