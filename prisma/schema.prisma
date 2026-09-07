@@ -1,0 +1,886 @@
+// Detergents Delivered — core domain schema (Phase 1 foundation).
+//
+// Money: every currency amount is Int minor units (cents). NEVER Float/Decimal for money.
+// Inventory: quantity changes are recorded ONLY via InventoryTransaction (ledger).
+//            InventoryBalance is a derived projection, never silently overwritten.
+// Financial history: payments, refunds, tax snapshots, and order line prices are
+//            append-safe. Do not update historical money rows in place.
+// Soft delete: operational entities may use deletedAt. Ledger / payment / tax
+//            rows are not hard-deleted and are not rewritten.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Identity & authorization
+// ---------------------------------------------------------------------------
+
+enum RoleCode {
+  CUSTOMER
+  ADMIN
+  INVENTORY
+  DRIVER
+  CPA
+  SUPER_ADMIN
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  /// Null for OAuth-only accounts. Never log or expose this value.
+  passwordHash  String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  accounts             Account[]
+  sessions             Session[]
+  userRoles            UserRole[]
+  customer             Customer?
+  auditLogs            AuditLog[]             @relation("AuditActor")
+  inventoryTxns        InventoryTransaction[] @relation("InventoryTxnActor")
+  mileageTrips         MileageTrip[]
+  deliveryAttempts     DeliveryAttempt[]
+  createdPurchaseOrders PurchaseOrder[]       @relation("PoCreatedBy")
+  createdOrders        Order[]                @relation("OrderCreatedBy")
+  assignedRouteStops   RouteStop[]            @relation("StopDriver")
+
+  @@index([deletedAt])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Role {
+  id          String   @id @default(cuid())
+  code        RoleCode @unique
+  name        String
+  description String?
+
+  userRoles   UserRole[]
+  permissions RolePermission[]
+}
+
+model Permission {
+  id          String  @id @default(cuid())
+  code        String  @unique
+  name        String
+  description String?
+
+  roles RolePermission[]
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+}
+
+model UserRole {
+  userId     String
+  roleId     String
+  assignedAt DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role       Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+}
+
+// ---------------------------------------------------------------------------
+// Customers & addresses
+// ---------------------------------------------------------------------------
+
+model Customer {
+  id        String    @id @default(cuid())
+  userId    String    @unique
+  user      User      @relation(fields: [userId], references: [id])
+  firstName String?
+  lastName  String?
+  phone     String?
+  notes     String?   @db.Text
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  addresses     Address[]
+  orders        Order[]
+  subscriptions Subscription[]
+  referralsMade Referral[]     @relation("Referrer")
+  referredBy    Referral?      @relation("Referee")
+
+  @@index([phone])
+  @@index([deletedAt])
+}
+
+model Address {
+  id           String    @id @default(cuid())
+  customerId   String
+  customer     Customer  @relation(fields: [customerId], references: [id])
+  label        String?
+  line1        String
+  line2        String?
+  city         String
+  region       String
+  postalCode   String
+  country      String    @default("US")
+  lat          Float?
+  lng          Float?
+  deliveryZoneId String?
+  deliveryZone DeliveryZone? @relation(fields: [deliveryZoneId], references: [id])
+  isDefault    Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+
+  orders          Order[]
+  subscriptions   Subscription[]
+  routeStops      RouteStop[]
+  deliveryAttempts DeliveryAttempt[]
+
+  @@index([customerId])
+  @@index([postalCode])
+  @@index([deliveryZoneId])
+}
+
+// ---------------------------------------------------------------------------
+// Catalog
+// ---------------------------------------------------------------------------
+
+enum ProductForm {
+  LIQUID
+  POWDER
+  PODS
+  SHEETS
+  OTHER
+}
+
+model Category {
+  id          String    @id @default(cuid())
+  slug        String    @unique
+  name        String
+  description String?
+  parentId    String?
+  parent      Category? @relation("CategoryTree", fields: [parentId], references: [id])
+  children    Category[] @relation("CategoryTree")
+  sortOrder   Int       @default(0)
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  products Product[]
+
+  @@index([parentId])
+  @@index([isActive])
+}
+
+model Product {
+  id          String      @id @default(cuid())
+  slug        String      @unique
+  name        String
+  brand       String
+  description String?     @db.Text
+  categoryId  String?
+  category    Category?   @relation(fields: [categoryId], references: [id])
+  form        ProductForm @default(OTHER)
+  isActive    Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  deletedAt   DateTime?
+
+  variants ProductVariant[]
+  images   ProductImage[]
+
+  @@index([brand])
+  @@index([categoryId])
+  @@index([isActive])
+}
+
+/// Sellable SKU. Do not duplicate the parent Product for each size/scent.
+model ProductVariant {
+  id         String  @id @default(cuid())
+  productId  String
+  product    Product @relation(fields: [productId], references: [id])
+  sku        String  @unique
+  upc        String? @unique
+  name       String
+  scent      String?
+  sizeLabel  String?
+  sizeValue  Decimal? @db.Decimal(12, 3)
+  sizeUnit   String?
+  isActive   Boolean @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  deletedAt  DateTime?
+
+  prices           ProductPrice[]
+  images           ProductImage[]
+  vendorProducts   VendorProduct[]
+  poItems          PurchaseOrderItem[]
+  receiptItems     ReceiptItem[]
+  inventoryTxns    InventoryTransaction[]
+  inventoryBalance InventoryBalance?
+  orderItems       OrderItem[]
+  subscriptionItems SubscriptionItem[]
+
+  @@index([productId])
+  @@index([isActive])
+}
+
+/// Time-bounded list price. Insert a new row to change price; do not rewrite history.
+model ProductPrice {
+  id               String         @id @default(cuid())
+  productVariantId String
+  productVariant   ProductVariant @relation(fields: [productVariantId], references: [id])
+  /// List price in cents.
+  amountCents      Int
+  currency         String         @default("USD")
+  startsAt         DateTime
+  endsAt           DateTime?
+  createdAt        DateTime       @default(now())
+
+  @@index([productVariantId, startsAt])
+}
+
+model ProductImage {
+  id               String          @id @default(cuid())
+  productId        String?
+  product          Product?        @relation(fields: [productId], references: [id])
+  productVariantId String?
+  productVariant   ProductVariant? @relation(fields: [productVariantId], references: [id])
+  storageKey       String
+  alt              String?
+  sortOrder        Int             @default(0)
+  isPrimary        Boolean         @default(false)
+  createdAt        DateTime        @default(now())
+
+  @@index([productId])
+  @@index([productVariantId])
+}
+
+// ---------------------------------------------------------------------------
+// Vendors, purchasing, receiving
+// ---------------------------------------------------------------------------
+
+enum PurchaseOrderStatus {
+  DRAFT
+  SUBMITTED
+  PARTIALLY_RECEIVED
+  RECEIVED
+  CANCELLED
+}
+
+model Vendor {
+  id        String    @id @default(cuid())
+  name      String
+  email     String?
+  phone     String?
+  notes     String?   @db.Text
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  products       VendorProduct[]
+  purchaseOrders PurchaseOrder[]
+
+  @@index([isActive])
+}
+
+model VendorProduct {
+  id               String         @id @default(cuid())
+  vendorId         String
+  vendor           Vendor         @relation(fields: [vendorId], references: [id])
+  productVariantId String
+  productVariant   ProductVariant @relation(fields: [productVariantId], references: [id])
+  vendorSku        String?
+  /// Last known unit cost in cents. Historical costs live on PO / receipt lines.
+  unitCostCents    Int?
+  currency         String         @default("USD")
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@unique([vendorId, productVariantId])
+}
+
+model PurchaseOrder {
+  id              String               @id @default(cuid())
+  number          String               @unique
+  vendorId        String
+  vendor          Vendor               @relation(fields: [vendorId], references: [id])
+  status          PurchaseOrderStatus  @default(DRAFT)
+  orderedAt       DateTime?
+  expectedAt      DateTime?
+  /// Expected merchandise total in cents (snapshot).
+  subtotalCents   Int                  @default(0)
+  freightCents    Int                  @default(0)
+  otherCostCents  Int                  @default(0)
+  /// Landed cost estimate = subtotal + freight + other (cents).
+  landedCostCents Int                  @default(0)
+  currency        String               @default("USD")
+  notes           String?              @db.Text
+  createdByUserId String?
+  createdBy       User?                @relation("PoCreatedBy", fields: [createdByUserId], references: [id])
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  items    PurchaseOrderItem[]
+  receipts Receipt[]
+
+  @@index([vendorId])
+  @@index([status])
+}
+
+model PurchaseOrderItem {
+  id               String         @id @default(cuid())
+  purchaseOrderId  String
+  purchaseOrder    PurchaseOrder  @relation(fields: [purchaseOrderId], references: [id])
+  productVariantId String
+  productVariant   ProductVariant @relation(fields: [productVariantId], references: [id])
+  quantityOrdered  Int
+  quantityReceived Int            @default(0)
+  unitCostCents    Int
+  lineTotalCents   Int
+
+  receiptItems ReceiptItem[]
+
+  @@index([purchaseOrderId])
+  @@index([productVariantId])
+}
+
+model Receipt {
+  id              String        @id @default(cuid())
+  number          String        @unique
+  purchaseOrderId String?
+  purchaseOrder   PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
+  receivedAt      DateTime      @default(now())
+  notes           String?       @db.Text
+  createdAt       DateTime      @default(now())
+
+  items ReceiptItem[]
+
+  @@index([purchaseOrderId])
+}
+
+model ReceiptItem {
+  id                  String             @id @default(cuid())
+  receiptId           String
+  receipt             Receipt            @relation(fields: [receiptId], references: [id])
+  purchaseOrderItemId String?
+  purchaseOrderItem   PurchaseOrderItem? @relation(fields: [purchaseOrderItemId], references: [id])
+  productVariantId    String
+  productVariant      ProductVariant     @relation(fields: [productVariantId], references: [id])
+  quantityReceived    Int
+  unitCostCents       Int
+  /// Allocated landed cost for this line in cents.
+  landedUnitCostCents Int?
+
+  @@index([receiptId])
+  @@index([productVariantId])
+}
+
+// ---------------------------------------------------------------------------
+// Inventory ledger
+// ---------------------------------------------------------------------------
+
+enum InventoryTxnType {
+  RECEIPT
+  SALE
+  RESERVE
+  RELEASE
+  ADJUSTMENT
+  RETURN
+  DAMAGE
+  COUNT
+  TRANSFER_IN
+  TRANSFER_OUT
+}
+
+/// Append-only ledger. Application code must never UPDATE or DELETE these rows.
+model InventoryTransaction {
+  id               String           @id @default(cuid())
+  productVariantId String
+  productVariant   ProductVariant   @relation(fields: [productVariantId], references: [id])
+  type             InventoryTxnType
+  /// Signed quantity in sellable units. Positive increases on-hand (or reserve).
+  quantity         Int
+  resultingOnHand  Int
+  resultingReserved Int
+  referenceType    String?
+  referenceId      String?
+  reason           String?
+  createdByUserId  String?
+  createdBy        User?            @relation("InventoryTxnActor", fields: [createdByUserId], references: [id])
+  createdAt        DateTime         @default(now())
+
+  @@index([productVariantId, createdAt])
+  @@index([referenceType, referenceId])
+}
+
+/// Derived projection of the ledger. Update ONLY as the result of applying a transaction.
+model InventoryBalance {
+  id               String         @id @default(cuid())
+  productVariantId String         @unique
+  productVariant   ProductVariant @relation(fields: [productVariantId], references: [id])
+  onHandQty        Int            @default(0)
+  reservedQty      Int            @default(0)
+  damagedQty       Int            @default(0)
+  inTransitQty     Int            @default(0)
+  updatedAt        DateTime       @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// Orders, payments, tax, subscriptions
+// ---------------------------------------------------------------------------
+
+enum OrderStatus {
+  DRAFT
+  PENDING_PAYMENT
+  PAID
+  FULFILLING
+  OUT_FOR_DELIVERY
+  DELIVERED
+  CANCELLED
+  REFUNDED
+}
+
+enum PaymentStatus {
+  PENDING
+  AUTHORIZED
+  CAPTURED
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+enum PaymentProvider {
+  STRIPE
+  MANUAL
+}
+
+model Order {
+  id              String      @id @default(cuid())
+  number          String      @unique
+  customerId      String
+  customer        Customer    @relation(fields: [customerId], references: [id])
+  addressId       String?
+  address         Address?    @relation(fields: [addressId], references: [id])
+  status          OrderStatus @default(DRAFT)
+  currency        String      @default("USD")
+  subtotalCents   Int         @default(0)
+  discountCents   Int         @default(0)
+  shippingCents   Int         @default(0)
+  taxCents        Int         @default(0)
+  totalCents      Int         @default(0)
+  notes           String?     @db.Text
+  placedAt        DateTime?
+  createdByUserId String?
+  createdBy       User?       @relation("OrderCreatedBy", fields: [createdByUserId], references: [id])
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  items            OrderItem[]
+  payments         Payment[]
+  refunds          Refund[]
+  taxCalculation   TaxCalculation?
+  routeStops       RouteStop[]
+  deliveryAttempts DeliveryAttempt[]
+  subscription     Subscription?     @relation("SubscriptionOrigin")
+
+  @@index([customerId])
+  @@index([status])
+  @@index([placedAt])
+}
+
+/// Line snapshots. unitPriceCents is frozen at checkout — do not rewrite after capture.
+model OrderItem {
+  id               String         @id @default(cuid())
+  orderId          String
+  order            Order          @relation(fields: [orderId], references: [id])
+  productVariantId String
+  productVariant   ProductVariant @relation(fields: [productVariantId], references: [id])
+  nameSnapshot     String
+  skuSnapshot      String
+  quantity         Int
+  unitPriceCents   Int
+  discountCents    Int            @default(0)
+  taxCents         Int            @default(0)
+  lineTotalCents   Int
+
+  @@index([orderId])
+  @@index([productVariantId])
+}
+
+model Payment {
+  id              String          @id @default(cuid())
+  orderId         String
+  order           Order           @relation(fields: [orderId], references: [id])
+  provider        PaymentProvider @default(STRIPE)
+  status          PaymentStatus   @default(PENDING)
+  amountCents     Int
+  currency        String          @default("USD")
+  externalId      String?         @unique
+  idempotencyKey  String?         @unique
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  events  PaymentEvent[]
+  refunds Refund[]
+
+  @@index([orderId])
+  @@index([status])
+}
+
+/// Append-only payment webhook / state events. Never rewrite; insert new events.
+model PaymentEvent {
+  id         String   @id @default(cuid())
+  paymentId  String
+  payment    Payment  @relation(fields: [paymentId], references: [id])
+  type       String
+  payload    Json?
+  externalId String?  @unique
+  createdAt  DateTime @default(now())
+
+  @@index([paymentId, createdAt])
+}
+
+model Refund {
+  id          String   @id @default(cuid())
+  orderId     String
+  order       Order    @relation(fields: [orderId], references: [id])
+  paymentId   String?
+  payment     Payment? @relation(fields: [paymentId], references: [id])
+  amountCents Int
+  currency    String   @default("USD")
+  reason      String?
+  externalId  String?  @unique
+  createdAt   DateTime @default(now())
+
+  @@index([orderId])
+}
+
+/// Destination-based tax snapshot at calculation time. Historical rows stay immutable.
+model TaxCalculation {
+  id              String   @id @default(cuid())
+  orderId         String   @unique
+  order           Order    @relation(fields: [orderId], references: [id])
+  provider        String
+  destinationJson Json
+  taxableCents    Int
+  taxCents        Int
+  currency        String   @default("USD")
+  breakdownJson   Json?
+  externalId      String?
+  createdAt       DateTime @default(now())
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAUSED
+  CANCELLED
+  PAST_DUE
+}
+
+model Subscription {
+  id                String             @id @default(cuid())
+  customerId        String
+  customer          Customer           @relation(fields: [customerId], references: [id])
+  addressId         String?
+  address           Address?           @relation(fields: [addressId], references: [id])
+  status            SubscriptionStatus @default(ACTIVE)
+  cadenceDays       Int                @default(28)
+  nextOrderAt       DateTime?
+  originOrderId     String?            @unique
+  originOrder       Order?             @relation("SubscriptionOrigin", fields: [originOrderId], references: [id])
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  cancelledAt       DateTime?
+
+  items SubscriptionItem[]
+
+  @@index([customerId])
+  @@index([status, nextOrderAt])
+}
+
+model SubscriptionItem {
+  id               String         @id @default(cuid())
+  subscriptionId   String
+  subscription     Subscription   @relation(fields: [subscriptionId], references: [id])
+  productVariantId String
+  productVariant   ProductVariant @relation(fields: [productVariantId], references: [id])
+  quantity         Int
+
+  @@index([subscriptionId])
+}
+
+// ---------------------------------------------------------------------------
+// Delivery, routing, mileage
+// ---------------------------------------------------------------------------
+
+model DeliveryZone {
+  id             String   @id @default(cuid())
+  name           String
+  slug           String   @unique
+  /// GeoJSON polygon or postal-code list. Validated in application layer.
+  boundaryJson   Json?
+  capacityPerDay Int      @default(0)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  addresses Address[]
+  routes    Route[]
+}
+
+enum RouteStatus {
+  DRAFT
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+model Vehicle {
+  id           String    @id @default(cuid())
+  name         String
+  plate        String?   @unique
+  capacityStops Int      @default(20)
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  routes       Route[]
+  mileageTrips MileageTrip[]
+}
+
+model Route {
+  id             String      @id @default(cuid())
+  number         String      @unique
+  serviceDate    DateTime    @db.Date
+  status         RouteStatus @default(DRAFT)
+  vehicleId      String?
+  vehicle        Vehicle?    @relation(fields: [vehicleId], references: [id])
+  deliveryZoneId String?
+  deliveryZone   DeliveryZone? @relation(fields: [deliveryZoneId], references: [id])
+  plannedMiles   Decimal?    @db.Decimal(10, 2)
+  actualMiles    Decimal?    @db.Decimal(10, 2)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  stops        RouteStop[]
+  mileageTrips MileageTrip[]
+
+  @@index([serviceDate, status])
+  @@index([vehicleId])
+}
+
+model RouteStop {
+  id              String   @id @default(cuid())
+  routeId         String
+  route           Route    @relation(fields: [routeId], references: [id])
+  orderId         String?
+  order           Order?   @relation(fields: [orderId], references: [id])
+  addressId       String
+  address         Address  @relation(fields: [addressId], references: [id])
+  sequence        Int
+  driverUserId    String?
+  driver          User?    @relation("StopDriver", fields: [driverUserId], references: [id])
+  plannedArriveAt DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime @default(now())
+
+  deliveryAttempts DeliveryAttempt[]
+
+  @@unique([routeId, sequence])
+  @@index([orderId])
+  @@index([driverUserId])
+}
+
+enum DeliveryAttemptResult {
+  DELIVERED
+  FAILED
+  REFUSED
+  RESCHEDULED
+}
+
+model DeliveryAttempt {
+  id          String                 @id @default(cuid())
+  orderId     String
+  order       Order                  @relation(fields: [orderId], references: [id])
+  routeStopId String?
+  routeStop   RouteStop?             @relation(fields: [routeStopId], references: [id])
+  addressId   String
+  address     Address                @relation(fields: [addressId], references: [id])
+  driverUserId String
+  driver      User                   @relation(fields: [driverUserId], references: [id])
+  result      DeliveryAttemptResult
+  notes       String?
+  attemptedAt DateTime               @default(now())
+
+  photos DeliveryPhoto[]
+
+  @@index([orderId])
+  @@index([driverUserId])
+}
+
+model DeliveryPhoto {
+  id                String          @id @default(cuid())
+  deliveryAttemptId String
+  deliveryAttempt   DeliveryAttempt @relation(fields: [deliveryAttemptId], references: [id])
+  storageKey        String
+  capturedAt        DateTime        @default(now())
+
+  @@index([deliveryAttemptId])
+}
+
+model MileageTrip {
+  id          String   @id @default(cuid())
+  vehicleId   String
+  vehicle     Vehicle  @relation(fields: [vehicleId], references: [id])
+  routeId     String?
+  route       Route?   @relation(fields: [routeId], references: [id])
+  driverUserId String
+  driver      User     @relation(fields: [driverUserId], references: [id])
+  startedAt   DateTime
+  endedAt     DateTime?
+  startOdometer Int?
+  endOdometer   Int?
+  miles       Decimal? @db.Decimal(10, 2)
+  purpose     String?
+  createdAt   DateTime @default(now())
+
+  @@index([vehicleId, startedAt])
+  @@index([driverUserId])
+}
+
+// ---------------------------------------------------------------------------
+// Promotions, referrals, expenses
+// ---------------------------------------------------------------------------
+
+model Promotion {
+  id              String    @id @default(cuid())
+  code            String    @unique
+  name            String
+  /// Discount amount in cents when type is FIXED; basis points when PERCENT (1000 = 10%).
+  value           Int
+  valueType       String
+  startsAt        DateTime
+  endsAt          DateTime?
+  maxRedemptions  Int?
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model Referral {
+  id            String    @id @default(cuid())
+  referrerId    String
+  referrer      Customer  @relation("Referrer", fields: [referrerId], references: [id])
+  refereeId     String    @unique
+  referee       Customer  @relation("Referee", fields: [refereeId], references: [id])
+  code          String
+  creditCents   Int       @default(0)
+  redeemedAt    DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([referrerId])
+  @@index([code])
+}
+
+model ExpenseCategory {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  qboAccountId String?
+  createdAt DateTime  @default(now())
+
+  expenses Expense[]
+}
+
+model Expense {
+  id                String          @id @default(cuid())
+  categoryId        String
+  category          ExpenseCategory @relation(fields: [categoryId], references: [id])
+  amountCents       Int
+  currency          String          @default("USD")
+  incurredOn        DateTime        @db.Date
+  memo              String?
+  receiptStorageKey String?
+  qboTxnId          String?         @unique
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@index([categoryId, incurredOn])
+}
+
+// ---------------------------------------------------------------------------
+// Platform
+// ---------------------------------------------------------------------------
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  actorUserId String?
+  actor       User?    @relation("AuditActor", fields: [actorUserId], references: [id])
+  action      String
+  entityType  String
+  entityId    String
+  beforeJson  Json?
+  afterJson   Json?
+  createdAt   DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([actorUserId, createdAt])
+}
+
+model Setting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  valueJson Json
+  updatedAt DateTime @updatedAt
+}
