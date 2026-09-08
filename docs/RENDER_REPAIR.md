@@ -40,7 +40,7 @@ Render's secure Save-only workflow: https://render.com/docs/configure-environmen
 
 ## Evidence scope
 
-Local Node 24 workspace: 101 unit/mocked-HTTP tests passed; lint, typecheck and optimized Next build passed. The build used a compile-only unreachable loopback URL, not Render credentials. Node 22/native PostgreSQL 16 validation is delegated to the existing GitHub CI runner configuration, not a new hosting resource. Local native DB execution remains unavailable because this workspace maps only UID 0; tests must not bypass that restriction.
+Local Node 24 workspace: 104 unit/mocked-HTTP tests passed after final review; lint, typecheck and optimized Next build passed. The build used a compile-only unreachable loopback URL, not Render credentials. The initial repair passed the existing GitHub CI on Node 22/native PostgreSQL 16: 101 unit tests, 16 integration tests, two browser tests and migration replay. The final review adds three unit cases; latest checks are attached to PR #12. No new hosting resource was created. Local native DB execution remains unavailable because this workspace maps only UID 0; tests must not bypass that restriction.
 
 The repair adds native PostgreSQL tests for bootstrap concurrency, no reset/recreation, collision refusal and receiving regressions; migration preflight/replay; and desktop/mobile browser tests with actual local Auth.js sessions, admin/customer separation, persisted/audited vendor creation, bad credentials, refresh, role revocation and deleted-user denial. Screenshots, traces and database assertions are CI artifacts. They are not hosted sandbox, email, Stripe/Tax, storage, checkout or delivery acceptance. Exact CI outcomes are recorded in TESTING.md after execution.
 

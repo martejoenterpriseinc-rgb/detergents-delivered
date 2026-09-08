@@ -35,6 +35,8 @@ describe("runtime configuration", () => {
     { NEXTAUTH_URL: "https://other.example.test" },
     { STRIPE_SECRET_KEY: "sk_live_synthetic" },
     { DATABASE_URL: "postgresql://dd-prod/db", DD_DATABASE_HOST: "dd-prod" },
+    { DATABASE_URL: "postgresql://dd-db/production", DD_DATABASE_NAME: "production" },
+    { DATABASE_URL: "postgresql://dd-db/%70roduction", DD_DATABASE_NAME: "production" },
     { APP_ENV: "production", DEMO_MODE: "true" },
   ])("rejects unsafe configuration %j", (overrides) => {
     expect(() => validateRuntimeConfig({ ...valid, ...overrides })).toThrow();

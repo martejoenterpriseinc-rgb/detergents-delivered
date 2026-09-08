@@ -24,7 +24,9 @@ export function validateRuntimeConfig(env: Environment): void {
   }
   if (
     env.APP_ENV !== "production" &&
-    /(^|[_.-])prod(uction)?([_.-]|$)/i.test(`${database.hostname}/${database.pathname}`)
+    [database.hostname, decodeURIComponent(database.pathname.slice(1))].some((part) =>
+      /(^|[_.-])prod(uction)?([_.-]|$)/i.test(part),
+    )
   ) {
     throw new Error("A non-production app cannot use a production database target.");
   }
