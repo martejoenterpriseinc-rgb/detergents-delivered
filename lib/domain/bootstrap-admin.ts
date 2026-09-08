@@ -1,4 +1,7 @@
-import { BOOTSTRAP_ADMIN_EMAIL, DOCUMENTED_STAGING_BOOTSTRAP_PASSWORD } from "./credentials";
+import {
+  BOOTSTRAP_ADMIN_EMAIL,
+  DOCUMENTED_STAGING_BOOTSTRAP_PASSWORD,
+} from "./credentials";
 
 export { BOOTSTRAP_ADMIN_EMAIL, DOCUMENTED_STAGING_BOOTSTRAP_PASSWORD };
 
@@ -10,36 +13,33 @@ export function parseSeedFlag(value: string | undefined): boolean {
 
 export function resolveBootstrapPassword(envPassword: string | undefined): {
   password: string;
-  source: "env" | "documented-default";
+  source: "env";
 } {
   const trimmed = envPassword?.trim();
-  if (trimmed) {
-    return { password: trimmed, source: "env" };
+  if (
+    !trimmed ||
+    trimmed.length < 20 ||
+    new TextEncoder().encode(trimmed).length > 72 ||
+    trimmed === DOCUMENTED_STAGING_BOOTSTRAP_PASSWORD
+  ) {
+    throw new Error(
+      "Set a unique SEED_BOOTSTRAP_ADMIN_PASSWORD of 20–72 UTF-8 bytes through secure environment entry. Public defaults are forbidden.",
+    );
   }
-  return {
-    password: DOCUMENTED_STAGING_BOOTSTRAP_PASSWORD,
-    source: "documented-default",
-  };
+  return { password: trimmed, source: "env" };
 }
 
 /**
- * Seed the bootstrap SUPER_ADMIN when explicitly requested, or automatically
- * in development/staging when no ADMIN / SUPER_ADMIN exists.
- * Production is never seeded this way.
+ * Explicit, one-time setup only; never recreate an administrator after rotation.
  */
 export function shouldSeedBootstrapAdmin(input: {
   appEnv: string;
   seedBootstrapAdmin: boolean;
   hasExistingAdmin: boolean;
 }): boolean {
-  if (input.appEnv === "production") {
-    return false;
-  }
-  if (input.seedBootstrapAdmin) {
-    return true;
-  }
   return (
     (input.appEnv === "development" || input.appEnv === "staging") &&
+    input.seedBootstrapAdmin &&
     !input.hasExistingAdmin
   );
 }

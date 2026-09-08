@@ -6,6 +6,7 @@ import { z } from "zod";
 import { authConfig } from "@/auth.config";
 import { prisma } from "@/lib/prisma";
 import type { RoleCode } from "@/lib/domain/authz";
+import { loadSessionAccount } from "@/lib/services/session-account";
 
 const credentialsSchema = z.object({
   // Accepts local/dev addresses such as admin@localhost; production users
@@ -19,25 +20,6 @@ const credentialsSchema = z.object({
     .refine((value) => /^[^\s@]+@[^\s@]+$/.test(value), "Invalid email"),
   password: z.string().min(1),
 });
-
-async function loadRoles(userId: string): Promise<RoleCode[]> {
-  const rows = await prisma.userRole.findMany({
-    where: { userId },
-    include: { role: true },
-  });
-  return rows.map((row) => row.role.code as RoleCode);
-}
-
-async function loadCredentialGate(userId: string) {
-  const row = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { mustChangeCredentials: true, email: true },
-  });
-  return {
-    mustChangeCredentials: Boolean(row?.mustChangeCredentials),
-    email: row?.email,
-  };
-}
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
@@ -86,12 +68,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         return token;
       }
 
+      const gate = await loadSessionAccount(userId);
+      if (!gate) return null;
       token.sub = userId;
-      if (user?.id || !token.roles) {
-        token.roles = await loadRoles(userId);
-      }
-
-      const gate = await loadCredentialGate(userId);
+      token.roles = gate.roles;
       token.mustChangeCredentials = gate.mustChangeCredentials;
       if (gate.email) {
         token.email = gate.email;

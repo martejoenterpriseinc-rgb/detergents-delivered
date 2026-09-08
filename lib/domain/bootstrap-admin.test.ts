@@ -5,72 +5,61 @@ import {
   resolveBootstrapPassword,
   shouldSeedBootstrapAdmin,
 } from "./bootstrap-admin";
-
-describe("bootstrap admin seed decision", () => {
-  it("never seeds production", () => {
+describe("explicit one-time bootstrap", () => {
+  it.each(["production", "invalid", ""])("never bootstraps environment %s", (appEnv) => {
     expect(
       shouldSeedBootstrapAdmin({
-        appEnv: "production",
+        appEnv,
         seedBootstrapAdmin: true,
         hasExistingAdmin: false,
       }),
     ).toBe(false);
   });
-
-  it("seeds when SEED_BOOTSTRAP_ADMIN=true in staging or development", () => {
-    expect(
-      shouldSeedBootstrapAdmin({
-        appEnv: "staging",
-        seedBootstrapAdmin: true,
-        hasExistingAdmin: true,
-      }),
-    ).toBe(true);
-    expect(
-      shouldSeedBootstrapAdmin({
-        appEnv: "development",
-        seedBootstrapAdmin: true,
-        hasExistingAdmin: true,
-      }),
-    ).toBe(true);
+  it.each(["staging", "development"])(
+    "requires opt-in and no administrator in %s",
+    (appEnv) => {
+      expect(
+        shouldSeedBootstrapAdmin({
+          appEnv,
+          seedBootstrapAdmin: false,
+          hasExistingAdmin: false,
+        }),
+      ).toBe(false);
+      expect(
+        shouldSeedBootstrapAdmin({
+          appEnv,
+          seedBootstrapAdmin: true,
+          hasExistingAdmin: true,
+        }),
+      ).toBe(false);
+      expect(
+        shouldSeedBootstrapAdmin({
+          appEnv,
+          seedBootstrapAdmin: true,
+          hasExistingAdmin: false,
+        }),
+      ).toBe(true);
+    },
+  );
+  it.each([
+    undefined,
+    "",
+    "short",
+    DOCUMENTED_STAGING_BOOTSTRAP_PASSWORD,
+    "x".repeat(73),
+    "🔐".repeat(20),
+  ])("rejects missing, public or invalid passwords %#", (password) => {
+    expect(() => resolveBootstrapPassword(password)).toThrow(
+      /SEED_BOOTSTRAP_ADMIN_PASSWORD/,
+    );
   });
-
-  it("auto-seeds staging and development when no admin exists", () => {
-    expect(
-      shouldSeedBootstrapAdmin({
-        appEnv: "staging",
-        seedBootstrapAdmin: false,
-        hasExistingAdmin: false,
-      }),
-    ).toBe(true);
-    expect(
-      shouldSeedBootstrapAdmin({
-        appEnv: "development",
-        seedBootstrapAdmin: false,
-        hasExistingAdmin: false,
-      }),
-    ).toBe(true);
-  });
-
-  it("skips auto-seed when an admin already exists", () => {
-    expect(
-      shouldSeedBootstrapAdmin({
-        appEnv: "staging",
-        seedBootstrapAdmin: false,
-        hasExistingAdmin: true,
-      }),
-    ).toBe(false);
-  });
-
-  it("resolves password from env or the documented staging default", () => {
-    expect(resolveBootstrapPassword("  Env-Temp-Pass!  ")).toEqual({
-      password: "Env-Temp-Pass!",
+  it("requires a supplied password and an explicit true flag", () => {
+    expect(resolveBootstrapPassword("Synthetic-Setup-Password-123")).toEqual({
+      password: "Synthetic-Setup-Password-123",
       source: "env",
     });
-    expect(resolveBootstrapPassword(undefined)).toEqual({
-      password: DOCUMENTED_STAGING_BOOTSTRAP_PASSWORD,
-      source: "documented-default",
-    });
     expect(parseSeedFlag("true")).toBe(true);
+    expect(parseSeedFlag(undefined)).toBe(false);
     expect(parseSeedFlag("false")).toBe(false);
   });
 });

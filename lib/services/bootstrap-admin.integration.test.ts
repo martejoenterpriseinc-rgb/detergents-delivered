@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import bcrypt from "bcryptjs";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { prisma } from "@/lib/prisma";
 import { BOOTSTRAP_ADMIN_EMAIL } from "@/lib/domain/bootstrap-admin";
 import { ensureBootstrapAdmin, hasExistingAdmin } from "./bootstrap-admin";
@@ -37,6 +37,18 @@ async function deleteBootstrapEmailUser() {
 describe("ensureBootstrapAdmin", () => {
   beforeAll(async () => {
     await ensureRoles();
+  });
+
+  beforeEach(async () => {
+    const emails = [BOOTSTRAP_ADMIN_EMAIL, `rotated-${suffix}@detergentsdelivered.com`];
+    const users = await prisma.user.findMany({
+      where: { email: { in: emails } },
+      select: { id: true },
+    });
+    const ids = users.map((user) => user.id);
+    await prisma.userRole.deleteMany({ where: { userId: { in: ids } } });
+    await prisma.auditLog.deleteMany({ where: { actorUserId: { in: ids } } });
+    await prisma.user.deleteMany({ where: { id: { in: ids } } });
   });
 
   afterAll(async () => {
@@ -96,7 +108,10 @@ describe("ensureBootstrapAdmin", () => {
       seedBootstrapFlag: true,
       password: "Should-Not-Apply-This!",
     });
-    expect(["created", "ensured", "skipped"]).toContain(result);
+    expect(result).toBe("skipped");
+    expect(
+      await prisma.user.findUnique({ where: { email: BOOTSTRAP_ADMIN_EMAIL } }),
+    ).toBeNull();
 
     const rotated = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
     expect(rotated.mustChangeCredentials).toBe(false);
@@ -114,7 +129,65 @@ describe("ensureBootstrapAdmin", () => {
     expect(result).toBe("skipped");
   });
 
-  it("reports existing admins", async () => {
+  it("serializes setup attempts and never resets an existing administrator", async () => {
+    const input = {
+      appEnv: "staging",
+      seedBootstrapFlag: true,
+      password: `Synthetic-Setup-${suffix}-Password`,
+    };
+    const results = await Promise.all([
+      ensureBootstrapAdmin(prisma, input),
+      ensureBootstrapAdmin(prisma, input),
+    ]);
+    expect(results.sort()).toEqual(["created", "skipped"]);
+    const before = await prisma.user.findUniqueOrThrow({
+      where: { email: BOOTSTRAP_ADMIN_EMAIL },
+    });
+    expect(
+      await ensureBootstrapAdmin(prisma, {
+        ...input,
+        password: "Different-Synthetic-Password-123",
+      }),
+    ).toBe("skipped");
+    const after = await prisma.user.findUniqueOrThrow({ where: { id: before.id } });
+    expect(after.passwordHash).toBe(before.passwordHash);
     expect(await hasExistingAdmin(prisma)).toBe(true);
+  });
+
+  it("refuses to promote or restore an existing non-admin bootstrap address", async () => {
+    const existing = await prisma.user.create({
+      data: { email: BOOTSTRAP_ADMIN_EMAIL, deletedAt: new Date() },
+    });
+    await expect(
+      ensureBootstrapAdmin(prisma, {
+        appEnv: "staging",
+        seedBootstrapFlag: true,
+        password: "Synthetic-Collision-Password-123",
+      }),
+    ).rejects.toThrow(/already exists/);
+    expect(await prisma.userRole.count({ where: { userId: existing.id } })).toBe(0);
+    const unchanged = await prisma.user.findUniqueOrThrow({ where: { id: existing.id } });
+    expect(unchanged.deletedAt).not.toBeNull();
+    expect(unchanged.passwordHash).toBeNull();
+  });
+
+  it("does not seed implicitly or accept a public default password", async () => {
+    expect(
+      await ensureBootstrapAdmin(prisma, {
+        appEnv: "staging",
+        seedBootstrapFlag: false,
+        password: "",
+      }),
+    ).toBe("skipped");
+    await expect(
+      ensureBootstrapAdmin(prisma, {
+        appEnv: "staging",
+        seedBootstrapFlag: true,
+        password: "ChangeMe-Now-DD-2026!",
+      }),
+    ).rejects.toThrow(/SEED_BOOTSTRAP_ADMIN_PASSWORD/);
+    expect(
+      await prisma.user.findUnique({ where: { email: BOOTSTRAP_ADMIN_EMAIL } }),
+    ).toBeNull();
   });
 });

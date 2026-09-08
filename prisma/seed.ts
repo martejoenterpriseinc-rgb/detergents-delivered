@@ -128,11 +128,15 @@ async function seedDevelopmentAdmin() {
 }
 
 async function seedBootstrapAdmin() {
+  if (!["development", "staging"].includes(process.env.APP_ENV ?? "") || !parseSeedFlag(process.env.SEED_BOOTSTRAP_ADMIN)) {
+    console.log("Bootstrap SUPER_ADMIN seed skipped; explicit non-production opt-in is required.");
+    return;
+  }
   const { password: bootstrapPassword, source } = resolveBootstrapPassword(
     process.env.SEED_BOOTSTRAP_ADMIN_PASSWORD,
   );
   const bootstrapResult = await ensureBootstrapAdmin(prisma, {
-    appEnv: process.env.APP_ENV ?? "development",
+    appEnv: process.env.APP_ENV!,
     seedBootstrapFlag: parseSeedFlag(process.env.SEED_BOOTSTRAP_ADMIN),
     password: bootstrapPassword,
   });
@@ -141,14 +145,19 @@ async function seedBootstrapAdmin() {
     console.log(
       `Seeded bootstrap SUPER_ADMIN ${BOOTSTRAP_ADMIN_EMAIL} (mustChangeCredentials=true). Password source: ${source}. See docs/DEPLOYMENT.md.`,
     );
-  } else if (bootstrapResult === "ensured") {
-    console.log(`Ensured bootstrap SUPER_ADMIN ${BOOTSTRAP_ADMIN_EMAIL}.`);
   } else {
     console.log("Bootstrap SUPER_ADMIN seed skipped.");
   }
 }
 
 async function main() {
+  if (!["development", "staging"].includes(process.env.APP_ENV ?? "")) {
+    throw new Error("Seed is restricted to explicitly configured development or staging.");
+  }
+  // Validate before ANY seed mutation, including roles/settings.
+  if (parseSeedFlag(process.env.SEED_BOOTSTRAP_ADMIN)) {
+    resolveBootstrapPassword(process.env.SEED_BOOTSTRAP_ADMIN_PASSWORD);
+  }
   await seedRoles();
   await ensureDeliverySettingsSeeded();
   await ensureDefaultSiteContent(prisma);

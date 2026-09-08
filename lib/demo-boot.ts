@@ -4,16 +4,15 @@ import { countVisibleShopProducts, seedDemoCatalog } from "../prisma/demo-catalo
 let seedInFlight: Promise<void> | null = null;
 
 export async function ensureDemoCatalogOnBoot() {
+  if (!canSeedDemoCatalog()) {
+    return { seeded: false, reason: "disabled" as const };
+  }
   try {
     const { ensureDeliverySettingsSeeded } =
       await import("@/lib/services/delivery-settings");
     await ensureDeliverySettingsSeeded();
   } catch (error) {
     console.error("Delivery settings seed skipped:", error);
-  }
-
-  if (!canSeedDemoCatalog()) {
-    return { seeded: false, reason: "disabled" as const };
   }
 
   const { prisma } = await import("@/lib/prisma");

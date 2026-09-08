@@ -6,6 +6,9 @@ export async function register() {
     return;
   }
 
+  const { validateRuntimeConfig } = await import("./lib/runtime-config");
+  validateRuntimeConfig(process.env);
+
   try {
     const { ensureDemoCatalogOnBoot } = await import("./lib/demo-boot");
     const result = await ensureDemoCatalogOnBoot();

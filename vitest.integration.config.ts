@@ -5,6 +5,8 @@ export default defineConfig({
   plugins: [tsconfigPaths()],
   test: {
     environment: "node",
+    setupFiles: ["./tests/integration-guard.ts"],
+    fileParallelism: false,
     include: ["**/*.integration.test.ts"],
     exclude: ["node_modules", ".next"],
     testTimeout: 30_000,
