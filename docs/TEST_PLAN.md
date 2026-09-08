@@ -46,7 +46,7 @@ Authz:
 - permission codes and `*`
 - role→permission mapping
 - force-change gate (`mustChangeCredentials` blocks `/admin` and staff APIs)
-- bootstrap seed decision (no production seed; auto-seed staging/dev when no admin)
+- bootstrap seed decision (explicit opt-in, no production seed, no existing administrator)
 - credential-change validation (min 12, new email, reject temp password)
 - website builder is ADMIN / SUPER_ADMIN only (`website.write`)
 
@@ -87,7 +87,9 @@ npm run db:validate
 npm run build
 ```
 
-CI: `.github/workflows/ci.yml` (Postgres 16 service, same commands).
+CI: `.github/workflows/ci.yml` (Postgres 16 service, same commands, read-only migration preflight/replay and desktop/mobile Playwright startup tests).
+
+Integration/E2E tests refuse hosted databases and require `APP_ENV=development`, `DD_ALLOW_DATABASE_TESTS=true`, and the loopback database `detergents_delivered_ci`. Browser results use real local PostgreSQL and real Auth.js credential sessions with synthetic accounts; no payment, email, or storage provider is exercised.
 
 ## Acceptance before production
 

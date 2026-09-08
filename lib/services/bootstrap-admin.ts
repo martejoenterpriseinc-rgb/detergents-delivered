@@ -1,12 +1,13 @@
-import type { PrismaClient } from "@prisma/client";
+import type { Prisma, PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import {
   BOOTSTRAP_ADMIN_EMAIL,
   BOOTSTRAP_ADMIN_NAME,
   shouldSeedBootstrapAdmin,
+  resolveBootstrapPassword,
 } from "@/lib/domain/bootstrap-admin";
 
-export async function hasExistingAdmin(db: PrismaClient): Promise<boolean> {
+export async function hasExistingAdmin(db: Prisma.TransactionClient): Promise<boolean> {
   const row = await db.userRole.findFirst({
     where: {
       role: { code: { in: ["ADMIN", "SUPER_ADMIN"] } },
@@ -24,71 +25,50 @@ export async function ensureBootstrapAdmin(
     seedBootstrapFlag: boolean;
     password: string;
   },
-): Promise<"created" | "ensured" | "skipped"> {
-  const existingAdmin = await hasExistingAdmin(db);
+): Promise<"created" | "skipped"> {
   if (
     !shouldSeedBootstrapAdmin({
       appEnv: input.appEnv,
       seedBootstrapAdmin: input.seedBootstrapFlag,
-      hasExistingAdmin: existingAdmin,
+      hasExistingAdmin: false,
     })
   ) {
     return "skipped";
   }
 
-  const superAdmin = await db.role.findUniqueOrThrow({
-    where: { code: "SUPER_ADMIN" },
-  });
+  const { password } = resolveBootstrapPassword(input.password);
+  const passwordHash = await bcrypt.hash(password, 12);
+  return db.$transaction(async (tx) => {
+    // Serialize two setup commands. No account/role write can escape this transaction.
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('detergents-delivered-bootstrap-admin'))`;
+    if (await hasExistingAdmin(tx)) return "skipped";
+    const superAdmin = await tx.role.findUniqueOrThrow({
+      where: { code: "SUPER_ADMIN" },
+    });
 
-  const existing = await db.user.findUnique({
-    where: { email: BOOTSTRAP_ADMIN_EMAIL },
-  });
+    const existing = await tx.user.findUnique({
+      where: { email: BOOTSTRAP_ADMIN_EMAIL },
+    });
 
-  if (existing) {
-    if (!existing.mustChangeCredentials) {
-      await db.userRole.upsert({
-        where: {
-          userId_roleId: { userId: existing.id, roleId: superAdmin.id },
-        },
-        update: {},
-        create: { userId: existing.id, roleId: superAdmin.id },
-      });
-      return "ensured";
+    if (existing) {
+      throw new Error(
+        "Bootstrap address already exists; use account recovery. No password, role, or deletion state was changed.",
+      );
     }
 
-    const passwordHash = await bcrypt.hash(input.password, 12);
-    await db.user.update({
-      where: { id: existing.id },
+    const user = await tx.user.create({
       data: {
+        email: BOOTSTRAP_ADMIN_EMAIL,
+        name: BOOTSTRAP_ADMIN_NAME,
         passwordHash,
-        deletedAt: null,
         mustChangeCredentials: true,
-        name: existing.name ?? BOOTSTRAP_ADMIN_NAME,
       },
     });
-    await db.userRole.upsert({
-      where: {
-        userId_roleId: { userId: existing.id, roleId: superAdmin.id },
-      },
-      update: {},
-      create: { userId: existing.id, roleId: superAdmin.id },
+
+    await tx.userRole.create({
+      data: { userId: user.id, roleId: superAdmin.id },
     });
-    return "ensured";
-  }
 
-  const passwordHash = await bcrypt.hash(input.password, 12);
-  const user = await db.user.create({
-    data: {
-      email: BOOTSTRAP_ADMIN_EMAIL,
-      name: BOOTSTRAP_ADMIN_NAME,
-      passwordHash,
-      mustChangeCredentials: true,
-    },
+    return "created";
   });
-
-  await db.userRole.create({
-    data: { userId: user.id, roleId: superAdmin.id },
-  });
-
-  return "created";
 }

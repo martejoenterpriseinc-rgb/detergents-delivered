@@ -70,7 +70,7 @@ Route groups do not change URLs; they keep layouts isolated.
 Authorization is enforced twice:
 
 1. `proxy.ts` — optimistic session cookie check (redirect to `/sign-in`, or `/account/change-credentials` when `mustChangeCredentials`)
-2. Server layouts / `lib/authz.ts` — authoritative role, permission, and credential-change checks
+2. Server layouts / `lib/authz.ts` — authoritative role, permission, and credential-change checks; Auth.js reloads persistent roles/deletion/credential state on every server session read
 
 CPA is read-focused: allowed into the admin shell, denied write APIs.
 
@@ -84,3 +84,7 @@ CPA is read-focused: allowed into the admin shell, denied write APIs.
 ## Environments
 
 Development, staging, and production share the same artifact shape and differ by `APP_ENV`, `DATABASE_URL`, and secrets. Development must not use production data. See [DEPLOYMENT.md](./DEPLOYMENT.md).
+
+## Source preservation during Render repair
+
+The Render-linked GitHub history (Prisma 6/Auth.js) remains the repair base. The independent saved Prisma 7/Better Auth history and approved Sites layout are preserved separately; no incompatible migration/auth merge or UI replacement is performed. See RENDER_REPAIR.md.

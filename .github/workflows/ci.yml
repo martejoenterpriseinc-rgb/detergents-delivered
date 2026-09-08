@@ -9,6 +9,8 @@ jobs:
   verify:
     name: Lint, typecheck, test, validate, build
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
     services:
       postgres:
@@ -28,7 +30,11 @@ jobs:
     env:
       APP_ENV: development
       DATABASE_URL: postgresql://dd_ci:dd_ci_password@localhost:5432/detergents_delivered_ci?schema=public
-      AUTH_SECRET: ci-only-placeholder-not-a-real-secret
+      AUTH_SECRET: synthetic-ci-only-runtime-secret-do-not-reuse-12345
+      DD_ALLOW_DATABASE_TESTS: "true"
+      DEMO_MODE: "false"
+      SEED_DEMO_CATALOG: "false"
+      SEED_BOOTSTRAP_ADMIN: "false"
       NEXTAUTH_URL: http://localhost:3000
       AUTH_URL: http://localhost:3000
 
@@ -54,6 +60,13 @@ jobs:
       - name: Apply migrations
         run: npm run db:migrate
 
+      - name: Read-only database preflight and migration replay
+        run: |
+          npm run check:runtime
+          npm run db:preflight
+          npm run db:migrate
+          npm run db:preflight
+
       - name: Lint
         run: npm run lint
 
@@ -68,3 +81,19 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Install test browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Desktop and mobile startup acceptance
+        run: npm run test:e2e
+
+      - name: Preserve browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: detergents-delivered-startup-evidence
+          path: |
+            playwright-report
+            test-results
+          retention-days: 14

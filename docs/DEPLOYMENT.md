@@ -48,33 +48,19 @@ Filesystem is ephemeral. Uploads go to object storage (S3 placeholders). Do not 
 
 ## Health
 
+`GET /api/ready` performs read-only database schema probes and returns 503 on configuration/connection/schema failure. Use it for readiness; `/api/health` is liveness only.
+
+
 `GET /api/health` returns `{ ok, service, env, timestamp }`. Use it as the container / load-balancer probe. It does not query the database in Phase 1 (avoid false kills during migrate). Add a separate `/api/ready` in a later phase if we need DB readiness.
 
 ## Bootstrap admin
 
-One-time SUPER_ADMIN used to enter `/admin` on a fresh development or staging database. **Production is never seeded this way.**
+Bootstrap is an explicit, one-time operation in development/staging only. It never automatically creates an administrator, resets an existing password, promotes an existing customer, revives a deleted account, or recreates the bootstrap account after owner credential rotation.
 
-The seed creates `admin@detergentsdelivered.com` when:
+Set `SEED_BOOTSTRAP_ADMIN=true` and enter a unique `SEED_BOOTSTRAP_ADMIN_PASSWORD` (20–72 UTF-8 bytes) through secure environment entry, then run `npm run db:seed` only after database review. There is no default password. The seed validates the password before any writes and serializes concurrent administrator creation in a database transaction. Remove the temporary password and turn the flag off afterward. First login still requires a different email/password.
 
-- `SEED_BOOTSTRAP_ADMIN=true`, or
-- `APP_ENV` is `development` or `staging` and no `ADMIN` / `SUPER_ADMIN` user exists yet
+The seed refuses production and an unspecified environment. Existing historical public default credentials remain rejected by credential-change validation; never use them to create or access an account.
 
-Login is email + password (no separate username column). The account is created with `mustChangeCredentials=true`. After sign-in, `/admin/*`, `/driver/*`, and other account pages are blocked until the operator sets a **new email** and **new password** at `/account/change-credentials`.
+## Existing Render repair
 
-### Temporary credentials (staging / first deploy)
-
-| Field | Value |
-| --- | --- |
-| Email | `admin@detergentsdelivered.com` |
-| Password | `SEED_BOOTSTRAP_ADMIN_PASSWORD` if set, otherwise the documented staging default **`ChangeMe-Now-DD-2026!`** |
-
-This default is a **temporary** break-glass password, not a production secret. Override it per environment with `SEED_BOOTSTRAP_ADMIN_PASSWORD`. The first-login form rejects the documented default, the env temp password, and reuse of the current hash.
-
-```bash
-# After migrate, on a database with no admin yet (or with the flag set):
-APP_ENV=staging SEED_BOOTSTRAP_ADMIN=true npm run db:seed
-```
-
-The seed hashes the password with bcrypt. It does not store plaintext. Re-running seed does **not** reset an account that already completed the credential change (`mustChangeCredentials=false`). `SEED_BOOTSTRAP_ADMIN=true` will recreate the bootstrap email only if that address is unused (for example after the operator rotated away from it).
-
-Google OAuth for ordinary shoppers is unchanged. Do not commit real production passwords.
+See [RENDER_REPAIR.md](RENDER_REPAIR.md) for the reviewed source, exact existing resources, safe start command, database preflight, test evidence and remaining access blocker. `npm start` now validates runtime configuration and migration history without applying migrations. The old Render command `npx prisma migrate deploy && npm start` must be changed before connecting a database. No migration SQL was edited by this repair.
