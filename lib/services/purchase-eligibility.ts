@@ -1,3 +1,4 @@
+import { commerceConfiguration } from "@/lib/commerce/config";
 import { prisma } from "@/lib/prisma";
 import { accountIdentity } from "./customer-account";
 import { launchConfig } from "./launch";
@@ -59,8 +60,12 @@ export async function purchaseEligibility(userId: string | null, zip: string) {
   return {
     ...base,
     eligible: true,
-    message: launch.enabled
-      ? `Planned launch: ${launch.launchDate}. The first delivery window is ${launch.launchDate}–${launch.firstDeliveryBy}; exact dates will be confirmed after routes are reviewed. Ordering is not open yet.`
-      : "Your account and delivery address are eligible. Ordering opens after payment and delivery booking are connected.",
+    canPurchase: commerceConfiguration().enabled && launch.enabled,
+    message:
+      commerceConfiguration().enabled && launch.enabled
+        ? `Your account is eligible. Review delivery availability and final pricing at checkout.`
+        : launch.enabled
+          ? `Planned launch: ${launch.launchDate}. The first delivery window is ${launch.launchDate}–${launch.firstDeliveryBy}; exact dates will be confirmed after routes are reviewed. Ordering is not open yet.`
+          : "Your account and delivery address are eligible. Ordering opens after payment and delivery booking are connected.",
   };
 }

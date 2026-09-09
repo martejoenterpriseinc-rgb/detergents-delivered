@@ -32,6 +32,9 @@ export default async function AccountPage() {
               Back to admin
             </Link>
           )}
+          <Link href="/account/addresses" className="font-semibold underline">
+            Delivery addresses
+          </Link>
           <form action={signOutAction}>
             <Button type="submit" variant="outline">
               Sign out
@@ -40,7 +43,12 @@ export default async function AccountPage() {
         </div>
       </div>
       <div className="mt-8">
-        <AccountDashboard account={account} orders={orders} delivery={delivery} rewardCents={loyalty.balance.availableCents} />
+        <AccountDashboard
+          account={account}
+          orders={orders}
+          delivery={delivery}
+          rewardCents={loyalty.balance.availableCents}
+        />
       </div>
     </div>
   );

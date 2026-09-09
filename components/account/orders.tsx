@@ -51,7 +51,11 @@ export function AccountOrders({
             </p>
             {stop && !["CANCELLED", "REFUNDED"].includes(order.status) && (
               <div className="rounded-xl bg-teal-50 p-3 text-sm">
-                <p>Delivery date: {stop.route.serviceDate.toISOString().slice(0, 10)}</p>
+                <p>
+                  {order.checkoutAttempt && !order.checkoutAttempt.deliveryConfirmedAt
+                    ? "Your first delivery date is awaiting route confirmation."
+                    : `Delivery date: ${stop.route.serviceDate.toISOString().slice(0, 10)}`}
+                </p>
                 {stop.plannedArriveAt && !stop.completedAt && (
                   <p>
                     Planned arrival (route schedule):{" "}
@@ -88,6 +92,14 @@ export function AccountOrders({
                   View delivery photo
                 </a>
               ))}
+            {order.checkoutAttempt && (
+              <Link
+                className="underline"
+                href={`/checkout/receipt/${order.checkoutAttempt.id}`}
+              >
+                Order receipt and payment status
+              </Link>
+            )}
             <p className="text-sm text-teal-800">
               {order.items.map((i) => `${i.nameSnapshot} × ${i.quantity}`).join(" · ")}
             </p>

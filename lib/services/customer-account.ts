@@ -178,6 +178,7 @@ export async function getCustomerOrders(userId: string, orderId?: string) {
       placedAt: true,
       totalCents: true,
       currency: true,
+      checkoutAttempt: { select: { id: true, deliveryConfirmedAt: true } },
       items: { select: { id: true, nameSnapshot: true, quantity: true } },
       routeStops: {
         where: {

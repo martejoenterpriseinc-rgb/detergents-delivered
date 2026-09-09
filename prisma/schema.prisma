@@ -171,6 +171,7 @@ model Customer {
   referralLinks ReferralLink[]
   rewardEntries RewardEntry[]
   rewardReservations RewardReservation[]
+  checkoutAttempts CheckoutAttempt[]
 
   @@index([phone])
   @@index([deletedAt])
@@ -566,6 +567,7 @@ model InventoryCostLayer {
   productVariant      ProductVariant  @relation(fields: [productVariantId], references: [id])
   receiptItemId       String?
   receiptItem         ReceiptItem?    @relation(fields: [receiptItemId], references: [id])
+  checkoutAllocations CheckoutCostAllocation[]
   quantityOriginal    Int
   quantityRemaining   Int
   landedUnitCostCents Int
@@ -652,6 +654,7 @@ model Order {
   rewardReservation RewardReservation?
   rewardEntries RewardEntry[]
   qualifyingReferral Referral? @relation("ReferralQualifyingOrder")
+  checkoutAttempt CheckoutAttempt?
 
   @@index([customerId])
   @@index([status])
@@ -1253,4 +1256,63 @@ model CustomerInvite {
   expiresAt DateTime
   createdAt DateTime @default(now())
   @@index([email])
+}
+
+/// Durable checkout state. Provider uncertainty never releases resource holds.
+model CheckoutAttempt {
+  id String @id @default(cuid())
+  customerId String
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  requestKey String
+  requestHash String
+  state String @default("QUOTED")
+  snapshot Json
+  expiresAt DateTime
+  sessionExpiresAt DateTime?
+  deliveryConfirmedAt DateTime?
+  stripeSessionId String? @unique
+  stripeCustomerId String?
+  stripeAccountId String
+  livemode Boolean
+  orderId String? @unique
+  order Order? @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  vehicleId String?
+  zoneId String?
+  serviceDate String?
+  spaceUnits Int @default(0)
+  detergentBuckets Int @default(0)
+  scentBeadBuckets Int @default(0)
+  lastError String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  costs CheckoutCostAllocation[]
+  events CheckoutProviderEvent[]
+  @@unique([customerId, requestKey])
+  @@index([state, updatedAt])
+  @@index([vehicleId, serviceDate, state])
+}
+
+/// Holds FIFO quantities without altering receipt costs; immutable after consumption.
+model CheckoutCostAllocation {
+  id String @id @default(cuid())
+  checkoutId String
+  checkout CheckoutAttempt @relation(fields: [checkoutId], references: [id], onDelete: Restrict)
+  costLayerId String
+  costLayer InventoryCostLayer @relation(fields: [costLayerId], references: [id], onDelete: Restrict)
+  quantity Int
+  unitCostCents Int
+  state String @default("HELD")
+  @@unique([checkoutId, costLayerId])
+  @@index([costLayerId, state])
+}
+
+/// Minimal signed provider evidence. Raw card/customer payloads are never stored.
+model CheckoutProviderEvent {
+  id String @id
+  checkoutId String
+  checkout CheckoutAttempt @relation(fields: [checkoutId], references: [id], onDelete: Restrict)
+  type String
+  evidence Json
+  verifiedAt DateTime
+  createdAt DateTime @default(now())
 }
