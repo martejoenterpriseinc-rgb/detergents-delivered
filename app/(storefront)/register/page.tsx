@@ -1,10 +1,10 @@
+import { runtimeGoogleConfigured } from "@/lib/integrations/google";
 import Link from "next/link";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { PasswordInput } from "@/components/ui/password-input";
-import { googleSignInConfigured } from "@/lib/domain/customer-access";
 import { registerWithCredentials, signInWithGoogle } from "../actions";
 
 export default async function RegisterPage({
@@ -67,7 +67,7 @@ export default async function RegisterPage({
             Create account
           </Button>
         </form>
-        {googleSignInConfigured() && (
+        {(await runtimeGoogleConfigured()) && (
           <form action={signInWithGoogle}>
             <Button type="submit" variant="outline" className="w-full">
               Continue with Google

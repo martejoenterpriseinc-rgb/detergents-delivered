@@ -44,8 +44,11 @@ export function commerceConfiguration(
     origin: origin ?? "",
   };
 }
-export function requireCommerce(recovery = false) {
-  const config = commerceConfiguration();
+export function requireCommerce(
+  recovery = false,
+  env: Record<string, string | undefined> = process.env,
+) {
+  const config = commerceConfiguration(env);
   const blocking = recovery
     ? config.missing.filter(
         (v) => !["Checkout activation", "Production checkout acceptance"].includes(v),

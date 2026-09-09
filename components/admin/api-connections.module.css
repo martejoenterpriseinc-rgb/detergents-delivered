@@ -1,0 +1,603 @@
+.root {
+  color: #153f3a;
+  min-width: 0;
+}
+.root button,
+.root a {
+  touch-action: manipulation;
+}
+.environment {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 24px;
+  padding: 20px 24px;
+  background: #fff8f7;
+  border: 1px solid #edc6c2;
+  border-left: 4px solid #b91c1c;
+  border-radius: 12px;
+}
+.production {
+  background: #f0fdf4;
+  border-color: #a7d4ba;
+  border-left-color: #167446;
+}
+.environment > div:first-child {
+  flex: 1;
+  min-width: 220px;
+}
+.eyebrow {
+  display: block;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #876865;
+  margin-bottom: 6px;
+}
+.environment strong {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 22px;
+}
+.current {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #b91c1c;
+  background: #fee2e2;
+  border-radius: 5px;
+  padding: 4px 7px;
+}
+.production .current {
+  background: #d1fae5;
+  color: #166534;
+}
+.hint {
+  display: block;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #758580;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+.switcher {
+  display: flex;
+  border: 1px solid #d4deda;
+  padding: 4px;
+  background: #fff;
+  border-radius: 9px;
+  gap: 4px;
+}
+.switcher button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 108px;
+  padding: 10px 15px;
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: 6px;
+  color: #5d746d;
+}
+.switcher .selected {
+  background: #123f38;
+  color: #fff;
+}
+.destination {
+  font-size: 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  align-items: flex-end;
+  color: #6b7772;
+}
+.destination button {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #0b7667;
+  font-weight: 700;
+}
+.heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin: 28px 0 18px;
+}
+.heading h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 21px;
+  font-weight: 750;
+}
+.heading p {
+  font-size: 12px;
+  color: #6b8079;
+  margin-top: 6px;
+}
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 11px;
+  color: #73847e;
+  margin-bottom: 20px;
+}
+.toolbar > div {
+  display: flex;
+  gap: 5px;
+}
+.toolbar button {
+  padding: 7px 11px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 650;
+}
+.toolbar button[aria-pressed="true"] {
+  background: #dceee8;
+  color: #124f43;
+}
+.provider {
+  border: 1px solid #dce7e2;
+  border-radius: 10px;
+  background: #fff;
+  margin-bottom: 18px;
+  overflow: hidden;
+}
+.providerHeading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 17px 20px;
+  background: #f8faf9;
+  border-bottom: 1px solid #e0e9e5;
+}
+.providerHeading h3 {
+  font-weight: 750;
+  font-size: 15px;
+}
+.providerHeading p {
+  font-size: 11px;
+  color: #6a8076;
+  margin-top: 3px;
+}
+.root table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+.root th {
+  text-align: left;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 9px;
+  font-weight: 700;
+  color: #81918b;
+  padding: 10px 20px;
+  background: #fff;
+  border-bottom: 1px solid #e8efec;
+}
+.root th:nth-child(1) {
+  width: 29%;
+}
+.root th:nth-child(2) {
+  width: 29%;
+}
+.root th:nth-child(3) {
+  width: 19%;
+}
+.root th:nth-child(4) {
+  width: 23%;
+}
+.root td {
+  padding: 14px 20px;
+  vertical-align: middle;
+  border-bottom: 1px solid #edf1ef;
+  overflow-wrap: anywhere;
+}
+.root tr:last-child td {
+  border-bottom: 0;
+}
+.fieldName {
+  display: block;
+  font-size: 12px;
+  font-weight: 650;
+}
+.masked {
+  color: #84998f;
+  letter-spacing: 0.1em;
+  font-size: 12px;
+}
+.empty {
+  color: #b2beb8;
+}
+.badge {
+  display: inline-flex;
+  padding: 4px 7px;
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 650;
+  white-space: normal;
+  line-height: 1.4;
+}
+.savedBadge {
+  background: #e3f3eb;
+  color: #236b4d;
+}
+.missingBadge {
+  background: #fff5dc;
+  color: #856522;
+}
+.neutralBadge {
+  background: #edf2ef;
+  color: #687f73;
+}
+.actions {
+  white-space: nowrap;
+}
+.editButton,
+.saveButton,
+.cancelButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 33px;
+  padding: 7px 11px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.editButton {
+  border: 1px solid #d3e3db;
+  background: #fff;
+  color: #216450;
+}
+.saveButton {
+  background: #086f61;
+  color: white;
+}
+.cancelButton {
+  color: #617d70;
+  margin-left: 4px;
+}
+.root button:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+}
+.editingRow {
+  background: #f2faf7;
+}
+.inputWrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid #6cad98;
+  background: #fff;
+  border-radius: 6px;
+  min-width: 0;
+}
+.root input {
+  min-width: 0;
+  width: 100%;
+  padding: 9px 10px;
+  font-size: 12px;
+  border-radius: 6px;
+  outline-offset: 2px;
+}
+.inputWrap input {
+  flex: 1;
+}
+.iconButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 30px;
+  min-height: 30px;
+  color: #547c6b;
+  cursor: pointer;
+}
+.error {
+  font-size: 11px;
+  color: #aa2727;
+  margin-top: 8px;
+  white-space: normal;
+  line-height: 1.5;
+}
+.problem {
+  margin-top: 12px;
+  background: #fef2f2;
+  border: 1px solid #f5c6c6;
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 12px;
+  color: #a52a2a;
+}
+.savedFeedback {
+  display: block;
+  color: #247459;
+  font-size: 10px;
+  margin-top: 3px;
+}
+.address {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 20px;
+  background: #fbfdfc;
+  border-top: 1px solid #edf1ef;
+  font-size: 10px;
+  color: #6c8177;
+  flex-wrap: wrap;
+}
+.address > span {
+  font-weight: 700;
+}
+.address code {
+  font-size: 10px;
+  overflow-wrap: anywhere;
+  flex: 1;
+  min-width: 120px;
+}
+.security {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  font-size: 11px;
+  color: #789086;
+  margin: 16px 3px;
+  line-height: 1.5;
+}
+.security svg {
+  flex-shrink: 0;
+}
+.additional {
+  border: 1px solid #dce7e2;
+  border-radius: 10px;
+  background: white;
+}
+.additional summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.additional > div {
+  padding: 0 20px 10px;
+}
+.additional p {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 11px;
+  padding: 12px 0;
+  border-top: 1px solid #edf1ef;
+}
+.additional p span {
+  flex: 1;
+  color: #7a8f84;
+  min-width: 160px;
+}
+.additional a {
+  color: #147b61;
+  font-weight: 700;
+}
+.dialog {
+  padding: 28px;
+  max-width: 500px;
+  width: calc(100% - 32px);
+  border: 1px solid #d4e4db;
+  border-radius: 16px;
+  margin: auto;
+  box-shadow: 0 24px 80px #0b2d3655;
+  color: #153f3a;
+}
+.dialog::backdrop {
+  background: #082e3566;
+}
+.dialog h2 {
+  font-size: 22px;
+  font-weight: 750;
+  padding-right: 18px;
+}
+.dialog p {
+  font-size: 13px;
+  line-height: 1.6;
+  color: #58786a;
+  margin: 14px 0;
+}
+.dialog code {
+  display: block;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  background: #eef5f1;
+  padding: 12px;
+  border-radius: 6px;
+  margin-bottom: 20px;
+}
+.dialog label {
+  font-size: 12px;
+  font-weight: 700;
+}
+.dialog input {
+  border: 1px solid #a5c6b4;
+  margin: 8px 0 20px;
+}
+.closeDialog {
+  position: absolute;
+  right: 14px;
+  top: 14px;
+  padding: 5px;
+}
+.dialog .error {
+  color: #aa2727;
+}
+.root :is(button, a, input, summary):focus-visible {
+  outline: 2px solid #15806b;
+  outline-offset: 3px;
+}
+@media (max-width: 1100px) {
+  .environment {
+    gap: 16px;
+    padding: 18px;
+  }
+  .destination {
+    align-items: flex-start;
+    width: 100%;
+    flex-direction: row;
+    justify-content: space-between;
+  }
+  .root td,
+  .root th {
+    padding: 12px;
+  }
+  .actions .cancelButton {
+    display: flex;
+    margin-left: 0;
+  }
+  .root th:nth-child(1) {
+    width: 28%;
+  }
+  .root th:nth-child(2) {
+    width: 30%;
+  }
+  .root th:nth-child(3) {
+    width: 21%;
+  }
+  .root th:nth-child(4) {
+    width: 21%;
+  }
+}
+@media (max-width: 640px) {
+  .environment > div:first-child {
+    min-width: 0;
+    width: 100%;
+  }
+  .switcher {
+    width: 100%;
+  }
+  .switcher button {
+    flex: 1;
+  }
+  .environment strong {
+    font-size: 20px;
+  }
+  .heading {
+    align-items: flex-start;
+    margin-top: 23px;
+  }
+  .heading h2 {
+    font-size: 18px;
+  }
+  .heading p {
+    max-width: 220px;
+    line-height: 1.5;
+  }
+  .heading > .editButton {
+    font-size: 0;
+    padding: 8px;
+  }
+  .heading > .editButton svg {
+    width: 17px;
+    height: 17px;
+  }
+  .toolbar > span {
+    display: none;
+  }
+  .toolbar button {
+    font-size: 10px;
+    padding: 7px 8px;
+  }
+  .providerHeading {
+    padding: 14px;
+    align-items: flex-start;
+  }
+  .providerHeading > .badge {
+    max-width: 110px;
+    font-size: 9px;
+  }
+  .root table,
+  .root tbody {
+    display: block;
+  }
+  .root thead {
+    display: none;
+  }
+  .root tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    padding: 14px;
+    gap: 9px 12px;
+    border-bottom: 1px solid #edf1ef;
+  }
+  .root tr:last-child {
+    border-bottom: 0;
+  }
+  .root td {
+    border: 0;
+    padding: 0;
+    min-width: 0;
+  }
+  .root td:nth-child(1) {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .root td:nth-child(2) {
+    grid-column: 1/-1;
+    grid-row: 2;
+  }
+  .root td:nth-child(3) {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: start;
+    text-align: right;
+  }
+  .root td:nth-child(4) {
+    grid-column: 2;
+    grid-row: 2;
+    align-self: end;
+    text-align: right;
+  }
+  .root .editingRow td:nth-child(2) {
+    grid-column: 1/-1;
+  }
+  .root .editingRow td:nth-child(4) {
+    grid-column: 1/-1;
+    grid-row: 3;
+    text-align: left;
+  }
+  .actions .cancelButton {
+    display: inline-flex;
+    margin-left: 4px;
+  }
+  .address {
+    padding: 10px 14px;
+    gap: 5px;
+  }
+  .address > span {
+    width: 100%;
+  }
+  .address code {
+    font-size: 9px;
+  }
+  .dialog {
+    padding: 24px;
+  }
+  .dialog h2 {
+    font-size: 20px;
+  }
+}

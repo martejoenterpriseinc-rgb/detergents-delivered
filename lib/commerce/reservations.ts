@@ -6,7 +6,7 @@ import { persistInventoryTransaction } from "@/lib/services/inventory-ledger";
 import { addLoad, emptyLoad, fitsVehicle, loadForItems } from "@/lib/domain/launch";
 import { buildSnapshot, fingerprint, json } from "./quote";
 import { capacityStates, heldStates, type CheckoutSnapshot } from "./domain";
-import { requireCommerce } from "./config";
+import { readCommerce } from "./runtime";
 
 export async function checkoutLock(tx: Prisma.TransactionClient, customerId: string) {
   // Short database transactions only. Never hold this lock while calling Stripe.
@@ -19,7 +19,7 @@ export async function reserveCheckout(
   id: string,
   acceptedWindow: boolean,
 ) {
-  const config = requireCommerce();
+  const config = await readCommerce();
   return prisma.$transaction(
     async (tx) => {
       const { customer } = await customerIdentity(tx, userId);

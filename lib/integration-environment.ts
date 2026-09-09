@@ -11,6 +11,16 @@ export const providerFields = {
   ],
   google: ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"],
   email: ["EMAIL_PROVIDER", "EMAIL_API_KEY", "EMAIL_FROM", "EMAIL_ALLOWED_RECIPIENTS"],
+  sms: ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM"],
+  quickbooks: ["QUICKBOOKS_CLIENT_ID", "QUICKBOOKS_CLIENT_SECRET", "QUICKBOOKS_REALM_ID"],
+  storage: [
+    "STORAGE_ENDPOINT",
+    "STORAGE_REGION",
+    "STORAGE_ACCESS_KEY_ID",
+    "STORAGE_SECRET_ACCESS_KEY",
+    "STORAGE_PUBLIC_BUCKET",
+    "STORAGE_PRIVATE_BUCKET",
+  ],
 } as const;
 type Provider = keyof typeof providerFields;
 

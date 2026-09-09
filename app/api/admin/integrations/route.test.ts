@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ gate: vi.fn(), status: vi.fn() }));
 vi.mock("@/lib/api-auth", () => ({ requireApiRole: mocks.gate }));
-vi.mock("@/lib/services/integration-status", () => ({ integrationStatus: mocks.status }));
+vi.mock("@/lib/integrations/status", () => ({ getIntegrationStatus: mocks.status }));
 vi.mock("@/lib/account-api", () => ({
   accountJson: (value: unknown) =>
     Response.json(value, { headers: { "Cache-Control": "private, no-store" } }),

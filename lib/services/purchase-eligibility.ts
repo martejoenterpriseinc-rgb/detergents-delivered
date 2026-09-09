@@ -1,4 +1,4 @@
-import { commerceConfiguration } from "@/lib/commerce/config";
+import { runtimeCommerceConfiguration } from "@/lib/commerce/runtime";
 import { prisma } from "@/lib/prisma";
 import { accountIdentity } from "./customer-account";
 import { launchConfig } from "./launch";
@@ -57,12 +57,13 @@ export async function purchaseEligibility(userId: string | null, zip: string) {
       message: "Add a validated delivery address in this zone before purchasing.",
     };
   const launch = await launchConfig();
+  const commerce = await runtimeCommerceConfiguration();
   return {
     ...base,
     eligible: true,
-    canPurchase: commerceConfiguration().enabled && launch.enabled,
+    canPurchase: commerce.enabled && launch.enabled,
     message:
-      commerceConfiguration().enabled && launch.enabled
+      commerce.enabled && launch.enabled
         ? `Your account is eligible. Review delivery availability and final pricing at checkout.`
         : launch.enabled
           ? `Planned launch: ${launch.launchDate}. The first delivery window is ${launch.launchDate}–${launch.firstDeliveryBy}; exact dates will be confirmed after routes are reviewed. Ordering is not open yet.`

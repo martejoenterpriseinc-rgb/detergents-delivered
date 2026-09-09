@@ -14,20 +14,20 @@ export type IntegrationStatus = {
 };
 // Explicit admin DTO: no environment objects, provider keys, account identities,
 // recovery recipients, encrypted payloads or raw provider errors leave this service.
-export function integrationStatus() {
-  const commerce = commerceConfiguration();
-  const google = googleSignInConfigured();
+export function integrationStatus(env: Record<string, string | undefined> = process.env) {
+  const commerce = commerceConfiguration(env);
+  const google = googleSignInConfigured(env);
   const documents = documentReadiness();
   let email = false;
   try {
-    recoveryEmailConfiguration();
+    recoveryEmailConfiguration(env);
     email = true;
   } catch {
     /* configuration only */
   }
   let origin: string | null = null;
   try {
-    origin = recoveryOrigin();
+    origin = recoveryOrigin(env);
   } catch {
     /* invalid origins must not be reflected */
   }
@@ -173,11 +173,9 @@ export function integrationStatus() {
     },
   ];
   return {
-    apiEnvironments: environmentSettings(),
-    environment: ["development", "staging", "production"].includes(
-      process.env.APP_ENV ?? "",
-    )
-      ? process.env.APP_ENV!
+    apiEnvironments: environmentSettings(env),
+    environment: ["development", "staging", "production"].includes(env.APP_ENV ?? "")
+      ? env.APP_ENV!
       : "unknown",
     checkedAt: new Date().toISOString(),
     checkoutEnabled: commerce.enabled,

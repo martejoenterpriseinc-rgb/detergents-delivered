@@ -1,12 +1,12 @@
 import Link from "next/link";
 import { requireRole } from "@/lib/authz";
 import { prisma } from "@/lib/prisma";
-import { commerceConfiguration } from "@/lib/commerce/config";
+import { runtimeCommerceConfiguration } from "@/lib/commerce/runtime";
 import { formatCents } from "@/lib/domain/money";
 import { ReconcileButton } from "@/components/commerce/admin-actions";
 export default async function Page() {
   await requireRole("ADMIN", "SUPER_ADMIN");
-  const config = commerceConfiguration();
+  const config = await runtimeCommerceConfiguration();
   const rows = await prisma.checkoutAttempt.findMany({
     where: { state: { not: "QUOTED" } },
     include: { order: true, customer: true },

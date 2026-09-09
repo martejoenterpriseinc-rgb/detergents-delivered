@@ -15,6 +15,7 @@ import {
 } from "@/lib/domain/customer-access";
 import { consumeAuthenticationLimit } from "@/lib/services/authentication-throttle";
 import { rejectTemporaryPassword } from "@/lib/services/customer-registration";
+import { readManagedEnvironment } from "@/lib/integrations/vault";
 import { providerConfiguration } from "@/lib/integration-environment";
 
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
@@ -41,8 +42,10 @@ function decryptToken(bytes: Uint8Array, context: string) {
   );
 }
 
-export function recoveryEmailConfiguration() {
-  const { values } = providerConfiguration("email");
+export function recoveryEmailConfiguration(
+  env: Record<string, string | undefined> = process.env,
+) {
+  const { values } = providerConfiguration("email", env);
   const apiKey = values.EMAIL_API_KEY;
   const from = values.EMAIL_FROM;
   const match = from.match(/^(.*?)\s*<([^<>]+)>$/);
@@ -52,12 +55,12 @@ export function recoveryEmailConfiguration() {
       "Password recovery is temporarily unavailable. Please try again later.",
       503,
     );
-  const origin = recoveryOrigin();
+  const origin = recoveryOrigin(env);
   encryptionKey();
   const allowed = values.EMAIL_ALLOWED_RECIPIENTS.split(",")
     .map((value) => value.trim().toLowerCase())
     .filter(Boolean);
-  if (process.env.APP_ENV !== "production" && !allowed.length)
+  if (env.APP_ENV !== "production" && !allowed.length)
     throw new AccountError(
       "Password recovery is temporarily unavailable. Please try again later.",
       503,
@@ -70,8 +73,12 @@ export function recoveryEmailConfiguration() {
   };
 }
 
+export async function runtimeRecoveryEmailConfiguration() {
+  return recoveryEmailConfiguration(await readManagedEnvironment(["email"]));
+}
+
 export async function requestPasswordRecovery(input: unknown, now = new Date()) {
-  recoveryEmailConfiguration(); // Same failure for every visitor, including unknown emails.
+  await runtimeRecoveryEmailConfiguration(); // Same failure for every visitor, including unknown emails.
   const email = accountEmailSchema.parse(input);
   if (!(await consumeAuthenticationLimit("recovery", email, now))) return;
   const token = randomBytes(32).toString("hex");
@@ -162,7 +169,7 @@ export async function resetRecoveredPassword(input: unknown, now = new Date()) {
 }
 
 export async function sendRecoveryEmail(email: string, token: string) {
-  const config = recoveryEmailConfiguration();
+  const config = await runtimeRecoveryEmailConfiguration();
   if (
     process.env.APP_ENV !== "production" &&
     !config.allowed.includes(email.toLowerCase())

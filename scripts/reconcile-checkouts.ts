@@ -1,10 +1,10 @@
 import { prisma } from "../lib/prisma";
 import { validateRuntimeConfig } from "../lib/runtime-config";
-import { requireCommerce } from "../lib/commerce/config";
+import { readCommerce } from "../lib/commerce/runtime";
 import { reconcileCheckout } from "../lib/commerce/checkout";
 async function main() {
   validateRuntimeConfig(process.env);
-  requireCommerce(true);
+  await readCommerce(true);
   const attempts = await prisma.checkoutAttempt.findMany({
     where: {
       state: { in: ["OPEN", "PROCESSING", "REVIEW"] },

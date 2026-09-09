@@ -5,7 +5,10 @@ vi.mock("@/lib/commerce/stripe", () => ({
 }));
 vi.mock("@/lib/commerce/checkout", () => ({ reconcileCheckout: vi.fn() }));
 vi.mock("@/lib/prisma", () => ({
-  prisma: { checkoutAttempt: { findUnique: mocks.findUnique } },
+  prisma: {
+    setting: { findMany: async () => [] },
+    checkoutAttempt: { findUnique: mocks.findUnique },
+  },
 }));
 import { POST } from "./route";
 afterEach(() => {

@@ -17,7 +17,7 @@ export default async function SettingsPage() {
       <div>
         <h1 className="text-3xl font-semibold text-teal-950">Settings</h1>
         <p className="mt-2 text-teal-800">
-          Manage your store, delivery preferences and environment connections.
+          Update API credentials, switch environments and manage your business.
         </p>
       </div>
       {canWrite && <EnvironmentSettings />}
@@ -43,7 +43,14 @@ export default async function SettingsPage() {
         </Card>
       )}
       <BusinessSetupCard userId={session.user.id} showCompleted />
-      <DeliverySettingsForm initial={settings} canWrite={canWrite} />
+      <details className="rounded-xl border border-teal-100 bg-white p-5">
+        <summary className="cursor-pointer text-lg font-semibold">
+          Delivery settings · counties & weekly route days
+        </summary>
+        <div className="mt-5">
+          <DeliverySettingsForm initial={settings} canWrite={canWrite} />
+        </div>
+      </details>
     </div>
   );
 }

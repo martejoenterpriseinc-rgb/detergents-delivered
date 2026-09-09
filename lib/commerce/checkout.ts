@@ -6,7 +6,7 @@ import { customerIdentity } from "@/lib/services/customer-account";
 import { rewardBalance } from "@/lib/services/loyalty";
 import { persistInventoryTransaction } from "@/lib/services/inventory-ledger";
 import { checkoutLock, reserveCheckout } from "./reservations";
-import { requireCommerce } from "./config";
+import { readCommerce } from "./runtime";
 import { assertSessionIdentity, createStripeCheckout, stripeClient } from "./stripe";
 import { json, publicCheckout } from "./quote";
 import { type CheckoutSnapshot, heldStates } from "./domain";
@@ -28,7 +28,9 @@ export async function beginCheckout(userId: string, id: string, accepted: boolea
   try {
     const result = a.stripeSessionId
       ? {
-          session: await stripeClient().checkout.sessions.retrieve(a.stripeSessionId),
+          session: await (
+            await stripeClient()
+          ).checkout.sessions.retrieve(a.stripeSessionId),
           customerId: a.stripeCustomerId,
         }
       : await createStripeCheckout(a.id, s, a.sessionExpiresAt!);
@@ -75,7 +77,7 @@ export async function settleVerifiedSession(
   if (!id) return;
   const original = await prisma.checkoutAttempt.findUnique({ where: { id } });
   if (!original) return;
-  const config = requireCommerce(true);
+  const config = await readCommerce(true);
   if (original.stripeAccountId !== config.accountId || original.livemode !== config.live)
     throw new AccountError("Payment environment mismatch.", 409);
   await prisma.$transaction(
@@ -399,7 +401,7 @@ export async function reconcileCheckout(
       "Payment setup is not confirmed. Retry the same checkout or contact support.",
       409,
     );
-  const stripe = stripeClient();
+  const stripe = await stripeClient();
   const session = await stripe.checkout.sessions.retrieve(a.stripeSessionId);
   const lines =
     session.status === "complete"
@@ -446,7 +448,7 @@ export async function cancelCheckout(userId: string, id: string) {
       "Payment creation must be reconciled before cancellation. Contact support.",
       409,
     );
-  const stripe = stripeClient();
+  const stripe = await stripeClient();
   const session = await stripe.checkout.sessions.retrieve(a.stripeSessionId);
   if (session.status === "open")
     await stripe.checkout.sessions.expire(
