@@ -123,6 +123,12 @@ export async function saveVehicleCapacity(userId: string, input: unknown) {
     if (!before?.isActive) throw new AccountError("Vehicle not found.", 404);
     if (before.updatedAt.toISOString() !== data.updatedAt)
       throw new AccountError("Vehicle settings changed. Refresh before saving.", 409);
+    const checkoutHolds = await tx.checkoutAttempt.count({
+      where: {
+        vehicleId: data.id,
+        state: { in: ["PREPARING", "OPEN", "PROCESSING", "REVIEW", "PAID"] },
+      },
+    });
     // Capacity edits cannot rewrite or invalidate existing paid route loads.
     const routes = await tx.route.count({
       where: {
@@ -132,7 +138,7 @@ export async function saveVehicleCapacity(userId: string, input: unknown) {
       },
     });
     if (
-      routes &&
+      (routes || checkoutHolds) &&
       (data.capacityStops < before.capacityStops ||
         data.capacityUnits < before.capacityUnits ||
         data.detergentBucketLimit < before.detergentBucketLimit ||

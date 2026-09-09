@@ -2,7 +2,7 @@
   "name": "detergents-delivered",
   "version": "0.1.0",
   "private": true,
-  "description": "Detergents Delivered \u2014 household product ecommerce, subscriptions, inventory, delivery, and accounting.",
+  "description": "Detergents Delivered — household product ecommerce, subscriptions, inventory, delivery, and accounting.",
   "scripts": {
     "dev": "next dev",
     "build": "prisma generate && next build",
@@ -41,9 +41,10 @@
     "next-auth": "^5.0.0-beta.30",
     "react": "19.2.8",
     "react-dom": "19.2.8",
+    "sharp": "0.35.4",
+    "stripe": "22.6.1",
     "tailwind-merge": "^3.3.1",
-    "zod": "^4.1.11",
-    "sharp": "0.35.4"
+    "zod": "^4.1.11"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0",
@@ -67,5 +68,10 @@
   },
   "engines": {
     "node": "22.x"
+  },
+  "overrides": {
+    "@prisma/config": {
+      "deepmerge-ts": "8.0.0"
+    }
   }
 }

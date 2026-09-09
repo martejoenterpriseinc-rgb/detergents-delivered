@@ -1,9 +1,35 @@
+import { commerceConfiguration } from "@/lib/commerce/config";
+import { ConnectedCheckout } from "@/components/commerce/connected-checkout";
+import { customerIdentity } from "@/lib/services/customer-account";
+import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/authz";
 import { CheckoutForm } from "@/components/storefront/checkout-form";
 import { getPublicDeliveryInfo } from "@/lib/services/delivery-settings";
 
 export default async function CheckoutPage() {
-  await requireAuth();
+  const session = await requireAuth();
+  if (commerceConfiguration().enabled) {
+    const { customer } = await customerIdentity(prisma, session.user.id);
+    const addresses = await prisma.address.findMany({
+      where: {
+        customerId: customer.id,
+        deletedAt: null,
+        validatedAt: { not: null },
+        validationSource: { not: null },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    return (
+      <div className="mx-auto max-w-6xl px-4 py-10">
+        <h1 className="mb-6 text-3xl font-semibold">Checkout</h1>
+        <ConnectedCheckout
+          addresses={addresses
+            .filter((a) => !a.validationSource?.startsWith("CHECKOUT_SNAPSHOT:"))
+            .map((a) => ({ id: a.id, label: `${a.line1}, ${a.city} ${a.postalCode}` }))}
+        />
+      </div>
+    );
+  }
   const delivery = await getPublicDeliveryInfo();
 
   return (

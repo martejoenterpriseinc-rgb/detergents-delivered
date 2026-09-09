@@ -3,9 +3,11 @@ import Link from "next/link";
 import { useRef, useState } from "react";
 export function PurchaseCheck({
   onEligibility,
+  onPurchase,
   initialZip = "",
   onArea,
 }: {
+  onPurchase?: (value: boolean) => void;
   onEligibility?: (value: boolean) => void;
   initialZip?: string;
   onArea?: (value: boolean, zip: string) => void;
@@ -19,6 +21,7 @@ export function PurchaseCheck({
     setBusy(true);
     setMessage("");
     onEligibility?.(false);
+    onPurchase?.(false);
     try {
       const response = await fetch(
         `/api/purchase-eligibility?zip=${encodeURIComponent(zip)}`,
@@ -29,6 +32,7 @@ export function PurchaseCheck({
       if (sequence.current !== attempt) return;
       setMessage(data.message);
       onEligibility?.(data.eligible === true);
+      onPurchase?.(data.canPurchase === true);
       onArea?.(data.areaAvailable === true, zip);
     } catch (e) {
       if (sequence.current === attempt) {
@@ -59,6 +63,7 @@ export function PurchaseCheck({
             setZip(e.target.value);
             setMessage("");
             onEligibility?.(false);
+            onPurchase?.(false);
             onArea?.(false, e.target.value);
           }}
           onKeyDown={(e) => {

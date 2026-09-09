@@ -43,7 +43,11 @@ async function capturedPayment(tx: Tx, orderId: string) {
         (e) =>
           e.verifiedAt &&
           e.externalId &&
-          ["payment_intent.succeeded", "checkout.session.completed"].includes(e.type),
+          [
+            "payment_intent.succeeded",
+            "checkout.session.completed",
+            "checkout.session.reconciled",
+          ].includes(e.type),
       ),
   );
   return trusted.reduce((sum, p) => sum + p.amountCents, 0);

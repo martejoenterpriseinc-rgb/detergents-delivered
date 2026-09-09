@@ -38,6 +38,7 @@ export function AddToCart({
   const { addLine } = useCart();
   const [variantId, setVariantId] = useState(variants[0]?.id ?? "");
   const [quantity, setQuantity] = useState(1);
+  const [canPurchase, setCanPurchase] = useState(false);
   const [eligible, setEligible] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -85,7 +86,7 @@ export function AddToCart({
 
   return (
     <div className="space-y-4">
-      <PurchaseCheck onEligibility={setEligible} />
+      <PurchaseCheck onEligibility={setEligible} onPurchase={setCanPurchase} />
       <fieldset className="space-y-2">
         <legend className="text-sm font-medium text-teal-950">Choose a size</legend>
         <div className="grid gap-2">
@@ -162,16 +163,19 @@ export function AddToCart({
         <Button
           type="button"
           variant="outline"
-          disabled
+          disabled={!canAdd || !canPurchase}
+          onClick={() => {
+            handleAdd(false);
+            router.push("/checkout");
+          }}
           title="Ordering opens after payment, tax and delivery reservations pass testing."
         >
           Buy it now
         </Button>
       </div>
       <p className="text-xs text-teal-700">
-        Buy it now opens after checkout is connected. Account approval, validated address,
-        stock and delivery capacity will be rechecked before payment. No payment or
-        reservation is made here.
+        Account approval, validated address, stock and delivery capacity will be rechecked
+        before payment. No payment or reservation is made here.
       </p>
       {message ? <p className="text-sm font-medium text-teal-800">{message}</p> : null}
     </div>
