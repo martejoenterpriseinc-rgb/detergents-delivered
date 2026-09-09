@@ -3,6 +3,7 @@ import { useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -188,10 +189,9 @@ export function AccountSettingsForm({
           <>
             <div>
               <Label htmlFor="currentPassword">Current password</Label>
-              <Input
+              <PasswordInput
                 id="currentPassword"
                 name="currentPassword"
-                type="password"
                 required
                 autoComplete="current-password"
                 maxLength={200}
@@ -199,10 +199,9 @@ export function AccountSettingsForm({
             </div>
             <div>
               <Label htmlFor="newPassword">New password</Label>
-              <Input
+              <PasswordInput
                 id="newPassword"
                 name="newPassword"
-                type="password"
                 required
                 minLength={12}
                 autoComplete="new-password"
@@ -210,10 +209,9 @@ export function AccountSettingsForm({
             </div>
             <div>
               <Label htmlFor="confirmPassword">Confirm new password</Label>
-              <Input
+              <PasswordInput
                 id="confirmPassword"
                 name="confirmPassword"
-                type="password"
                 required
                 minLength={12}
                 autoComplete="new-password"

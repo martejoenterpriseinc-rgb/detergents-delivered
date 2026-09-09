@@ -2,24 +2,17 @@
 
 import { safeLoginCallback } from "@/lib/domain/login-destination";
 import { AuthError } from "next-auth";
-import bcrypt from "bcryptjs";
 import { redirect } from "next/navigation";
-import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { signIn, signOut } from "@/auth";
 import { CHANGE_CREDENTIALS_PATH } from "@/lib/domain/credentials";
 import { prisma } from "@/lib/prisma";
-
-const registerSchema = z.object({
-  name: z.string().trim().min(1).max(120),
-  email: z
-    .string()
-    .trim()
-    .toLowerCase()
-    .min(3)
-    .max(320)
-    .refine((value) => /^[^\s@]+@[^\s@]+$/.test(value), "Invalid email"),
-  password: z.string().min(8).max(200),
-});
+import {
+  googleSignInConfigured,
+  registerAccountSchema,
+} from "@/lib/domain/customer-access";
+import { registerCustomer } from "@/lib/services/customer-registration";
+import { consumeAuthenticationLimit } from "@/lib/services/authentication-throttle";
 
 export async function signInWithCredentials(formData: FormData) {
   const email = String(formData.get("email") ?? "");
@@ -51,6 +44,7 @@ export async function signInWithCredentials(formData: FormData) {
 }
 
 export async function signInWithGoogle(formData: FormData) {
+  if (!googleSignInConfigured()) redirect("/sign-in?error=unavailable");
   const callbackUrl = safeLoginCallback(formData.get("callbackUrl"));
   await signIn("google", { redirectTo: callbackUrl });
 }
@@ -60,50 +54,25 @@ export async function signOutAction() {
 }
 
 export async function registerWithCredentials(formData: FormData) {
-  const parsed = registerSchema.safeParse({
+  const parsed = registerAccountSchema.safeParse({
     name: formData.get("name"),
     email: formData.get("email"),
     password: formData.get("password"),
+    confirmPassword: formData.get("confirmPassword"),
   });
   if (!parsed.success) {
     redirect("/register?error=invalid");
   }
 
-  const existing = await prisma.user.findFirst({
-    where: { email: parsed.data.email, deletedAt: null },
-  });
-  if (existing) {
-    redirect("/register?error=exists");
+  if (!(await consumeAuthenticationLimit("register", parsed.data.email)))
+    redirect("/register?error=limited");
+  try {
+    await registerCustomer(parsed.data);
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")
+      redirect("/register?error=unavailable");
+    redirect("/register?error=invalid");
   }
-
-  const passwordHash = await bcrypt.hash(parsed.data.password, 12);
-  const user = await prisma.user.create({
-    data: {
-      email: parsed.data.email,
-      name: parsed.data.name,
-      passwordHash,
-    },
-  });
-
-  const customerRole = await prisma.role.upsert({
-    where: { code: "CUSTOMER" },
-    update: {},
-    create: {
-      code: "CUSTOMER",
-      name: "Customer",
-      description: "Shopper account for the storefront and household account area.",
-    },
-  });
-  await prisma.userRole.create({
-    data: { userId: user.id, roleId: customerRole.id },
-  });
-  await prisma.customer.create({
-    data: {
-      userId: user.id,
-      firstName: parsed.data.name.split(" ")[0],
-      lastName: parsed.data.name.split(" ").slice(1).join(" ") || null,
-    },
-  });
 
   try {
     await signIn("credentials", {

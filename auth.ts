@@ -7,6 +7,8 @@ import { authConfig } from "@/auth.config";
 import { prisma } from "@/lib/prisma";
 import type { RoleCode } from "@/lib/domain/authz";
 import { loadSessionAccount } from "@/lib/services/session-account";
+import { createHouseholdUser } from "@/lib/services/customer-registration";
+import { consumeAuthenticationLimit } from "@/lib/services/authentication-throttle";
 
 const credentialsSchema = z.object({
   // Accepts local/dev addresses such as admin@localhost; production users
@@ -18,12 +20,23 @@ const credentialsSchema = z.object({
     .min(3)
     .max(320)
     .refine((value) => /^[^\s@]+@[^\s@]+$/.test(value), "Invalid email"),
-  password: z.string().min(1),
+  password: z.string().min(1).max(200),
 });
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
-  adapter: PrismaAdapter(prisma),
+  adapter: {
+    ...PrismaAdapter(prisma),
+    // Google is the only OAuth provider. The signIn callback requires its
+    // verified-email claim before Auth.js can reach this atomic provisioning path.
+    createUser: (data) =>
+      createHouseholdUser({
+        email: data.email,
+        name: data.name,
+        image: data.image,
+        emailVerified: new Date(),
+      }),
+  },
   session: { strategy: "jwt" },
   providers: [
     ...authConfig.providers,
@@ -38,6 +51,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (!parsed.success) {
           return null;
         }
+        if (!(await consumeAuthenticationLimit("login", parsed.data.email))) return null;
 
         const user = await prisma.user.findFirst({
           where: { email: parsed.data.email, deletedAt: null },
@@ -63,6 +77,28 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   callbacks: {
+    async signIn({ account, profile }) {
+      if (account?.provider !== "google") return true;
+      if (profile?.email_verified !== true || !profile.email) return false;
+      const linked = await prisma.account.findUnique({
+        where: {
+          provider_providerAccountId: {
+            provider: "google",
+            providerAccountId: account.providerAccountId,
+          },
+        },
+        include: { user: { select: { deletedAt: true } } },
+      });
+      if (linked) return !linked.user.deletedAt;
+      const existing = await prisma.user.findUnique({
+        where: { email: profile.email.trim().toLowerCase() },
+        select: { id: true },
+      });
+      // No implicit linking, including for an already signed-in browser. An
+      // existing email/password identity must use its original sign-in method.
+      if (existing) return "/sign-in?error=OAuthAccountNotLinked";
+      return consumeAuthenticationLimit("register", profile.email);
+    },
     async jwt({ token, user }) {
       const userId = user?.id ?? token.sub;
       if (!userId) {

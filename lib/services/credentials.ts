@@ -68,24 +68,42 @@ export async function changeUserCredentials(input: {
   }
 
   const passwordHash = await bcrypt.hash(parsed.password, 12);
-  const updated = await prisma.user.update({
-    where: { id: user.id },
-    data: {
-      email: parsed.email,
-      passwordHash,
-      mustChangeCredentials: false,
-    },
-    select: { id: true, email: true, mustChangeCredentials: true },
-  });
+  return prisma.$transaction(async (tx) => {
+    const changed = await tx.user.updateMany({
+      where: {
+        id: user.id,
+        email: user.email,
+        passwordHash: user.passwordHash,
+        mustChangeCredentials: true,
+        deletedAt: null,
+      },
+      data: {
+        email: parsed.email,
+        passwordHash,
+        mustChangeCredentials: false,
+        sessionVersion: { increment: 1 },
+      },
+    });
+    if (changed.count !== 1)
+      throw new CredentialsError("Credentials changed. Please sign in again.");
+    const updated = await tx.user.findUniqueOrThrow({
+      where: { id: user.id },
+      select: { id: true, email: true, mustChangeCredentials: true },
+    });
+    await tx.passwordRecovery.updateMany({
+      where: { userId: user.id, consumedAt: null },
+      data: { consumedAt: new Date(), tokenCiphertext: null },
+    });
+    await tx.session.deleteMany({ where: { userId: user.id } });
+    await writeAuditLog(tx, {
+      actorUserId: user.id,
+      action: "user.credentials.rotated",
+      entityType: "User",
+      entityId: user.id,
+      beforeJson: { email: user.email, mustChangeCredentials: true },
+      afterJson: { email: updated.email, mustChangeCredentials: false },
+    });
 
-  await writeAuditLog(prisma, {
-    actorUserId: user.id,
-    action: "user.credentials.rotated",
-    entityType: "User",
-    entityId: user.id,
-    beforeJson: { email: user.email, mustChangeCredentials: true },
-    afterJson: { email: updated.email, mustChangeCredentials: false },
+    return updated;
   });
-
-  return updated;
 }

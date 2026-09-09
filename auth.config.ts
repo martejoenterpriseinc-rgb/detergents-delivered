@@ -1,19 +1,19 @@
 import type { NextAuthConfig } from "next-auth";
 import Google from "next-auth/providers/google";
 import type { RoleCode } from "@/lib/domain/authz";
+import { googleSignInConfigured } from "@/lib/domain/customer-access";
 
 const googleId = process.env.GOOGLE_CLIENT_ID ?? process.env.AUTH_GOOGLE_ID;
 const googleSecret = process.env.GOOGLE_CLIENT_SECRET ?? process.env.AUTH_GOOGLE_SECRET;
 
-const googleProvider =
-  googleId && googleSecret
-    ? [
-        Google({
-          clientId: googleId,
-          clientSecret: googleSecret,
-        }),
-      ]
-    : [];
+const googleProvider = googleSignInConfigured()
+  ? [
+      Google({
+        clientId: googleId,
+        clientSecret: googleSecret,
+      }),
+    ]
+  : [];
 
 export const authConfig = {
   pages: {

@@ -28,7 +28,7 @@ export function StorefrontHeader({ signedIn }: { signedIn: boolean }) {
         >
           <BrandLogo size={40} />
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold tracking-tight text-teal-900">
+            <p className="hidden text-xs font-semibold tracking-tight text-teal-900 min-[360px]:block sm:text-sm">
               Detergents Delivered
             </p>
             <p className="hidden text-xs text-teal-700/80 sm:block">
@@ -65,7 +65,7 @@ export function StorefrontHeader({ signedIn }: { signedIn: boolean }) {
           </Link>
           <Link
             href={signedIn ? "/account" : "/sign-in"}
-            className="hidden rounded-full bg-teal-700 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800 sm:inline-flex"
+            className="inline-flex min-h-11 shrink-0 items-center rounded-full bg-teal-700 px-3 py-2 text-sm font-semibold text-white hover:bg-teal-800"
           >
             {signedIn ? "Account" : "Sign in"}
           </Link>
