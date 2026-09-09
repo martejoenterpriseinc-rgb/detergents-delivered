@@ -1,15 +1,24 @@
 import sharp from "sharp";
+import type { Prisma } from "@prisma/client";
 import { createHash } from "node:crypto";
 import { putLocalObject, readLocalObject } from "@/lib/storage";
 import { AccountError } from "@/lib/domain/account";
+import {
+  operationalMediaReady,
+  putOperationalMedia,
+  readOperationalMedia,
+} from "@/lib/operations/media";
 // This existing local adapter is only permitted in isolated development. Render's
 // ephemeral disk must never be presented as durable proof-photo storage.
-export function proofStorageReady() {
+function localProof() {
   return (
     process.env.APP_ENV === "development" && process.env.DD_LOCAL_PROOF_STORAGE === "true"
   );
 }
-export async function saveProof(bytes: Buffer) {
+export function proofStorageReady() {
+  return localProof() || operationalMediaReady("PROOF");
+}
+export async function saveProof(bytes: Buffer, tx?: Prisma.TransactionClient) {
   if (!proofStorageReady())
     throw new AccountError(
       "Private delivery-photo storage must be connected before starting deliveries.",
@@ -33,6 +42,10 @@ export async function saveProof(bytes: Buffer) {
       415,
     );
   }
+  if (!localProof()) {
+    if (!tx) throw new AccountError("An atomic delivery save is required.", 503);
+    return putOperationalMedia(tx, sanitized, "PROOF");
+  }
   const result = await putLocalObject({
     bytes: sanitized,
     filename: "delivery.jpg",
@@ -41,6 +54,8 @@ export async function saveProof(bytes: Buffer) {
   return { ...result, hash: createHash("sha256").update(sanitized).digest("hex") };
 }
 export async function loadProof(key: string) {
-  if (!proofStorageReady()) throw new AccountError("Photo storage is unavailable.", 503);
-  return readLocalObject(key);
+  if (key.startsWith("db/proof/")) return readOperationalMedia(key, "PROOF");
+  if (localProof() && key.startsWith("local/") && !key.startsWith("local/catalog/"))
+    return readLocalObject(key);
+  throw new AccountError("Photo storage is unavailable.", 503);
 }

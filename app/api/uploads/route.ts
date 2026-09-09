@@ -7,6 +7,12 @@ export async function POST(request: Request) {
   const gate = await requireApiRole(["ADMIN", "INVENTORY", "SUPER_ADMIN"]);
   if (gate.error) return gate.error;
 
+  if (process.env.APP_ENV !== "development")
+    return Response.json(
+      { error: "Use the product photo or private document upload workflow." },
+      { status: 409 },
+    );
+
   const form = await request.formData().catch(() => null);
   const file = form?.get("file");
   if (!(file instanceof File)) {

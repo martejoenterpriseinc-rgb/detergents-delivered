@@ -134,6 +134,7 @@ export async function operationsFixture(db: PrismaClient) {
   });
   return {
     marker,
+    product,
     admin,
     driver,
     stranger,

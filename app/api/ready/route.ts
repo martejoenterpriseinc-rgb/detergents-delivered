@@ -31,6 +31,9 @@ export async function GET() {
         await tx.$queryRaw`SELECT "loadKind" FROM "Product" LIMIT 0`;
         await tx.$queryRaw`SELECT "capacityUnits", "detergentBucketLimit", "scentBeadBucketLimit" FROM "Vehicle" LIMIT 0`;
         await tx.$queryRaw`SELECT "version", "startsOn", "endsOn" FROM "Promotion" LIMIT 0`;
+        await tx.$queryRaw`SELECT "recoveryCheckedAt" FROM "CheckoutAttempt" LIMIT 0`;
+        await tx.$queryRaw`SELECT "kind", "environment", "bytes", "keyId", "byteSize", "sha256" FROM "OperationalMedia" LIMIT 0`;
+        await tx.$queryRaw`SELECT "environment", "state", "leaseId", "leasedUntil", "heartbeatAt", "nextRunAt" FROM "OperationalJob" LIMIT 0`;
         if (process.env.APP_ENV === "production") {
           const marker = await tx.setting.findUnique({ where: { key: ENVIRONMENT_KEY } });
           validateDatabaseEnvironment(

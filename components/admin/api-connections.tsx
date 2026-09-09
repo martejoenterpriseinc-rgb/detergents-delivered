@@ -535,6 +535,13 @@ export function ApiConnections({ initial }: { initial: ApiEditorData }) {
             <a href="/admin/website/builder">Open builder ↗</a>
           </p>
           <p>
+            <strong>Product & delivery photos</strong>
+            <span>
+              Durable storage is built in. Delivery proofs are encrypted; the S3 connector
+              above is optional future expansion.
+            </span>
+          </p>
+          <p>
             <strong>Stripe Tax</strong>
             <span>
               Uses the Stripe credentials above. Tax setup requires verification.

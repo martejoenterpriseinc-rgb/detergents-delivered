@@ -1,0 +1,156 @@
+# New isolated production resources only. No seeded accounts or copied sandbox records.
+services:
+  - type: web
+    name: detergents-delivered-production
+    runtime: node
+    plan: 0.5c-512mb
+    region: ohio
+    repo: https://github.com/martejoenterpriseinc-rgb/detergents-delivered
+    branch: feature/production-operations
+    autoDeployTrigger: "off"
+    buildCommand: npm ci && npx prisma generate && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: APP_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: detergents-delivered-production-db
+          property: connectionString
+      - key: DD_DATABASE_HOST
+        fromDatabase:
+          name: detergents-delivered-production-db
+          property: host
+      - key: DD_DATABASE_NAME
+        fromDatabase:
+          name: detergents-delivered-production-db
+          property: database
+      - key: AUTH_URL
+        value: https://detergents-delivered-production.onrender.com
+      - key: NEXTAUTH_URL
+        value: https://detergents-delivered-production.onrender.com
+      - key: AUTH_TRUST_HOST
+        value: "true"
+      - key: DD_SANDBOX_APP_URL
+        value: https://detergents-delivered-staging.onrender.com
+      - key: DD_LIVE_APP_URL
+        value: https://detergents-delivered-production.onrender.com
+      - key: DD_CHECKOUT_ENABLED
+        value: "false"
+      - key: DD_RECOVERY_DELIVERY_ENABLED
+        value: "false"
+      - key: DEMO_MODE
+        value: "false"
+      - key: SEED_DEMO_CATALOG
+        value: "false"
+      - key: SEED_BOOTSTRAP_ADMIN
+        value: "false"
+      - key: DD_ALLOW_DATABASE_TESTS
+        value: "false"
+      - key: DD_SYNTHETIC_PREVIEW
+        value: "false"
+      - key: DD_LOCAL_PROOF_STORAGE
+        value: "false"
+      - key: DD_LOCAL_CATALOG_STORAGE
+        value: "false"
+      - key: DD_OPERATING_MEDIA_ENABLED
+        value: "true"
+      - key: DD_CATALOG_MEDIA_LIMIT_MB
+        value: "250"
+      - key: DD_PROOF_MEDIA_LIMIT_MB
+        value: "500"
+      - key: AUTH_SECRET
+        generateValue: true
+      - key: DD_BUSINESS_DOCUMENT_ACTIVE_KEY
+        sync: false
+      - key: DD_BUSINESS_DOCUMENT_KEYS
+        sync: false
+    preDeployCommand: node --import tsx scripts/provision-production.ts
+    healthCheckPath: /api/ready
+  - type: worker
+    name: detergents-delivered-production-jobs
+    runtime: node
+    plan: 0.5c-512mb
+    region: ohio
+    repo: https://github.com/martejoenterpriseinc-rgb/detergents-delivered
+    branch: feature/production-operations
+    autoDeployTrigger: "off"
+    buildCommand: npm ci && npx prisma generate
+    startCommand: npm run check:runtime && npm run db:preflight && npm run operations:work
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: APP_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: detergents-delivered-production-db
+          property: connectionString
+      - key: DD_DATABASE_HOST
+        fromDatabase:
+          name: detergents-delivered-production-db
+          property: host
+      - key: DD_DATABASE_NAME
+        fromDatabase:
+          name: detergents-delivered-production-db
+          property: database
+      - key: AUTH_URL
+        value: https://detergents-delivered-production.onrender.com
+      - key: NEXTAUTH_URL
+        value: https://detergents-delivered-production.onrender.com
+      - key: AUTH_TRUST_HOST
+        value: "true"
+      - key: DD_SANDBOX_APP_URL
+        value: https://detergents-delivered-staging.onrender.com
+      - key: DD_LIVE_APP_URL
+        value: https://detergents-delivered-production.onrender.com
+      - key: DD_CHECKOUT_ENABLED
+        value: "false"
+      - key: DD_RECOVERY_DELIVERY_ENABLED
+        value: "false"
+      - key: DEMO_MODE
+        value: "false"
+      - key: SEED_DEMO_CATALOG
+        value: "false"
+      - key: SEED_BOOTSTRAP_ADMIN
+        value: "false"
+      - key: DD_ALLOW_DATABASE_TESTS
+        value: "false"
+      - key: DD_SYNTHETIC_PREVIEW
+        value: "false"
+      - key: DD_LOCAL_PROOF_STORAGE
+        value: "false"
+      - key: DD_LOCAL_CATALOG_STORAGE
+        value: "false"
+      - key: DD_OPERATING_MEDIA_ENABLED
+        value: "true"
+      - key: DD_CATALOG_MEDIA_LIMIT_MB
+        value: "250"
+      - key: DD_PROOF_MEDIA_LIMIT_MB
+        value: "500"
+      - key: AUTH_SECRET
+        fromService:
+          type: web
+          name: detergents-delivered-production
+          envVarKey: AUTH_SECRET
+      - key: DD_BUSINESS_DOCUMENT_ACTIVE_KEY
+        fromService:
+          type: web
+          name: detergents-delivered-production
+          envVarKey: DD_BUSINESS_DOCUMENT_ACTIVE_KEY
+      - key: DD_BUSINESS_DOCUMENT_KEYS
+        fromService:
+          type: web
+          name: detergents-delivered-production
+          envVarKey: DD_BUSINESS_DOCUMENT_KEYS
+databases:
+  - name: detergents-delivered-production-db
+    databaseName: detergents_delivered_production
+    user: dd_production
+    plan: 0.1c-256mb
+    diskSizeGB: 5
+    region: ohio
+    postgresMajorVersion: "16"
+    ipAllowList: []

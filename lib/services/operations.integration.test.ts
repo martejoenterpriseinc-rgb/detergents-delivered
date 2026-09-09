@@ -132,10 +132,12 @@ describe("operations native PostgreSQL", () => {
         .jpeg()
         .toBuffer();
       process.env.DD_LOCAL_PROOF_STORAGE = "false";
+      process.env.DD_OPERATING_MEDIA_ENABLED = "false";
       await expect(
         completeWithPhoto(f.driver.id, f.route.id, first.id, key, image),
       ).rejects.toMatchObject({ status: 503 });
       process.env.DD_LOCAL_PROOF_STORAGE = "true";
+      process.env.DD_OPERATING_MEDIA_ENABLED = "true";
       await Promise.all([
         completeWithPhoto(f.driver.id, f.route.id, first.id, key, image),
         completeWithPhoto(f.driver.id, f.route.id, first.id, key, image),

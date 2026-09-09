@@ -14,6 +14,8 @@ describe("private photo adapter guards (storage mocked)", () => {
   it("never enables ephemeral photo storage on staging", () => {
     vi.stubEnv("APP_ENV", "staging");
     vi.stubEnv("DD_LOCAL_PROOF_STORAGE", "true");
+    vi.stubEnv("DD_BUSINESS_DOCUMENT_KEYS", "");
+    vi.stubEnv("DD_BUSINESS_DOCUMENT_ACTIVE_KEY", "");
     expect(proofStorageReady()).toBe(false);
   });
   it("rejects forged image headers before writing", async () => {

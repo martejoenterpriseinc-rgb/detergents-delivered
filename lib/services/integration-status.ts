@@ -98,11 +98,11 @@ export function integrationStatus(env: Record<string, string | undefined> = proc
     {
       id: "operating-media",
       name: "Product and delivery photos",
-      state: "implementation-needed",
+      state: documents.encryption ? "verification-needed" : "configuration-needed",
       summary:
-        "Hosted product photos and private delivery proof still need a durable storage adapter. Local development storage cannot enable them on staging.",
+        "Product photos and encrypted delivery proofs use durable database storage. Private proofs retain their customer and driver access checks.",
       nextSteps: [
-        "Connect separate catalog and private proof storage with server authorization and tested retention.",
+        "Monitor photo capacity in Background jobs & photo storage and retain encryption keys with backups.",
         "Verify upload, access control and persistence through redeploy and recovery.",
       ],
     },
@@ -165,7 +165,7 @@ export function integrationStatus(env: Record<string, string | undefined> = proc
       name: "Scheduled recovery jobs",
       state: "verification-needed",
       summary:
-        "Recovery scripts exist. This page has no verified scheduler heartbeat and cannot confirm that they are running.",
+        "The operational scheduler records leases, heartbeats, retries and attention counts. See Background jobs & photo storage for its current state.",
       nextSteps: [
         "Schedule payment reconciliation and recovery email delivery with environment-specific credentials.",
         "Verify restart recovery, retries, monitoring and operator alerts.",

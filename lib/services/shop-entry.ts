@@ -61,7 +61,7 @@ export async function addShopEntry(userId: string, input: unknown, image?: Buffe
           409,
         );
       let storageKey: string | undefined;
-      if (image?.length) storageKey = (await saveCatalogImage(image)).storageKey;
+      if (image?.length) storageKey = (await saveCatalogImage(image, tx)).storageKey;
       const product = await tx.product.create({
         data: {
           name: data.title,

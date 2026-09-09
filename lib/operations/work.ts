@@ -1,0 +1,121 @@
+import { prisma } from "@/lib/prisma";
+import { readCommerce } from "@/lib/commerce/runtime";
+import { reconcileCheckout } from "@/lib/commerce/checkout";
+import {
+  deliverRecoveryEmails,
+  runtimeRecoveryEmailConfiguration,
+} from "@/lib/services/password-recovery";
+import { type JobResult, type JobName, runJob } from "./jobs";
+
+const blocked = (reason: JobResult["reason"] = "PROVIDER_SETUP_REQUIRED"): JobResult => ({
+  state: "BLOCKED",
+  checked: 0,
+  completed: 0,
+  attention: 0,
+  reason,
+});
+export async function paymentRecoveryWork(
+  ownsLease: () => Promise<boolean>,
+): Promise<JobResult> {
+  try {
+    await readCommerce(true);
+  } catch {
+    return blocked();
+  }
+  const attempts = await prisma.checkoutAttempt.findMany({
+    where: { state: { in: ["PREPARING", "OPEN", "PROCESSING", "REVIEW"] } },
+    orderBy: [
+      { recoveryCheckedAt: { sort: "asc", nulls: "first" } },
+      { createdAt: "asc" },
+      { id: "asc" },
+    ],
+    take: 10,
+    select: { id: true, stripeSessionId: true },
+  });
+  let checked = 0,
+    completed = 0,
+    attention = 0;
+  for (const attempt of attempts) {
+    if (!(await ownsLease())) throw new Error("Worker lease expired.");
+    await prisma.checkoutAttempt.updateMany({
+      where: {
+        id: attempt.id,
+        state: { in: ["PREPARING", "OPEN", "PROCESSING", "REVIEW"] },
+      },
+      data: { recoveryCheckedAt: new Date() },
+    });
+    checked++;
+    if (!attempt.stripeSessionId) {
+      // Provider creation uncertainty never releases reservations or retries a new charge.
+      await prisma.checkoutAttempt.updateMany({
+        where: { id: attempt.id, stripeSessionId: null, state: "PREPARING" },
+        data: { lastError: "PAYMENT_SETUP_UNCONFIRMED" },
+      });
+      attention++;
+      continue;
+    }
+    try {
+      await reconcileCheckout(attempt.id);
+      const latest = await prisma.checkoutAttempt.findUnique({
+        where: { id: attempt.id },
+        select: { state: true },
+      });
+      if (latest?.state === "REVIEW") attention++;
+      else completed++;
+    } catch {
+      attention++;
+    }
+  }
+  return {
+    state: attention ? "ATTENTION" : "HEALTHY",
+    checked,
+    completed,
+    attention,
+    ...(attention ? { reason: "PAYMENT_REVIEW_REQUIRED" as const } : {}),
+  };
+}
+export async function emailRecoveryWork(
+  ownsLease: () => Promise<boolean>,
+): Promise<JobResult> {
+  if (process.env.DD_RECOVERY_DELIVERY_ENABLED !== "true")
+    return blocked("DELIVERY_DISABLED");
+  try {
+    await runtimeRecoveryEmailConfiguration();
+  } catch {
+    return blocked();
+  }
+  if (!(await ownsLease())) throw new Error("Worker lease expired.");
+  const result = await deliverRecoveryEmails(5);
+  const exhausted = await prisma.passwordRecovery.count({
+    where: {
+      deliveredAt: null,
+      consumedAt: null,
+      attempts: { gte: 5 },
+      expiresAt: { gt: new Date() },
+    },
+  });
+  const attention = result.failed + exhausted;
+  return {
+    state: attention ? "ATTENTION" : "HEALTHY",
+    checked: result.accepted + result.failed,
+    completed: result.accepted,
+    attention,
+    ...(attention ? { reason: "EMAIL_RETRY_REQUIRED" as const } : {}),
+  };
+}
+export async function runOperationalCycle() {
+  const [payments, email] = await Promise.all([
+    runOperationalTask("payment-reconciliation"),
+    runOperationalTask("recovery-email"),
+  ]);
+  return {
+    payments,
+    email,
+  };
+}
+export function runOperationalTask(name: JobName) {
+  return runJob(
+    name,
+    name === "payment-reconciliation" ? paymentRecoveryWork : emailRecoveryWork,
+  );
+}

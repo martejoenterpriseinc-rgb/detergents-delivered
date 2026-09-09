@@ -218,7 +218,7 @@ export async function completeWithPhoto(
           409,
         );
       await assertPaidStops(tx, route);
-      const photo = await saveProof(bytes); // Failed writes throw; no status/audit/attempt commits.
+      const photo = await saveProof(bytes, tx); // Bytes, delivery and audit commit together.
       const now = new Date();
       await tx.deliveryAttempt.create({
         data: {
