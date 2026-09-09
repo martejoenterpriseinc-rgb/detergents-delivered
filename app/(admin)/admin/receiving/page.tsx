@@ -1,3 +1,5 @@
+import { hasRole } from "@/lib/domain/authz";
+import PurchaseOrdersPage from "../purchase-orders/page";
 import Link from "next/link";
 import { formatCents } from "@/lib/domain/money";
 import { ReceivingDesk } from "@/components/admin/receiving-desk";
@@ -7,7 +9,9 @@ import { requireRole } from "@/lib/authz";
 export const dynamic = "force-dynamic";
 
 export default async function ReceivingPage() {
-  await requireRole("ADMIN", "INVENTORY", "SUPER_ADMIN");
+  const session = await requireRole("ADMIN", "INVENTORY", "CPA", "SUPER_ADMIN");
+  if (!hasRole(session.user.roles, ["ADMIN", "INVENTORY", "SUPER_ADMIN"]))
+    return <PurchaseOrdersPage />;
   const purchaseOrders = await prisma.purchaseOrder.findMany({
     include: {
       vendor: true,

@@ -11,13 +11,14 @@ export type AdminNavItem = {
 
 const admins: RoleCode[] = ["ADMIN", "SUPER_ADMIN"];
 const stock: RoleCode[] = ["ADMIN", "INVENTORY", "SUPER_ADMIN"];
+const stockReaders: RoleCode[] = [...stock, "CPA"];
 export const ADMIN_NAV: AdminNavItem[] = [
   { href: "/admin", label: "Dashboard", phase: 1 },
   { href: "/admin/orders", label: "Orders", phase: 3 },
   { href: "/admin/deliveries", label: "Deliveries", phase: 4, roles: admins },
   { href: "/admin/customers", label: "Customers", phase: 3, roles: admins },
   { href: "/admin/inventory", label: "Inventory", phase: 2 },
-  { href: "/admin/receiving", label: "Receiving", phase: 2, roles: stock },
+  { href: "/admin/receiving", label: "Receiving", phase: 2, roles: stockReaders },
   { href: "/admin/website", label: "Website", phase: 2, roles: admins },
   { href: "/admin/payments", label: "Payments", phase: 3, roles: admins },
   { href: "/admin/reports", label: "Reports", phase: 8 },
@@ -44,10 +45,10 @@ export const WORKSPACE_ACTIONS: Record<string, AdminNavItem[]> = {
     action("/admin/products/new", "+ Item", stock),
   ],
   "/admin/receiving": [
-    action("/admin/receiving", "Receiving", stock),
-    action("/admin/purchase-orders", "Purchase orders", stock),
+    action("/admin/receiving", "Receiving", stockReaders),
+    action("/admin/purchase-orders", "Purchase orders", stockReaders),
     action("/admin/purchase-orders/new", "+ Purchase order", stock),
-    action("/admin/vendors", "Vendors", stock),
+    action("/admin/vendors", "Vendors", stockReaders),
     action("/admin/vendors/new", "+ Vendor", stock),
   ],
   "/admin/reports": [

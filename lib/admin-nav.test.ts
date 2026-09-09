@@ -38,6 +38,10 @@ describe("consolidated admin workspaces", () => {
     ).toEqual(["Inventory", "Products"]);
     expect(workspaceActions("/admin/customers", ["INVENTORY"])).toEqual([]);
     expect(
+      workspaceActions("/admin/receiving", ["CPA"]).map((item) => item.label),
+    ).toEqual(["Receiving", "Purchase orders", "Vendors"]);
+    expect(visibleAdminNav(["CPA"]).map((item) => item.label)).toContain("Receiving");
+    expect(
       workspaceActions("/admin/inventory", ["SUPER_ADMIN"]).map((item) => item.label),
     ).toContain("+ Item");
   });
