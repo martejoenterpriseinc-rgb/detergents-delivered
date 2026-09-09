@@ -37,7 +37,7 @@ test("owner entry, matched live tiles, referrals and safe checkout rewards previ
     async function user(prefix: string, owner = false) {
       const u = await db.user.create({
         data: {
-          email: `${prefix}-${marker}@example.test`,
+          email: `${prefix.toLowerCase()}-${marker}@example.test`,
           emailVerified: new Date(),
           passwordHash: await bcrypt.hash(password, 4),
           userRoles: {
