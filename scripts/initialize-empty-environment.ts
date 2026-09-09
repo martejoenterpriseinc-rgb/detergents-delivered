@@ -13,7 +13,7 @@ async function main() {
   try {
     await db.$transaction(
       async (tx) => {
-        await tx.$queryRaw`SELECT pg_advisory_xact_lock(613279106)`;
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(613279106)`;
         const name = decodeURIComponent(
           new URL(process.env.DATABASE_URL!).pathname.slice(1),
         );

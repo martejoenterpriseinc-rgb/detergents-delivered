@@ -44,3 +44,5 @@ New native PostgreSQL tests: four cases in `lib/services/launch-offers.integrati
 The additive `20260909210000_launch_offers` migration was generated/reviewed locally, not applied to any database. All existing migration files are preserved unchanged. New database readiness probes cover its columns. Do not deploy the application before native migration replay and browser acceptance pass for the exact revision.
 
 Launch-date follow-up: changed-date/revision persistence and injected failed-save browser assertions added, plus unauthorized/invalid-date database rollback assertions. Execution remains pending native CI; no new database/browser pass is claimed.
+
+CI run 34351876850 applied/replayed all eight migrations, passed lint/typecheck and 138 unit cases, and ran all 38 PostgreSQL cases: 35 passed, three failed on Prisma void-column decoding from advisory-lock SELECTs. Changed those lock calls to executeRaw, matching the existing bootstrap lock pattern. Follow-up CI required. No hosted writes occurred.

@@ -12,7 +12,7 @@ export async function savePromotion(userId: string, input: unknown) {
     if (!user.userRoles.some(({ role }) => ["ADMIN", "SUPER_ADMIN"].includes(role.code)))
       throw new AccountError("Administrator access required.", 403);
     // Transaction-wide lock serializes the unique code across administrators.
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(613279104)`;
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(613279104)`;
     const before = await tx.promotion.findUnique({ where: { code: data.code } });
     if ((before?.version ?? 0) !== data.version)
       throw new AccountError("Promotion changed. Refresh before saving.", 409);

@@ -48,7 +48,7 @@ export async function saveLaunch(userId: string, input: unknown) {
   const data = launchSchema.parse(input);
   return prisma.$transaction(async (tx) => {
     await loyaltyAdmin(tx, userId);
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(613279105)`;
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(613279105)`;
     await tx.setting.upsert({
       where: { key: LAUNCH_KEY },
       update: {},
@@ -170,7 +170,7 @@ export async function saveZoneZips(userId: string, input: unknown) {
     .parse(input);
   return prisma.$transaction(async (tx) => {
     await loyaltyAdmin(tx, userId);
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(613279105)`;
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(613279105)`;
     // Serializes cross-zone ZIP assignment checks; no address ownership inferred from ZIP.
     await tx.$queryRaw`SELECT id FROM "DeliveryZone" ORDER BY id FOR UPDATE`;
     const zones = await tx.deliveryZone.findMany({ where: { isActive: true } });
@@ -233,7 +233,7 @@ export async function createLaunchResource(userId: string, input: unknown) {
     .parse(input);
   return prisma.$transaction(async (tx) => {
     await loyaltyAdmin(tx, userId);
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(613279105)`;
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(613279105)`;
     const id = `launch-${data.requestKey}`;
     const hash = createHash("sha256").update(JSON.stringify(data)).digest("hex");
     const existing = await tx.auditLog.findFirst({
