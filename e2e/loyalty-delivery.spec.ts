@@ -133,9 +133,9 @@ test("owner entry, matched live tiles, referrals and safe checkout rewards previ
     });
     await ownerPage.goto(`/admin/loyalty/referrals?status=PENDING&q=${referral.id}`);
     await ownerPage.getByRole("button", { name: "Review qualifying purchase" }).click();
-    await expect(ownerPage.getByRole("alert")).toContainText(
-      "No qualifying paid first order",
-    );
+    await expect(
+      ownerPage.getByRole("alert").filter({ hasText: "No qualifying paid first order" }),
+    ).toBeVisible();
     // Fixture only: verifiedAt simulates the future trusted provider adapter. This is NOT a real Stripe sandbox charge.
     const qualifying = await db.order.create({
       data: {
