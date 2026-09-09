@@ -49,6 +49,8 @@ afterEach(async () => {
   vi.unstubAllEnvs();
   await prisma.setting.deleteMany({ where: { key: { in: keys } } });
   await prisma.auditLog.deleteMany({ where: { actorUserId: ownerId } });
+  await prisma.checkoutAttempt.deleteMany({ where: { customer: { userId: ownerId } } });
+  await prisma.customer.deleteMany({ where: { userId: ownerId } });
   await prisma.user.delete({ where: { id: ownerId } });
 });
 const input = (value: string, version = 0) => ({
@@ -156,6 +158,41 @@ it("does not let API edits open checkout or change payment credentials while che
     "false",
   );
 });
+it.each(["PREPARING", "OPEN", "PROCESSING", "REVIEW"])(
+  "blocks Stripe edits during %s payment recovery even after checkout is closed",
+  async (state) => {
+    const customer = await prisma.customer.create({
+      data: { userId: ownerId, firstName: "Synthetic", lastName: "API guard" },
+    });
+    await prisma.checkoutAttempt.create({
+      data: {
+        customerId: customer.id,
+        requestKey: randomUUID(),
+        requestHash: "synthetic-api-guard",
+        state,
+        snapshot: {},
+        expiresAt: new Date(Date.now() + 60_000),
+        stripeAccountId: "acct_synthetic",
+        livemode: false,
+      },
+    });
+    await expect(
+      saveApiField(
+        ownerId,
+        {
+          environment: "sandbox",
+          provider: "stripe",
+          field: "STRIPE_SECRET_KEY",
+          value: "sk_test_replacement",
+          version: 0,
+        },
+        env,
+      ),
+    ).rejects.toThrow(/Payment recovery is still pending/);
+    expect(await prisma.setting.count({ where: { key: { in: keys } } })).toBe(0);
+    expect(await prisma.auditLog.count({ where: { actorUserId: ownerId } })).toBe(0);
+  },
+);
 it("saves the other app address only as a navigation destination", async () => {
   await saveApiField(
     ownerId,
