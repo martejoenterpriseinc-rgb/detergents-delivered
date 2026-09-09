@@ -4,6 +4,8 @@ import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import "../tests/integration-guard";
 
+test.use({ actionTimeout: 15000, navigationTimeout: 20000 });
+
 test("customer account, order support, staff KPIs, failed saves, and password revocation", async ({
   page,
   browser,
@@ -178,6 +180,7 @@ test("customer account, order support, staff KPIs, failed saves, and password re
       ).status(),
     ).toBe(403);
     await login(adminPage, admin.email, password);
+    await expect(adminPage).toHaveURL(/\/account$/);
     await adminPage.goto("/admin");
     await adminPage
       .getByRole("link", { name: /Support tickets.*Active tickets/ })
