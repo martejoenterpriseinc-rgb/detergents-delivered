@@ -1,5 +1,8 @@
 import Link from "next/link";
-import { UserRound, LockKeyhole, Bell, Truck, Headphones, Gift } from "lucide-react";
+import { UserRound, LockKeyhole, Bell, Headphones, Gift } from "lucide-react";
+import { DeliveryWidget } from "@/components/account/delivery-widget";
+import { formatCents } from "@/lib/domain/money";
+import type { DeliverySnapshot } from "@/lib/domain/loyalty";
 import { Card } from "@/components/ui/card";
 import { AccountOrders } from "@/components/account/orders";
 import type {
@@ -9,7 +12,11 @@ import type {
 export function AccountDashboard({
   account,
   orders,
+  delivery,
+  rewardCents,
 }: {
+  delivery: DeliverySnapshot;
+  rewardCents: number;
   account: Awaited<ReturnType<typeof getCustomerAccount>>;
   orders: Awaited<ReturnType<typeof getCustomerOrders>>;
 }) {
@@ -31,12 +38,6 @@ export function AccountDashboard({
       label: "Notifications",
       text: "Email and SMS on or off",
       Icon: Bell,
-    },
-    {
-      href: "/account/deliveries",
-      label: "Delivery status",
-      text: "View saved delivery updates",
-      Icon: Truck,
     },
     {
       href: "/account/support",
@@ -76,7 +77,7 @@ export function AccountDashboard({
             key={href}
             className="rounded-3xl focus-visible:outline-2 focus-visible:outline-teal-700"
           >
-            <Card className="flex h-full items-center gap-4 hover:bg-teal-50">
+            <Card className="flex h-32 items-center gap-4 hover:bg-teal-50">
               <Icon className="h-6 w-6 shrink-0 text-teal-700" aria-hidden="true" />
               <div>
                 <h2 className="font-semibold">{label}</h2>
@@ -85,18 +86,23 @@ export function AccountDashboard({
             </Card>
           </Link>
         ))}
+        <DeliveryWidget initial={delivery} />
+        <Link
+          href="/account/loyalty"
+          data-testid="loyalty-widget"
+          className="rounded-3xl focus-visible:outline-2 focus-visible:outline-teal-700"
+        >
+          <Card className="flex h-32 items-center gap-4 hover:bg-teal-50">
+            <Gift className="h-6 w-6 shrink-0 text-teal-700" aria-hidden="true" />
+            <div>
+              <h2 className="font-semibold">Loyalty Club</h2>
+              <p className="text-sm text-teal-700">
+                {formatCents(rewardCents)} rewards available
+              </p>
+            </div>
+          </Card>
+        </Link>
       </div>
-      <Card className="flex items-start gap-4">
-        <Gift className="h-7 w-7 shrink-0 text-teal-700" aria-hidden="true" />
-        <div className="space-y-2">
-          <h2 className="text-xl font-semibold">Loyalty Club</h2>
-          <p className="text-sm font-semibold text-teal-800">Coming soon</p>
-          <p className="text-sm text-teal-700">
-            Membership, points, and rewards will appear here when the program launches. No
-            rewards balance has been issued.
-          </p>
-        </div>
-      </Card>
       <section className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-xl font-semibold">Orders & delivery updates</h2>

@@ -16,6 +16,12 @@ export async function GET() {
         await tx.$queryRaw`SELECT "emailNotifications", "smsNotifications" FROM "Customer" LIMIT 0`;
         await tx.$queryRaw`SELECT "status", "version", "requestHash" FROM "SupportTicket" LIMIT 0`;
         await tx.$queryRaw`SELECT "body", "requestKey" FROM "SupportMessage" LIMIT 0`;
+        await tx.$queryRaw`SELECT "version" FROM "LoyaltyProgram" LIMIT 0`;
+        await tx.$queryRaw`SELECT "entryKey", "amountCents" FROM "RewardEntry" LIMIT 0`;
+        await tx.$queryRaw`SELECT "state", "orderTotalCents" FROM "RewardReservation" LIMIT 0`;
+        await tx.$queryRaw`SELECT "token", "expiresAt" FROM "ReferralLink" LIMIT 0`;
+        await tx.$queryRaw`SELECT "verifiedAt" FROM "PaymentEvent" LIMIT 0`;
+        await tx.$queryRaw`SELECT "status", "friendCreditCents" FROM "Referral" LIMIT 0`;
         await tx.$queryRaw`SELECT "code" FROM "Role" LIMIT 0`;
         await tx.$queryRaw`SELECT "websiteVisible" FROM "ProductVariant" LIMIT 0`;
         await tx.$queryRaw`SELECT "visible" FROM "SiteSection" LIMIT 0`;

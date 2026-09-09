@@ -1,5 +1,6 @@
 "use client";
 
+import { CheckoutRewards } from "@/components/loyalty/checkout-rewards";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -12,18 +13,11 @@ import {
   type DeliveryCheckerConfig,
 } from "@/components/storefront/delivery-checker";
 import { useCart } from "@/components/storefront/cart-provider";
+import { demoOrderTotals } from "@/lib/cart";
 import {
-  createDemoOrderId,
-  DEMO_ORDERS_STORAGE_KEY,
-  demoOrderTotals,
-  type DemoOrder,
-} from "@/lib/cart";
-import {
-  checkDeliveryZip,
   EXAMPLE_DELIVERY_CITY,
   EXAMPLE_DELIVERY_REGION,
   EXAMPLE_DELIVERY_ZIP,
-  zoneNameForZip,
 } from "@/lib/delivery-area";
 import { formatCents } from "@/lib/domain/money";
 
@@ -36,10 +30,9 @@ export function CheckoutForm({
   };
 }) {
   const router = useRouter();
-  const { ready, lines, subtotalCents, clear } = useCart();
+  const { ready, lines, subtotalCents } = useCart();
   const totals = useMemo(() => demoOrderTotals(subtotalCents), [subtotalCents]);
   const [error, setError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
 
   if (!ready) {
     return <p className="text-sm text-teal-800">Loading checkout…</p>;
@@ -62,66 +55,16 @@ export function CheckoutForm({
       className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]"
       onSubmit={(event) => {
         event.preventDefault();
-        setError(null);
-        const data = new FormData(event.currentTarget);
-        const name = String(data.get("name") ?? "").trim();
-        const email = String(data.get("email") ?? "").trim();
-        const phone = String(data.get("phone") ?? "").trim();
-        const line1 = String(data.get("line1") ?? "").trim();
-        const line2 = String(data.get("line2") ?? "").trim();
-        const city = String(data.get("city") ?? "").trim();
-        const region = String(data.get("region") ?? "").trim();
-        const postalCode = String(data.get("postalCode") ?? "").trim();
-        const area = checkDeliveryZip(postalCode, {
-          enabledCountyCodes: delivery.enabledCountyCodes,
-          nextWindowLabel: delivery.nextWindowLabel,
-        });
-        if (!name || !email || !line1 || !city || !region) {
-          setError("Please fill in name, email, and a complete delivery address.");
-          return;
-        }
-        if (!area.ok) {
-          setError(area.message);
-          return;
-        }
-        setSubmitting(true);
-        const order: DemoOrder = {
-          id: createDemoOrderId(),
-          placedAt: new Date().toISOString(),
-          status: "confirmed",
-          email,
-          name,
-          phone,
-          address: {
-            line1,
-            line2: line2 || undefined,
-            city,
-            region,
-            postalCode: area.zip,
-          },
-          zoneName:
-            zoneNameForZip(area.zip, delivery.enabledCountyCodes) ?? area.zoneName,
-          nextWindowLabel: delivery.nextWindowLabel ?? undefined,
-          lines,
-          totals,
-          note: "Demo confirmation only. No payment was collected.",
-        };
-        const existingRaw = localStorage.getItem(DEMO_ORDERS_STORAGE_KEY);
-        const existing = existingRaw ? (JSON.parse(existingRaw) as DemoOrder[]) : [];
-        localStorage.setItem(
-          DEMO_ORDERS_STORAGE_KEY,
-          JSON.stringify([order, ...existing]),
+        setError(
+          "Checkout is not connected yet. No payment, booking or rewards use has occurred.",
         );
-        sessionStorage.setItem("dd-last-demo-order", JSON.stringify(order));
-        clear();
-        router.push(`/checkout/confirmation?order=${encodeURIComponent(order.id)}`);
       }}
     >
       <div className="space-y-4">
         <DemoBanner>
-          <strong>Demo checkout — payments not live.</strong> Place order creates a local
-          confirmation only. We will not charge a card or send this to QuickBooks.{" "}
-          {delivery.weeklySummary} {delivery.serviceAreaSummary}
+          <strong>Checkout preview — purchasing unavailable.</strong> Payment, tax,
+          inventory and delivery booking must be connected before an order can be
+          confirmed. {delivery.weeklySummary} {delivery.serviceAreaSummary}
         </DemoBanner>
         <Card className="space-y-4">
           <h2 className="text-lg font-semibold text-teal-950">Delivery details</h2>
@@ -188,8 +131,8 @@ export function CheckoutForm({
             {error}
           </p>
         ) : null}
-        <Button type="submit" className="w-full sm:w-auto" disabled={submitting}>
-          {submitting ? "Placing demo order…" : "Place order (demo)"}
+        <Button type="submit" className="w-full sm:w-auto" disabled>
+          Checkout not available yet
         </Button>
       </div>
       <Card className="h-fit space-y-3">
@@ -224,6 +167,7 @@ export function CheckoutForm({
           <span>Total</span>
           <span>{formatCents(totals.totalCents)}</span>
         </div>
+        <CheckoutRewards />
       </Card>
     </form>
   );

@@ -165,6 +165,9 @@ model Customer {
   referralsMade Referral[]     @relation("Referrer")
   referredBy    Referral?      @relation("Referee")
   supportTickets SupportTicket[]
+  referralLinks ReferralLink[]
+  rewardEntries RewardEntry[]
+  rewardReservations RewardReservation[]
 
   @@index([phone])
   @@index([deletedAt])
@@ -640,6 +643,9 @@ model Order {
   deliveryAttempts DeliveryAttempt[]
   subscription     Subscription?     @relation("SubscriptionOrigin")
   supportTickets SupportTicket[]
+  rewardReservation RewardReservation?
+  rewardEntries RewardEntry[]
+  qualifyingReferral Referral? @relation("ReferralQualifyingOrder")
 
   @@index([customerId])
   @@index([status])
@@ -696,6 +702,8 @@ model PaymentEvent {
   payload    Json?
   externalId String?  @unique
   createdAt  DateTime @default(now())
+  /// Set only by the future verified provider webhook adapter. Legacy events remain unverified.
+  verifiedAt DateTime?
 
   @@index([paymentId, createdAt])
 }
@@ -938,9 +946,100 @@ model Referral {
   creditCents   Int       @default(0)
   redeemedAt    DateTime?
   createdAt     DateTime  @default(now())
+  linkId        String? @unique
+  link          ReferralLink? @relation(fields: [linkId], references: [id])
+  status        ReferralState @default(PENDING)
+  friendCreditCents Int @default(0)
+  minimumPurchaseCents Int @default(0)
+  programVersion Int @default(0)
+  qualifyingOrderId String? @unique
+  qualifyingOrder Order? @relation("ReferralQualifyingOrder", fields: [qualifyingOrderId], references: [id])
+  reversedAt DateTime?
 
   @@index([referrerId])
   @@index([code])
+}
+
+enum ReferralState {
+  PENDING
+  REWARDED
+  REVERSED
+}
+
+model LoyaltyProgram {
+  id String @id @default("default")
+  enabled Boolean @default(false)
+  referrerRewardCents Int @default(0)
+  friendRewardCents Int @default(0)
+  minimumPurchaseCents Int @default(0)
+  linkExpiryDays Int @default(30)
+  maxReferralsPerCustomer Int @default(25)
+  version Int @default(0)
+  updatedAt DateTime @updatedAt
+}
+
+model ReferralLink {
+  id String @id @default(cuid())
+  customerId String
+  customer Customer @relation(fields: [customerId], references: [id])
+  token String @unique
+  label String
+  requestKey String
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  copiedAt DateTime?
+  sharedAt DateTime?
+  openedAt DateTime?
+  referral Referral?
+  @@unique([customerId, requestKey])
+  @@index([customerId, createdAt])
+}
+
+enum RewardEntryKind {
+  REFERRAL
+  REDEMPTION
+  RESTORE
+  REVERSAL
+}
+
+/// Append-only dollar-credit ledger. Negative balances after reversal block future spending.
+model RewardEntry {
+  id String @id @default(cuid())
+  customerId String
+  customer Customer @relation(fields: [customerId], references: [id])
+  entryKey String @unique
+  kind RewardEntryKind
+  amountCents Int
+  orderId String?
+  order Order? @relation(fields: [orderId], references: [id])
+  sourceId String
+  description String
+  createdAt DateTime @default(now())
+  @@index([customerId, createdAt])
+  @@index([sourceId])
+}
+
+enum RewardReservationState {
+  HELD
+  USED
+  RELEASED
+}
+
+/// Reserved credits are held until a trusted checkout finalizer confirms success or cancellation.
+model RewardReservation {
+  id String @id @default(cuid())
+  orderId String @unique
+  order Order @relation(fields: [orderId], references: [id])
+  customerId String
+  customer Customer @relation(fields: [customerId], references: [id])
+  amountCents Int
+  orderTotalCents Int
+  requestKey String
+  state RewardReservationState @default(HELD)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([customerId, requestKey])
+  @@index([customerId, state])
 }
 
 model ExpenseCategory {

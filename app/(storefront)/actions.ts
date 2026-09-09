@@ -1,5 +1,6 @@
 "use server";
 
+import { safeLoginCallback } from "@/lib/domain/login-destination";
 import { AuthError } from "next-auth";
 import bcrypt from "bcryptjs";
 import { redirect } from "next/navigation";
@@ -23,7 +24,7 @@ const registerSchema = z.object({
 export async function signInWithCredentials(formData: FormData) {
   const email = String(formData.get("email") ?? "");
   const password = String(formData.get("password") ?? "");
-  const callbackUrl = String(formData.get("callbackUrl") ?? "/account");
+  const callbackUrl = safeLoginCallback(formData.get("callbackUrl"));
 
   const pending = await prisma.user.findFirst({
     where: { email: email.trim().toLowerCase(), deletedAt: null },
@@ -50,7 +51,7 @@ export async function signInWithCredentials(formData: FormData) {
 }
 
 export async function signInWithGoogle(formData: FormData) {
-  const callbackUrl = String(formData.get("callbackUrl") ?? "/account");
+  const callbackUrl = safeLoginCallback(formData.get("callbackUrl"));
   await signIn("google", { redirectTo: callbackUrl });
 }
 

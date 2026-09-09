@@ -1,3 +1,4 @@
+import { safeLoginCallback } from "@/lib/domain/login-destination";
 import Link from "next/link";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -11,7 +12,7 @@ export default async function SignInPage({
   searchParams: Promise<{ callbackUrl?: string; error?: string }>;
 }) {
   const params = await searchParams;
-  const callbackUrl = params.callbackUrl ?? "/account";
+  const callbackUrl = safeLoginCallback(params.callbackUrl);
   const googleEnabled = Boolean(
     process.env.GOOGLE_CLIENT_ID || process.env.AUTH_GOOGLE_ID,
   );
@@ -20,8 +21,7 @@ export default async function SignInPage({
     <div className="mx-auto flex w-full max-w-md flex-col px-4 py-16">
       <h1 className="text-3xl font-semibold text-teal-950">Welcome back</h1>
       <p className="mt-2 text-sm text-teal-800">
-        Sign in to see your household account. You can still shop and use demo checkout
-        without signing in.
+        Sign in to your account. Staff open the admin dashboard; customers open their household account.
       </p>
       {params.error ? (
         <p className="mt-4 rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-900">

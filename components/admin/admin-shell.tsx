@@ -44,8 +44,8 @@ export function AdminShell({
           <p className="min-w-0 flex-1 text-sm break-all text-teal-800">
             {email ?? "Signed in"}
           </p>
-          <Link href="/" className="shrink-0 text-sm font-medium text-teal-800">
-            Storefront
+          <Link href="/account" className="shrink-0 text-sm font-medium text-teal-800">
+            View as customer
           </Link>
         </header>
         <div className="p-4 sm:p-8">{children}</div>
