@@ -10,17 +10,16 @@ export default async function AccountSubscriptionsPage() {
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-12">
       <h1 className="text-3xl font-semibold text-teal-950">Subscriptions</h1>
-      <p className="mt-2 text-teal-800">
-        Pause, skip, and swap will live here when Phase 5 lands.
-      </p>
+      <p className="mt-2 text-teal-800">Quarterly orders with payment at purchase.</p>
       <DemoBanner className="mt-6">
         Subscription management is a placeholder. No cadence is billed.
       </DemoBanner>
       <Card className="mt-6 space-y-3">
-        <p className="font-semibold text-teal-950">Fresh Breeze 64 oz · every 4 weeks</p>
+        <p className="font-semibold text-teal-950">Quarterly · every three months</p>
         <p className="text-sm text-teal-800">
-          Preview only. Next order date, skip, and variant swap are not connected to
-          inventory or Stripe.
+          Not available yet. Order now will require immediate payment and the next
+          eligible zone, week, and delivery day, subject to stock and capacity. No delayed
+          payment collection.
         </p>
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="outline" disabled>

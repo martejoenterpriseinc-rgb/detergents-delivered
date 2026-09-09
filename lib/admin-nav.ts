@@ -13,6 +13,13 @@ export const ADMIN_NAV: AdminNavItem[] = [
   { href: "/admin", label: "Dashboard", phase: 1, ready: true },
   { href: "/admin/orders", label: "Orders", phase: 3 },
   { href: "/admin/routes", label: "Routes", phase: 4 },
+  {
+    href: "/admin/support",
+    label: "Customer support",
+    phase: 3,
+    ready: true,
+    roles: ["ADMIN", "SUPER_ADMIN"],
+  },
   { href: "/admin/customers", label: "Customers", phase: 3 },
   { href: "/admin/products", label: "Products", phase: 2, ready: true },
   { href: "/admin/categories", label: "Categories", phase: 2, ready: true },

@@ -40,6 +40,9 @@ model User {
   passwordHash  String?
   /// When true, the user must rotate login email and password before staff routes.
   mustChangeCredentials Boolean @default(false)
+  sessionVersion Int @default(0)
+  passwordChangeFailures Int @default(0)
+  passwordChangeLockedUntil DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   deletedAt     DateTime?
@@ -57,6 +60,7 @@ model User {
   createdOrders        Order[]                @relation("OrderCreatedBy")
   assignedRouteStops   RouteStop[]            @relation("StopDriver")
   updatedSiteSections  SiteSection[]          @relation("SiteSectionUpdatedBy")
+  supportMessages SupportMessage[]
 
   @@index([deletedAt])
 }
@@ -148,6 +152,8 @@ model Customer {
   firstName String?
   lastName  String?
   phone     String?
+  emailNotifications Boolean @default(false)
+  smsNotifications Boolean @default(false)
   notes     String?   @db.Text
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -158,6 +164,7 @@ model Customer {
   subscriptions Subscription[]
   referralsMade Referral[]     @relation("Referrer")
   referredBy    Referral?      @relation("Referee")
+  supportTickets SupportTicket[]
 
   @@index([phone])
   @@index([deletedAt])
@@ -632,6 +639,7 @@ model Order {
   routeStops       RouteStop[]
   deliveryAttempts DeliveryAttempt[]
   subscription     Subscription?     @relation("SubscriptionOrigin")
+  supportTickets SupportTicket[]
 
   @@index([customerId])
   @@index([status])
@@ -1027,4 +1035,51 @@ model SiteSection {
   @@unique([pageId, sectionId])
   @@index([pageId, sortOrder])
   @@index([updatedByUserId])
+}
+
+// Customer support is independent of order/payment state. Resolving a ticket never refunds an order.
+enum SupportStatus {
+  OPEN
+  IN_PROGRESS
+  WAITING_CUSTOMER
+  RESOLVED
+}
+
+model SupportTicket {
+  id String @id @default(cuid())
+  customerId String
+  customer Customer @relation(fields: [customerId], references: [id])
+  orderId String?
+  order Order? @relation(fields: [orderId], references: [id])
+  subject String
+  category String
+  status SupportStatus @default(OPEN)
+  requestKey String
+  requestHash String
+  version Int @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  resolvedAt DateTime?
+  messages SupportMessage[]
+
+  @@unique([customerId, requestKey])
+  @@index([customerId, updatedAt])
+  @@index([status, updatedAt])
+  @@index([orderId])
+}
+
+model SupportMessage {
+  id String @id @default(cuid())
+  ticketId String
+  ticket SupportTicket @relation(fields: [ticketId], references: [id])
+  authorUserId String
+  author User @relation(fields: [authorUserId], references: [id])
+  isStaff Boolean
+  body String @db.Text
+  requestKey String
+  requestHash String
+  createdAt DateTime @default(now())
+
+  @@unique([ticketId, authorUserId, requestKey])
+  @@index([ticketId, createdAt])
 }
