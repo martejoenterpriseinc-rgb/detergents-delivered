@@ -1119,6 +1119,67 @@ model Setting {
   updatedAt DateTime @updatedAt
 }
 
+// DetergentsDelivered business setup. Isolated from commerce and legal provider identity.
+model BusinessSetup {
+  id        String   @id
+  version   Int      @default(0)
+  dataJson  Json
+  updatedAt DateTime @updatedAt
+}
+
+model BusinessSetupRevision {
+  id        String   @id @default(cuid())
+  version   Int      @unique
+  actorId   String
+  action    String
+  dataJson  Json
+  createdAt DateTime @default(now())
+}
+
+model BusinessAccess {
+  userId    String   @id
+  grantedBy String
+  createdAt DateTime @default(now())
+}
+
+model BusinessDocument {
+  id          String   @id @default(cuid())
+  planId      String?
+  stepKey     String?
+  category    String
+  title       String
+  notes       String   @default("")
+  issueDate   String?
+  expiryDate  String?
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  versions    BusinessDocumentVersion[]
+}
+
+model BusinessDocumentVersion {
+  id          String   @id @default(cuid())
+  documentId  String
+  document    BusinessDocument @relation(fields: [documentId], references: [id], onDelete: Restrict)
+  number      Int
+  requestKey  String   @unique
+  requestHash String
+  metadataJson Json
+  uploadedBy  String
+  contentType String
+  size        Int
+  sha256      String
+  keyId       String
+  ciphertext  Bytes?
+  scanStatus  String   @default("QUARANTINED")
+  scannedAt   DateTime?
+  createdAt   DateTime @default(now())
+  deletedAt   DateTime?
+  @@unique([documentId, number])
+  @@index([scanStatus, createdAt])
+}
+
 // ---------------------------------------------------------------------------
 // Website builder (section-based CMS — not a visual drag-drop designer)
 // ---------------------------------------------------------------------------

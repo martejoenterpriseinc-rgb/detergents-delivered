@@ -1,3 +1,4 @@
+import { BusinessSetupCard } from "@/components/business/dashboard-card";
 import { requireAuth } from "@/lib/authz";
 import { supportKpis } from "@/lib/services/support";
 import { customerDirectory, dailyQueue, revenueOrders } from "@/lib/services/operations";
@@ -20,12 +21,15 @@ export default async function AdminDashboardPage() {
     supportKpis(session.user.id),
   ]);
   return (
-    <OperationsOverview
-      date={date}
-      queue={queue}
-      customers={customers}
-      revenue={revenue}
-      support={support}
-    />
+    <>
+      <BusinessSetupCard userId={session.user.id} />
+      <OperationsOverview
+        date={date}
+        queue={queue}
+        customers={customers}
+        revenue={revenue}
+        support={support}
+      />
+    </>
   );
 }

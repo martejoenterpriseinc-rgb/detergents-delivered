@@ -1,0 +1,122 @@
+"use client";
+import { useCallback, createContext, useContext, useEffect, useRef, useState } from "react";
+import type { Source } from "@/lib/business/definitions";
+export const SaveNavigation = createContext<
+  (flush: () => Promise<boolean>) => () => void
+>(() => () => {});
+export const fieldClass =
+  "mt-1 block w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-2 focus:outline-teal-600";
+export const panelClass =
+  "rounded-2xl border border-teal-100 bg-white p-5 shadow-sm sm:p-6";
+export function money(cents: number) {
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(
+    cents / 100,
+  );
+}
+export function SourceLinks({ links }: { links: Source[] }) {
+  const [now] = useState(() => Date.now());
+  return (
+    <ul className="space-y-2">
+      {links.map((s) => (
+        <li key={s.url} className="text-sm">
+          <a
+            className="font-medium text-teal-800 underline"
+            href={s.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            referrerPolicy="no-referrer"
+          >
+            {s.title} ↗
+          </a>
+          <span className="ml-2 text-xs text-slate-500">Checked {s.checkedAt}</span>
+          {(s.status === "REVIEW" || now - Date.parse(s.checkedAt) > 90 * 86400000) && (
+            <p className="mt-1 text-amber-900">
+              Review needed:{" "}
+              {s.fallback ??
+                "Recheck the official instructions before filing; this source review is over 90 days old."}
+            </p>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+}
+// Serialized autosave. Inputs remain disabled only during the request; failed edits stay visible.
+export function useSavedForm<T>(initial: T, save: (value: T) => Promise<void>) {
+  const [value, setValue] = useState(initial);
+  const [feedback, setFeedback] = useState("Saved");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const saved = useRef(JSON.stringify(initial));
+  const current = useRef(value);
+
+  const saveRef = useRef(save);
+  useEffect(() => {
+    saveRef.current = save;
+  }, [save]);
+  const [lastSaved, setLastSaved] = useState(JSON.stringify(initial));
+  const dirty = JSON.stringify(value) !== lastSaved;
+  const saving = useRef(false);
+  const flush = useCallback(async () => {
+    if (saving.current) return false;
+    if (JSON.stringify(current.current) === saved.current) return true;
+    saving.current = true;
+    setBusy(true);
+    setError("");
+    setFeedback("Saving…");
+    const submitted = current.current;
+    try {
+      await saveRef.current(submitted);
+      saved.current = JSON.stringify(submitted);
+      setLastSaved(saved.current);
+      setFeedback("Saved");
+      return true;
+    } catch (e) {
+      setError(
+        e instanceof Error ? e.message : "Save failed. Your edits are still here.",
+      );
+      setFeedback("Not saved");
+      return false;
+    } finally {
+      saving.current = false;
+      setBusy(false);
+    }
+  }, []);
+  const registerFlush = useContext(SaveNavigation);
+  useEffect(() => registerFlush(flush), [registerFlush, flush]);
+  useEffect(() => {
+    if (!dirty || error) return;
+    const timer = setTimeout(() => void flush(), 900);
+    return () => clearTimeout(timer);
+  }, [value, dirty, error, flush]);
+  useEffect(() => {
+    const prevent = (e: BeforeUnloadEvent) => {
+      if (JSON.stringify(current.current) !== saved.current) {
+        e.preventDefault();
+      }
+    };
+    window.addEventListener("beforeunload", prevent);
+    return () => window.removeEventListener("beforeunload", prevent);
+  }, []);
+  function edit(next: T) {
+    current.current = next;
+    setValue(next);
+    setError("");
+    setFeedback("Unsaved changes");
+  }
+  return { value, edit, feedback, busy, error, flush, dirty };
+}
+export function SaveFeedback({ feedback, error }: { feedback: string; error: string }) {
+  return (
+    <div>
+      <p role="status" className="text-sm text-teal-800">
+        {feedback}
+      </p>
+      {error && (
+        <p role="alert" className="mt-2 rounded-lg bg-red-50 p-3 text-sm text-red-800">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
