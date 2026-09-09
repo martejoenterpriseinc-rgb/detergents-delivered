@@ -87,7 +87,34 @@ jobs:
         run: npm run build
 
       - name: Install test browser
-        run: npx playwright install --with-deps chromium
+        # Playwright downloads its pinned Chromium; the runner's optional Google
+        # Chrome apt source is unrelated and can publish inconsistent indexes.
+        # Keep Ubuntu sources and all package signature/hash checks enabled.
+        run: |
+          sudo python3 - <<'PYTHON'
+          from pathlib import Path
+          target = "dl.google.com/linux/chrome-stable/deb"
+          for source in Path("/etc/apt/sources.list.d").glob("*.list"):
+              lines = source.read_text().splitlines()
+              updated = ["# Excluded unused Chrome source in CI: " + line
+                         if target in line and line.lstrip().startswith("deb ") else line
+                         for line in lines]
+              if updated != lines:
+                  source.write_text("\n".join(updated) + "\n")
+                  print("Excluded optional Chrome source:", source.name)
+          for source in Path("/etc/apt/sources.list.d").glob("*.sources"):
+              blocks = source.read_text().split("\n\n")
+              updated = []
+              for block in blocks:
+                  uris = [line.split(":", 1)[1].strip().split() for line in block.splitlines() if line.startswith("URIs:")]
+                  if uris and all(target in uri for group in uris for uri in group):
+                      block = "\n".join(line for line in block.splitlines() if not line.startswith("Enabled:")) + "\nEnabled: no"
+                      print("Excluded optional Chrome source:", source.name)
+                  updated.append(block)
+              if updated != blocks:
+                  source.write_text("\n\n".join(updated))
+          PYTHON
+          npx playwright install --with-deps chromium
 
       - name: Desktop and mobile startup acceptance
         run: npm run test:e2e

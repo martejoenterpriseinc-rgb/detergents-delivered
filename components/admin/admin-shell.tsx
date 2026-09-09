@@ -17,7 +17,7 @@ import {
   BarChart3,
 } from "lucide-react";
 import { BrandLogo } from "@/components/brand/logo";
-import { visibleAdminNav } from "@/lib/admin-nav";
+import { visibleAdminNav, adminWorkspace, workspaceActions } from "@/lib/admin-nav";
 const navIcon = (href: string) =>
   href === "/admin"
     ? LayoutDashboard
@@ -63,12 +63,7 @@ export function AdminShell({
               <Link
                 key={item.href}
                 href={item.href}
-                className={
-                  path === item.href ||
-                  (item.href !== "/admin" && path.startsWith(item.href + "/"))
-                    ? "selected"
-                    : ""
-                }
+                className={adminWorkspace(path) === item.href ? "selected" : ""}
               >
                 <Icon size={18} />
                 <span>{item.label}</span>
@@ -102,7 +97,23 @@ export function AdminShell({
             <ChevronDown size={14} />
           </div>
         </header>
-        <main className="ops-main">{children}</main>
+        <main className="ops-main">
+          {workspaceActions(path, roles).length > 0 && (
+            <nav aria-label="Workspace tools" className="mb-6 flex flex-wrap gap-2">
+              {workspaceActions(path, roles).map((item) => (
+                <Link
+                  key={item.label}
+                  href={item.href}
+                  className="ops-button secondary"
+                  aria-current={path === item.href ? "page" : undefined}
+                >
+                  {item.label}
+                </Link>
+              ))}
+            </nav>
+          )}
+          {children}
+        </main>
       </div>
     </div>
   );

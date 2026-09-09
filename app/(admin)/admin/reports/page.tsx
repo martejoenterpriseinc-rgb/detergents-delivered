@@ -1,11 +1,15 @@
-import { PhasePlaceholder } from "@/components/admin/phase-placeholder";
-
-export default function Page() {
+import Link from "next/link";
+export default function ReportsPage() {
   return (
-    <PhasePlaceholder
-      title="Reports"
-      phase={8}
-      summary="Operational and financial reports wait until transactions exist."
-    />
+    <div className="space-y-6">
+      <h1 className="text-3xl font-semibold text-teal-950">Reports</h1>
+      <p>Open your financial and operational tools above.</p>
+      <Link className="ops-button" href="/admin/reports/revenue">
+        Revenue report
+      </Link>
+      <p className="text-sm text-teal-800">
+        Tools still awaiting integration show their current availability when opened.
+      </p>
+    </div>
   );
 }
