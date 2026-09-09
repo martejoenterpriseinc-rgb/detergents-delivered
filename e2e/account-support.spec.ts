@@ -228,8 +228,8 @@ test("customer account, order support, staff KPIs, failed saves, and password re
     ).toBe(true);
     const filters = [
       adminPage.getByLabel("Lookup", { exact: true }),
-      adminPage.getByLabel("Status", { exact: true }),
-      adminPage.getByLabel("Sort", { exact: true }),
+      adminPage.getByRole("combobox", { name: /^Status/ }),
+      adminPage.getByRole("combobox", { name: /^Sort/ }),
       adminPage.getByRole("button", { name: "Apply filters" }),
     ];
     const boxes = await Promise.all(filters.map((field) => field.boundingBox()));
