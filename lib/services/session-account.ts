@@ -6,6 +6,7 @@ export async function loadSessionAccount(userId: string) {
     where: { id: userId, deletedAt: null },
     select: {
       email: true,
+      sessionVersion: true,
       mustChangeCredentials: true,
       userRoles: { select: { role: { select: { code: true } } } },
     },
@@ -13,6 +14,7 @@ export async function loadSessionAccount(userId: string) {
   if (!user) return null;
   return {
     email: user.email,
+    sessionVersion: user.sessionVersion,
     mustChangeCredentials: user.mustChangeCredentials,
     roles: user.userRoles.map((row) => row.role.code as RoleCode),
   };

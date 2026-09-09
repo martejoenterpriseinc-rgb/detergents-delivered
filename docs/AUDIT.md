@@ -18,3 +18,20 @@ This is an increment to the saved gap-closing audit, not a rebuild or a new full
 | Production launch | NO LAUNCH | Full acceptance, reconciliation/recovery and explicit owner approval required |
 
 Exact evidence: [CI run 34254362585](https://github.com/martejoenterpriseinc-rgb/detergents-delivered/actions/runs/34254362585) — 16 native integrations, 2 browser cases. Final review adds three unit cases (104 local passes); PR #12 retains the complete test gate. The 24 approved Sites regression tests also pass. Hosted connection and full commerce acceptance remain unverified.
+
+## September 9 account/support increment
+
+The historical startup evidence above is superseded operationally by PR #12's hosted record: corrected startup/readiness passed at `0da05682`, and owner-provided screenshots show a shared Customer/Super Admin login. They do not prove checkout or commerce readiness. Preserve the documented initial migration deviation in PR #12.
+
+| Requirement | This increment | Evidence / remaining gate |
+| --- | --- | --- |
+| Edit customer info and created dates | Database-backed name/phone, read-only original dates; identity/roles preserved | account native and browser tests; staging deployment pending |
+| Change password | Current-password verification, throttle, session revocation, atomic audit | native password tests and separate-session browser proof pending CI |
+| Notification on/off | Saved email/SMS preferences, default off | persistence tests; actual providers/verification remain disconnected |
+| Contact us / order problem | Account-owned tickets tied to an owned order or general account question | ownership/idempotency/rollback/native and browser tests pending CI |
+| Staff support dashboard / clickable KPI | Active total plus status drilldowns, lookup/filter/sort/pagination/CSV | staff/foreign-user denial, filtered export and browser assertions pending CI |
+| Delivery status | Real owned order/route read model; labeled planned arrival | customer browser fixtures; driver/private-photo provider workflow remains unaccepted |
+| Loyalty Club display | Honest prelaunch display | no rewards engine or invented membership |
+| Full commerce / production | NO LAUNCH | existing payment, inventory, scheduling, provider, recovery and acceptance gaps retained |
+
+Migration, security review, test scope and staging approval requirements: ACCOUNT_SUPPORT.md.

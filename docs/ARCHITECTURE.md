@@ -88,3 +88,7 @@ Development, staging, and production share the same artifact shape and differ by
 ## Source preservation during Render repair
 
 The Render-linked GitHub history (Prisma 6/Auth.js) remains the repair base. The independent saved Prisma 7/Better Auth history and approved Sites layout are preserved separately; no incompatible migration/auth merge or UI replacement is performed. See RENDER_REPAIR.md.
+
+## Account and support increment
+
+`lib/services/customer-account.ts` owns self-service contact fields, notification preferences, credential changes and customer order reads. `lib/services/support.ts` owns ticket conversations and staff queues; it cannot mutate order/payment/delivery financial state. `lib/account-api.ts` handles authenticated JSON/Origin boundaries. `sessionVersion` is checked during each authoritative Auth.js JWT refresh to revoke old credentials after password replacement. Support identities always derive from User → Customer, not a posted customer ID or ZIP. See ACCOUNT_SUPPORT.md for additive migration and provider limitations.

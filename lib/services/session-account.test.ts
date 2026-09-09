@@ -8,17 +8,20 @@ describe("persistent session permissions (mocked database)", () => {
     findFirst
       .mockResolvedValueOnce({
         email: "test@example.test",
+        sessionVersion: 0,
         mustChangeCredentials: false,
         userRoles: [{ role: { code: "ADMIN" } }],
       })
       .mockResolvedValueOnce({
         email: "test@example.test",
+        sessionVersion: 0,
         mustChangeCredentials: true,
         userRoles: [],
       });
     expect((await loadSessionAccount("synthetic"))?.roles).toEqual(["ADMIN"]);
     expect(await loadSessionAccount("synthetic")).toEqual({
       email: "test@example.test",
+      sessionVersion: 0,
       mustChangeCredentials: true,
       roles: [],
     });

@@ -12,7 +12,10 @@ export async function GET() {
       async (tx) => {
         await tx.$executeRaw`SET TRANSACTION READ ONLY`;
         await tx.$executeRaw`SET LOCAL statement_timeout = '3000ms'`;
-        await tx.$queryRaw`SELECT "mustChangeCredentials" FROM "User" LIMIT 0`;
+        await tx.$queryRaw`SELECT "mustChangeCredentials", "sessionVersion", "passwordChangeFailures", "passwordChangeLockedUntil" FROM "User" LIMIT 0`;
+        await tx.$queryRaw`SELECT "emailNotifications", "smsNotifications" FROM "Customer" LIMIT 0`;
+        await tx.$queryRaw`SELECT "status", "version", "requestHash" FROM "SupportTicket" LIMIT 0`;
+        await tx.$queryRaw`SELECT "body", "requestKey" FROM "SupportMessage" LIMIT 0`;
         await tx.$queryRaw`SELECT "code" FROM "Role" LIMIT 0`;
         await tx.$queryRaw`SELECT "websiteVisible" FROM "ProductVariant" LIMIT 0`;
         await tx.$queryRaw`SELECT "visible" FROM "SiteSection" LIMIT 0`;

@@ -12,3 +12,7 @@ Read RENDER_REPAIR.md and TEST_PLAN.md for scope and remaining gates.
 - No coverage threshold was lowered. The independent Prisma 7 checkpoint's coverage/native tests apply only to that source history and have not become passing tests for this Prisma 6 repair.
 
 Launch verdict: **NO LAUNCH**. Hosted connection/configuration, migration inventory, hosted browser persistence and the commerce acceptance workflow remain blocked/unverified.
+
+## Account/support increment (September 9)
+
+Adds `lib/services/customer-account.integration.test.ts`, `lib/domain/account.test.ts`, `lib/account-api.test.ts`, and `e2e/account-support.spec.ts`. Existing CI runs both old and new regression suites, all migrations/replay, and browser projects. New tests use only synthetic local/CI PostgreSQL records. Browser HTTP 503 injection is explicitly a mock failure; the successful session/database paths use actual Auth.js/PG. No provider sandbox test is inferred. Results pending CI; see ACCOUNT_SUPPORT.md and the incremental PR.

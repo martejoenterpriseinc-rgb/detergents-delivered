@@ -57,6 +57,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           name: user.name,
           image: user.image,
           mustChangeCredentials: user.mustChangeCredentials,
+          sessionVersion: user.sessionVersion,
         };
       },
     }),
@@ -70,6 +71,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
       const gate = await loadSessionAccount(userId);
       if (!gate) return null;
+      const presentedVersion = user
+        ? (user.sessionVersion ?? gate.sessionVersion)
+        : (token.sessionVersion ?? 0);
+      if (presentedVersion !== gate.sessionVersion) return null;
+      token.sessionVersion = gate.sessionVersion;
       token.sub = userId;
       token.roles = gate.roles;
       token.mustChangeCredentials = gate.mustChangeCredentials;

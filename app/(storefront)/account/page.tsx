@@ -1,10 +1,17 @@
 import { requireAuth } from "@/lib/authz";
 import { AccountDashboard } from "@/components/storefront/account-dashboard";
 import { signOutAction } from "../actions";
+import Link from "next/link";
+import { getCustomerAccount, getCustomerOrders } from "@/lib/services/customer-account";
+import { ADMIN_SHELL_ROLES, hasRole } from "@/lib/domain/authz";
 import { Button } from "@/components/ui/button";
 
 export default async function AccountPage() {
   const session = await requireAuth();
+  const [account, orders] = await Promise.all([
+    getCustomerAccount(session.user.id),
+    getCustomerOrders(session.user.id),
+  ]);
 
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-12">
@@ -12,17 +19,24 @@ export default async function AccountPage() {
         <div>
           <h1 className="text-3xl font-semibold text-teal-950">Your household</h1>
           <p className="mt-2 text-teal-800">
-            Orders, delivery notes, and a preview of subscription controls.
+            Your details, orders, deliveries, and support in one place.
           </p>
         </div>
-        <form action={signOutAction}>
-          <Button type="submit" variant="outline">
-            Sign out
-          </Button>
-        </form>
+        <div className="flex flex-wrap items-center gap-4">
+          {hasRole(session.user.roles, ADMIN_SHELL_ROLES) && (
+            <Link href="/admin" className="font-semibold text-teal-800 underline">
+              Admin dashboard
+            </Link>
+          )}
+          <form action={signOutAction}>
+            <Button type="submit" variant="outline">
+              Sign out
+            </Button>
+          </form>
+        </div>
       </div>
       <div className="mt-8">
-        <AccountDashboard email={session.user.email ?? ""} roles={session.user.roles} />
+        <AccountDashboard account={account} orders={orders} />
       </div>
     </div>
   );
