@@ -27,15 +27,8 @@ body {
 }
 
 /* Detergents Delivered operations workspace; storefront styles remain scoped. */
-/* Keep wide admin tables in their own scroll containers on mobile. */
-html:has(.ops-shell),
-body:has(.ops-shell) {
-  max-width: 100%;
-  overflow-x: hidden;
-}
 .ops-shell {
   width: 100%;
-  overflow-x: clip;
   min-height: 100vh;
   background: #f4f7f6;
   color: #153d3a;
@@ -792,6 +785,8 @@ body:has(.ops-shell) {
   font-size: 12px;
 }
 .ops-table-wrap {
+  /* Contain absolutely positioned accessible labels inside the table scroller. */
+  position: relative;
   overflow: auto;
 }
 .ops-table {

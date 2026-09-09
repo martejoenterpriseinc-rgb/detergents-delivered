@@ -27,7 +27,7 @@ test("delivery command center, customer directory and private completion", async
     ).toBeVisible();
     await page.screenshot({
       path: info.outputPath("01-admin-overview.png"),
-      // Capture the actual mobile viewport; full-page map captures disturb Chromium mobile hit testing.
+      // Capture the actual mobile viewport used for interaction assertions.
       fullPage: info.project.name !== "mobile",
     });
     await page.getByRole("link", { name: /New customers.*Signed up/ }).click();
@@ -115,7 +115,7 @@ test("delivery command center, customer directory and private completion", async
     ).toBeVisible();
     await page.screenshot({
       path: info.outputPath("03-daily-delivery-dashboard.png"),
-      // Capture the actual mobile viewport; full-page map captures disturb Chromium mobile hit testing.
+      // Capture the actual mobile viewport used for interaction assertions.
       fullPage: info.project.name !== "mobile",
     });
     await page.getByRole("button", { name: "Start deliveries", exact: true }).click();
