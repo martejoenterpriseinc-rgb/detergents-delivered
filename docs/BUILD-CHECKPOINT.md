@@ -1,5 +1,7 @@
 # Current environment API checkpoint
 
+Latest continuation: both approved branches are published as PRs #21 and #22. The full environment revision `84db387` passed 299 checks and is deployed to staging; the latest builder-only CI has a separately tracked delivery-refresh failure. Read `docs/ENVIRONMENT-RELEASE.md` for the current source, CI corrections, migration compatibility fix and staging release status. The publication blockers below are historical and must not cause another permission request.
+
 Owner request: separate sandbox/live APIs in Settings, correct API selection by environment, red sandbox banner on every page. Earlier owner authorization allows pushing and deployment; the historical authorization block below is not a new instruction to request permission.
 
 - Worktree: `/workspace/detergents-environments`; branch `feature/environment-api-isolation`, based on local builder `c8c4e21`.
