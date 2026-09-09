@@ -58,7 +58,8 @@ test("builder publishes photos and sections with faithful device previews and pr
     await page.getByLabel("Heading", { exact: true }).fill(title);
     await page.getByRole("link", { name: "Dashboard", exact: true }).click();
     await expect(page).toHaveURL(/\/admin\/website\/builder$/);
-    await expect(page.getByRole("alert")).toContainText("unsaved changes");
+    const editorAlert = page.locator(".wb-root").getByRole("alert");
+    await expect(editorAlert).toContainText("unsaved changes");
     await expect(page.getByLabel("Heading", { exact: true })).toHaveValue(title);
     const bytes = await sharp({
       create: {
@@ -140,7 +141,7 @@ test("builder publishes photos and sections with faithful device previews and pr
         : route.continue(),
     );
     await page.getByRole("button", { name: "Save & apply", exact: true }).click();
-    await expect(page.getByRole("alert")).toHaveText("Injected save failure");
+    await expect(editorAlert).toHaveText("Injected save failure");
     await expect(page.getByLabel("Footer description")).toHaveValue(
       "A saved local delivery storefront.",
     );
