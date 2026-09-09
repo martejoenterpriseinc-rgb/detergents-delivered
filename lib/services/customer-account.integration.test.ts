@@ -158,6 +158,16 @@ describe("customer account and support (native PostgreSQL)", () => {
       );
     }
   });
+  it("serializes phone removal against SMS opt-in", async () => {
+    const user = await customer();
+    const results = await Promise.allSettled([
+      updateCustomerProfile(user.id, { firstName: "Synthetic", lastName: "", phone: "" }),
+      updateNotifications(user.id, { emailNotifications: false, smsNotifications: true }),
+    ]);
+    expect(results.filter((r) => r.status === "rejected")).toHaveLength(1);
+    const account = await getCustomerAccount(user.id);
+    expect(account.smsNotifications && !account.phone).toBe(false);
+  });
   it("keeps two customers sharing a ZIP isolated and denies non-support staff", async () => {
     const a = await customer();
     const b = await customer();

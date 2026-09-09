@@ -109,7 +109,9 @@ test("customer account, order support, staff KPIs, failed saves, and password re
     );
     await page.getByLabel("First name", { exact: true }).fill("Must not persist");
     await page.getByRole("button", { name: "Save changes" }).click();
-    await expect(page.getByRole("alert")).toHaveText("Injected save failure");
+    await expect(
+      page.getByRole("alert").filter({ hasText: "Injected save failure" }),
+    ).toHaveText("Injected save failure");
     expect(
       (await db.customer.findUnique({ where: { id: a.customer!.id } }))?.firstName,
     ).toBe("Updated synthetic");

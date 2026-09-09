@@ -54,6 +54,11 @@ export async function updateCustomerProfile(userId: string, input: unknown) {
   const data = profileSchema.parse(input);
   return prisma.$transaction(async (tx) => {
     const { user, customer } = await customerIdentity(tx, userId, true);
+    if (!data.phone && customer.smsNotifications) {
+      throw new AccountError(
+        "Turn off SMS notifications before removing your phone number.",
+      );
+    }
     // Contact changes do not modify address ownership, verification, historical orders, or roles.
     await tx.customer.update({
       where: { id: customer.id },
