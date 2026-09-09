@@ -27,7 +27,8 @@ test("delivery command center, customer directory and private completion", async
     ).toBeVisible();
     await page.screenshot({
       path: info.outputPath("01-admin-overview.png"),
-      fullPage: true,
+      // Capture the actual mobile viewport; full-page map captures disturb Chromium mobile hit testing.
+      fullPage: info.project.name !== "mobile",
     });
     await page.getByRole("link", { name: /New customers.*Signed up/ }).click();
     await expect(page).toHaveURL(/group=new/);
@@ -41,8 +42,10 @@ test("delivery command center, customer directory and private completion", async
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.screenshot({
       path: info.outputPath("02-customers-map-directory.png"),
-      fullPage: true,
+      // Capture the actual mobile viewport; full-page map captures disturb Chromium mobile hit testing.
+      fullPage: info.project.name !== "mobile",
     });
+    expect(await page.evaluate(() => ({ width: innerWidth, scrollWidth: document.documentElement.scrollWidth, scale: visualViewport?.scale }))).toMatchObject({ width: page.viewportSize()!.width, scrollWidth: page.viewportSize()!.width, scale: 1 });
     await page.getByRole("link", { name: /Referred customer count/ }).click();
     await expect(
       page.getByRole("heading", { name: "Referred customers", exact: true }),
@@ -97,7 +100,8 @@ test("delivery command center, customer directory and private completion", async
     ).toBeVisible();
     await page.screenshot({
       path: info.outputPath("03-daily-delivery-dashboard.png"),
-      fullPage: true,
+      // Capture the actual mobile viewport; full-page map captures disturb Chromium mobile hit testing.
+      fullPage: info.project.name !== "mobile",
     });
     await page.getByRole("button", { name: "Start deliveries", exact: true }).click();
     await expect(page.getByRole("status")).toContainText("Deliveries started");

@@ -77,7 +77,7 @@ test("shop, support KPI, configurable launch and promotions persist with custome
     });
     await launchDate.fill("2026-10-21");
     await page.getByRole("button", { name: "Save launch & cadence" }).click();
-    await expect(page.getByRole("alert")).toContainText("Synthetic save failure");
+    await expect(page.getByRole("main").getByRole("alert")).toContainText("Synthetic save failure");
     await expect(page.getByRole("status")).toHaveCount(0);
     await expect(page.getByTestId("saved-launch-date")).toContainText(changedDate);
     const afterFailure = await db.setting.findUniqueOrThrow({ where: { key: LAUNCH_KEY } });
