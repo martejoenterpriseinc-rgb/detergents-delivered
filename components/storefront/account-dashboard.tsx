@@ -19,6 +19,37 @@ const STATUS_LABEL: Record<DemoOrder["status"], string> = {
   delivered: "Delivered",
 };
 
+/** Muted household-brand status: sentence case + small color dot (not pastel pills). */
+const STATUS_DOT: Record<DemoOrder["status"], string> = {
+  confirmed: "bg-teal-500",
+  packing: "bg-sky-500",
+  out_for_delivery: "bg-sky-600",
+  delivered: "bg-green-700",
+};
+
+const STATUS_TEXT: Record<DemoOrder["status"], string> = {
+  confirmed: "text-teal-800",
+  packing: "text-slate-700",
+  out_for_delivery: "text-sky-900",
+  delivered: "text-green-900",
+};
+
+function OrderStatus({ status }: { status: DemoOrder["status"] }) {
+  const label = STATUS_LABEL[status];
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 text-[0.8125rem] font-medium ${STATUS_TEXT[status]}`}
+      aria-label={`Order status: ${label}`}
+    >
+      <span
+        className={`h-2 w-2 shrink-0 rounded-full ${STATUS_DOT[status]}`}
+        aria-hidden
+      />
+      {label}
+    </span>
+  );
+}
+
 function subscribe(onStoreChange: () => void) {
   window.addEventListener("storage", onStoreChange);
   return () => window.removeEventListener("storage", onStoreChange);
@@ -72,13 +103,15 @@ export function AccountDashboard({ email, roles }: { email: string; roles: strin
                 <div>
                   <p className="font-semibold text-teal-950">{order.id}</p>
                   <p className="text-xs text-teal-700">
-                    {new Date(order.placedAt).toLocaleDateString()} ·{" "}
-                    {STATUS_LABEL[order.status]}
+                    {new Date(order.placedAt).toLocaleDateString()}
                   </p>
                 </div>
-                <p className="font-semibold text-teal-950">
-                  {formatCents(order.totals.totalCents)}
-                </p>
+                <div className="flex flex-col items-end gap-1">
+                  <OrderStatus status={order.status} />
+                  <p className="font-semibold text-teal-950">
+                    {formatCents(order.totals.totalCents)}
+                  </p>
+                </div>
               </div>
               <p className="text-sm text-teal-800">
                 {order.lines
