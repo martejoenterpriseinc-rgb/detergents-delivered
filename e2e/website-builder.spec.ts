@@ -167,7 +167,11 @@ test("builder publishes photos and sections with faithful device previews and pr
       )
       .toBeGreaterThan(0);
     await page.getByLabel("Click to edit", { exact: true }).uncheck();
-    await iframe.getByRole("link", { name: "Sign in", exact: true }).click();
+    await expect(iframe.locator(".sf-edit-mode")).toHaveCount(0);
+    await iframe
+      .locator(".sf-header")
+      .getByRole("link", { name: "Sign in", exact: true })
+      .click();
     await expect(iframe.getByRole("heading", { name: title })).toBeVisible();
     await expect
       .poll(() => iframe.locator("body").evaluate(() => window.innerWidth))
