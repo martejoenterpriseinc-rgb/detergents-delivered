@@ -66,31 +66,38 @@ export function useSavedForm<T>(initial: T, save: (value: T) => Promise<void>) {
   }, [save]);
   const [lastSaved, setLastSaved] = useState(JSON.stringify(initial));
   const dirty = JSON.stringify(value) !== lastSaved;
-  const saving = useRef(false);
-  const flush = useCallback(async () => {
-    if (saving.current) return false;
-    if (JSON.stringify(current.current) === saved.current) return true;
-    saving.current = true;
+  const saving = useRef<Promise<boolean> | null>(null);
+  const flush = useCallback(function flush(): Promise<boolean> {
+    // Navigation and workflow actions must join an in-flight autosave instead
+    // of silently losing the click. A failed save still blocks the action.
+    if (saving.current) return saving.current.then((ok) => (ok ? flush() : false));
+    if (JSON.stringify(current.current) === saved.current) return Promise.resolve(true);
     setBusy(true);
     setError("");
     setFeedback("Saving…");
     const submitted = current.current;
-    try {
-      await saveRef.current(submitted);
-      saved.current = JSON.stringify(submitted);
-      setLastSaved(saved.current);
-      setFeedback("Saved");
-      return true;
-    } catch (e) {
-      setError(
-        e instanceof Error ? e.message : "Save failed. Your edits are still here.",
-      );
-      setFeedback("Not saved");
-      return false;
-    } finally {
-      saving.current = false;
-      setBusy(false);
-    }
+    const pending = Promise.resolve()
+      .then(async () => {
+        try {
+          await saveRef.current(submitted);
+          saved.current = JSON.stringify(submitted);
+          setLastSaved(saved.current);
+          setFeedback("Saved");
+          return true;
+        } catch (e) {
+          setError(
+            e instanceof Error ? e.message : "Save failed. Your edits are still here.",
+          );
+          setFeedback("Not saved");
+          return false;
+        }
+      })
+      .finally(() => {
+        saving.current = null;
+        setBusy(false);
+      });
+    saving.current = pending;
+    return pending;
   }, []);
   const registerFlush = useContext(SaveNavigation);
   useEffect(() => registerFlush(flush), [registerFlush, flush]);

@@ -1,56 +1,76 @@
 import { z } from "zod";
 import { requireApiRole } from "@/lib/api-auth";
-import { serviceErrorResponse } from "@/lib/api-errors";
-import { WEBSITE_MANAGER_ROLES, HOME_PAGE_SLUG } from "@/lib/domain/site-content";
-import { getHomePageForBuilder, publishHomeSections } from "@/lib/services/site-content";
-
+import { accountFailure, accountJson } from "@/lib/account-api";
+import { readSiteJson } from "@/lib/site-api";
+import {
+  WEBSITE_MANAGER_ROLES,
+  HOME_PAGE_SLUG,
+  SiteContentError,
+} from "@/lib/domain/site-content";
+import {
+  getHomePageForBuilder,
+  saveHomeDocument,
+  listPublishedHomeRevisions,
+  readPublishedHomeRevision,
+} from "@/lib/services/site-content";
 export const dynamic = "force-dynamic";
-
-const publishSchema = z.object({
-  sections: z.array(z.unknown()),
+const saveSchema = z.object({
+  document: z.unknown(),
+  version: z.number().int().nonnegative(),
+  requestKey: z.string().uuid(),
+  mode: z.enum(["draft", "publish"]),
 });
-
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ slug: string }> },
 ) {
   const gate = await requireApiRole([...WEBSITE_MANAGER_ROLES]);
   if (gate.error) return gate.error;
-
-  const { slug } = await params;
-  if (slug !== HOME_PAGE_SLUG) {
-    return Response.json({ error: "page not found" }, { status: 404 });
-  }
-
+  if ((await params).slug !== HOME_PAGE_SLUG)
+    return accountJson({ error: "Page not found." }, 404);
   try {
-    const data = await getHomePageForBuilder();
-    return Response.json(data);
+    const query = new URL(request.url).searchParams;
+    if (query.has("revision")) {
+      const value = z
+        .string()
+        .regex(/^\d{1,10}$/)
+        .transform(Number)
+        .parse(query.get("revision"));
+      return accountJson(await readPublishedHomeRevision(value));
+    }
+    if (query.get("history") === "1") {
+      const before = query.has("before")
+        ? z
+            .string()
+            .regex(/^\d{1,10}$/)
+            .transform(Number)
+            .parse(query.get("before"))
+        : undefined;
+      return accountJson(await listPublishedHomeRevisions(before));
+    }
+    return accountJson(await getHomePageForBuilder());
   } catch (error) {
-    return serviceErrorResponse(error);
+    return accountFailure(error);
   }
 }
-
 export async function PUT(
   request: Request,
   { params }: { params: Promise<{ slug: string }> },
 ) {
   const gate = await requireApiRole([...WEBSITE_MANAGER_ROLES]);
   if (gate.error) return gate.error;
-
-  const { slug } = await params;
-  if (slug !== HOME_PAGE_SLUG) {
-    return Response.json({ error: "page not found" }, { status: 404 });
-  }
-
-  const body = publishSchema.safeParse(await request.json().catch(() => null));
-  if (!body.success) {
-    return Response.json({ error: "invalid_body", details: body.error.flatten() }, { status: 400 });
-  }
-
+  if ((await params).slug !== HOME_PAGE_SLUG)
+    return accountJson({ error: "Page not found." }, 404);
   try {
-    const result = await publishHomeSections(body.data.sections, gate.session.user.id);
-    return Response.json(result);
+    return accountJson(
+      await saveHomeDocument(
+        saveSchema.parse(await readSiteJson(request)),
+        gate.session.user.id,
+      ),
+    );
   } catch (error) {
-    return serviceErrorResponse(error);
+    return error instanceof SiteContentError
+      ? accountJson({ error: error.message }, 400)
+      : accountFailure(error);
   }
 }

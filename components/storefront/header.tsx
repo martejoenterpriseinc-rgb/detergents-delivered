@@ -1,108 +1,85 @@
 "use client";
-
 import Link from "next/link";
+import Image from "next/image";
+import type { Route } from "next";
 import { useState } from "react";
 import { Menu, ShoppingBag, X } from "lucide-react";
-import { BrandLogo } from "@/components/brand/logo";
 import { useCart } from "@/components/storefront/cart-provider";
-import { cn } from "@/lib/utils";
-
-const NAV = [
-  { href: "/shop", label: "Shop" },
-  { href: "/delivery-area", label: "Delivery area" },
-  { href: "/faq", label: "FAQ" },
-  { href: "/account", label: "Account" },
-] as const;
-
-export function StorefrontHeader({ signedIn }: { signedIn: boolean }) {
+import {
+  DEFAULT_SITE_SETTINGS,
+  siteImageUrl,
+  type SiteSettings,
+} from "@/lib/domain/site-content";
+export function StorefrontHeader({
+  signedIn,
+  settings = DEFAULT_SITE_SETTINGS,
+}: {
+  signedIn: boolean;
+  settings?: SiteSettings;
+}) {
   const { itemCount } = useCart();
   const [open, setOpen] = useState(false);
-
   return (
-    <header className="sticky top-0 z-40 border-b border-teal-100 bg-white/90 backdrop-blur">
-      <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-4 py-3">
+    <header className="sf-header" data-site-area="header">
+      <div className="sf-container sf-header-row">
         <Link
           href="/"
-          className="flex min-w-0 items-center gap-3"
+          className={`sf-brand ${settings.logoId === "builtin:logo" ? "sf-brand-wordmark" : ""}`}
           onClick={() => setOpen(false)}
+          aria-label={`${settings.brandName} home`}
         >
-          <BrandLogo size={40} />
-          <div className="min-w-0">
-            <p className="hidden text-xs font-semibold tracking-tight text-teal-900 min-[360px]:block sm:text-sm">
-              Detergents Delivered
-            </p>
-            <p className="hidden text-xs text-teal-700/80 sm:block">
-              Weekly scheduled delivery · Chicagoland
-            </p>
-          </div>
+          {/* Uploaded logos are served by the same authenticated/public media handler as photos. */}
+
+          {settings.logoId && (
+            <Image
+              unoptimized={!settings.logoId.startsWith("builtin:")}
+              src={siteImageUrl(settings.logoId)}
+              alt=""
+              width={64}
+              height={48}
+            />
+          )}
+          <span>
+            <strong>{settings.brandName}</strong>
+            <small>{settings.tagline}</small>
+          </span>
         </Link>
-        <nav className="hidden items-center gap-5 text-sm font-medium md:flex">
-          {NAV.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className="text-teal-800 hover:text-teal-950"
-            >
-              {item.label}
+        <nav className="sf-desktop-nav" aria-label="Primary">
+          {settings.navigation.map((n, i) => (
+            <Link key={i} href={n.href as Route}>
+              {n.label}
             </Link>
           ))}
         </nav>
-        <div className="flex items-center gap-2">
-          <Link
-            href="/cart"
-            className="relative inline-flex h-11 items-center gap-2 rounded-full border border-teal-200 bg-white px-3 text-sm font-semibold text-teal-900 hover:bg-teal-50"
-          >
-            <ShoppingBag className="h-4 w-4" aria-hidden />
-            <span className="hidden sm:inline">Cart</span>
-            <span
-              className={cn(
-                "inline-flex min-w-5 items-center justify-center rounded-full px-1.5 text-xs",
-                itemCount > 0 ? "bg-teal-700 text-white" : "bg-teal-100 text-teal-800",
-              )}
-            >
-              {itemCount}
-            </span>
-          </Link>
-          <Link
-            href={signedIn ? "/account" : "/sign-in"}
-            className="inline-flex min-h-11 shrink-0 items-center rounded-full bg-teal-700 px-3 py-2 text-sm font-semibold text-white hover:bg-teal-800"
-          >
+        <div className="sf-header-actions">
+          <Link href={signedIn ? "/account" : "/sign-in"} className="sf-login">
             {signedIn ? "Account" : "Sign in"}
+          </Link>
+          <Link href="/cart" className="sf-cart" aria-label={`Cart, ${itemCount} items`}>
+            <ShoppingBag size={18} aria-hidden />
+            <span className="sf-cart-label">Cart</span>
+            <span className="sf-cart-count">{itemCount}</span>
           </Link>
           <button
             type="button"
-            className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-teal-200 text-teal-900 md:hidden"
+            className="sf-menu"
             aria-expanded={open}
             aria-label={open ? "Close menu" : "Open menu"}
-            onClick={() => setOpen((value) => !value)}
+            onClick={() => setOpen(!open)}
           >
-            {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            {open ? <X size={20} /> : <Menu size={20} />}
           </button>
         </div>
       </div>
-      {open ? (
-        <div className="border-t border-teal-100 bg-white px-4 py-3 md:hidden">
-          <nav className="grid gap-2 text-sm font-medium">
-            {NAV.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className="rounded-2xl px-3 py-2 text-teal-900 hover:bg-teal-50"
-                onClick={() => setOpen(false)}
-              >
-                {item.label}
-              </Link>
-            ))}
-            <Link
-              href={signedIn ? "/account" : "/sign-in"}
-              className="rounded-2xl bg-teal-700 px-3 py-2 text-white"
-              onClick={() => setOpen(false)}
-            >
-              {signedIn ? "Your account" : "Sign in"}
+      {open && (
+        <nav className="sf-mobile-nav sf-container" aria-label="Mobile navigation">
+          {settings.navigation.map((n, i) => (
+            <Link key={i} href={n.href as Route} onClick={() => setOpen(false)}>
+              {n.label}
             </Link>
-          </nav>
-        </div>
-      ) : null}
+          ))}
+        </nav>
+      )}
     </header>
   );
 }

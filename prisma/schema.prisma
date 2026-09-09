@@ -1214,7 +1214,7 @@ model BusinessDocumentVersion {
 }
 
 // ---------------------------------------------------------------------------
-// Website builder (section-based CMS — not a visual drag-drop designer)
+// Website builder: versioned content, drafts and durable marketing images
 // ---------------------------------------------------------------------------
 
 model SitePage {
@@ -1225,6 +1225,46 @@ model SitePage {
   updatedAt DateTime @updatedAt
 
   sections SiteSection[]
+  version Int @default(0)
+  settingsJson Json?
+  draftJson Json?
+  revisions SiteRevision[]
+}
+
+model SiteRevision {
+  id String @id @default(cuid())
+  pageId String
+  page SitePage @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  requestKey String @unique
+  requestHash String
+  version Int
+  mode String
+  contentJson Json
+  actorUserId String?
+  createdAt DateTime @default(now())
+  @@unique([pageId, version])
+}
+
+// Only validated, re-encoded marketing images. Never store private documents here.
+model SiteMedia {
+  id String @id @default(cuid())
+  bytes Bytes
+  sha256 String @unique
+  mimeType String
+  size Int
+  width Int
+  height Int
+  uploadedByUserId String
+  createdAt DateTime @default(now())
+}
+
+model PostalLocation {
+  postalCode String @id
+  latitude Float?
+  longitude Float?
+  placeName String?
+  retryAt DateTime
+  updatedAt DateTime @updatedAt
 }
 
 model SiteSection {
@@ -1244,6 +1284,7 @@ model SiteSection {
   visible           Boolean  @default(true)
   sortOrder         Int      @default(0)
   styleVariant      String?
+  presentationJson Json?
   /// Admin notes: what this section should do (not shown on the storefront).
   intentNotes       String?  @db.Text
   updatedByUserId   String?

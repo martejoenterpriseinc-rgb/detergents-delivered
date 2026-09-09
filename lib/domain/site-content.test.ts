@@ -30,17 +30,44 @@ describe("website builder authorization", () => {
 
 describe("default home copy", () => {
   it("uses weekly scheduled delivery, Chicagoland counties, and no name-brand marketing", () => {
-    const blob = DEFAULT_HOME_SECTIONS.map((section) => collectDraftCopy(section)).join("\n");
+    const blob = DEFAULT_HOME_SECTIONS.map((section) => collectDraftCopy(section)).join(
+      "\n",
+    );
     expect(blob.toLowerCase()).toContain("weekly");
     expect(blob.toLowerCase()).toContain("chicagoland");
     expect(findForbiddenDefaultCopy(blob)).toEqual([]);
     expect(DEFAULT_CHICAGOLAND_COUNTIES).toContain("Cook");
     expect(DEFAULT_CHICAGOLAND_COUNTIES).toContain("DuPage");
-    expect(DEFAULT_HOME_SECTIONS.some((section) => section.sectionId === "hero")).toBe(true);
+    expect(DEFAULT_HOME_SECTIONS.some((section) => section.sectionId === "hero")).toBe(
+      true,
+    );
+    expect(
+      DEFAULT_HOME_SECTIONS.some(
+        (section) => section.type === "service-area" && section.visible,
+      ),
+    ).toBe(true);
   });
 });
 
 describe("section validation", () => {
+  it("validates independent desktop and mobile photo crop positions", () => {
+    const section = {
+      ...DEFAULT_HOME_SECTIONS[0],
+      imagePositionX: 20,
+      mobileImagePositionY: 80,
+    };
+    expect(validateSiteSectionDraft(section)).toMatchObject({
+      imagePositionX: 20,
+      imagePositionY: 50,
+      mobileImagePositionX: 50,
+      mobileImagePositionY: 80,
+    });
+    for (const value of [-1, 101, NaN, Infinity, "50", 10.5]) {
+      expect(() =>
+        validateSiteSectionDraft({ ...section, mobileImagePositionY: value }),
+      ).toThrow(/settings/);
+    }
+  });
   it("accepts a well-formed section and rejects unsafe hrefs or unknown types", () => {
     const draft = validateSiteSectionDraft({
       sectionId: "hero",
@@ -53,7 +80,11 @@ describe("section validation", () => {
     });
     expect(draft.ctaHref).toBe("/shop");
     expect(() =>
-      validateSiteSectionDraft({ sectionId: "hero", type: "hero", ctaHref: "javascript:alert(1)" }),
+      validateSiteSectionDraft({
+        sectionId: "hero",
+        type: "hero",
+        ctaHref: "javascript:alert(1)",
+      }),
     ).toThrow(/ctaHref/);
     expect(() => validateSiteSectionDraft({ sectionId: "hero", type: "popup" })).toThrow(
       /unknown type/,
@@ -81,5 +112,22 @@ describe("county list", () => {
   it("trims, dedupes, and parses comma or newline lists", () => {
     expect(normalizeCountyList([" Cook ", "cook", "Will", ""])).toEqual(["Cook", "Will"]);
     expect(parseCountyList("Cook, DuPage\nKane")).toEqual(["Cook", "DuPage", "Kane"]);
+  });
+});
+
+describe("builder links and private notes", () => {
+  it("rejects backslash redirects, controls, credentials and reserved section IDs", () => {
+    for (const ctaHref of [
+      "/\\\\attacker.example",
+      "//attacker.example",
+      "https://user:secret@example.com",
+      "https://exa\nmple.com",
+      "data:text/html,hello",
+    ])
+      expect(() =>
+        validateSiteSectionDraft({ sectionId: "safe", type: "cta", ctaHref }),
+      ).toThrow();
+    for (const sectionId of ["header", "footer", "announcement", "theme", "x[y]"])
+      expect(() => validateSiteSectionDraft({ sectionId, type: "cta" })).toThrow();
   });
 });

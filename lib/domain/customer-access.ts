@@ -30,13 +30,20 @@ export const resetPasswordSchema = z
 export const RECOVERY_RESPONSE =
   "If an eligible account uses that email, you’ll receive a password reset link. Check your inbox and spam folder. If you use Google, choose Continue with Google instead.";
 
+export function googleSignInCredentials(
+  env: Record<string, string | undefined> = process.env,
+) {
+  return {
+    clientId: env.GOOGLE_CLIENT_ID?.trim() || env.AUTH_GOOGLE_ID?.trim() || "",
+    clientSecret:
+      env.GOOGLE_CLIENT_SECRET?.trim() || env.AUTH_GOOGLE_SECRET?.trim() || "",
+  };
+}
 export function googleSignInConfigured(
   env: Record<string, string | undefined> = process.env,
 ) {
-  return Boolean(
-    (env.GOOGLE_CLIENT_ID || env.AUTH_GOOGLE_ID)?.trim() &&
-    (env.GOOGLE_CLIENT_SECRET || env.AUTH_GOOGLE_SECRET)?.trim(),
-  );
+  const credentials = googleSignInCredentials(env);
+  return Boolean(credentials.clientId && credentials.clientSecret);
 }
 
 // Never derive recovery links from a request Host or a supplied callback URL.

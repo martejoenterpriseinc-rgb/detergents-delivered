@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { hasRole, type RoleCode } from "./authz";
 
 export const WEBSITE_MANAGER_ROLES: RoleCode[] = ["ADMIN", "SUPER_ADMIN"];
@@ -12,6 +13,9 @@ export const SITE_SECTION_TYPES = [
   "features",
   "service-area",
   "cta",
+  "products",
+  "steps",
+  "image",
 ] as const;
 
 export type SiteSectionType = (typeof SITE_SECTION_TYPES)[number];
@@ -44,6 +48,15 @@ export type SiteSectionDraft = {
   sortOrder: number;
   styleVariant: SiteStyleVariant;
   intentNotes: string;
+  imageId?: string;
+  imageAlt?: string;
+  imageFit?: "cover" | "contain";
+  imagePositionX?: number;
+  imagePositionY?: number;
+  mobileImagePositionX?: number;
+  mobileImagePositionY?: number;
+  alignment?: "left" | "center";
+  spacing?: "compact" | "normal" | "roomy";
 };
 
 const SAME_DAY_PATTERN =
@@ -110,8 +123,20 @@ export function findForbiddenDefaultCopy(text: string): string[] {
   return hits;
 }
 
-export function collectDraftCopy(draft: Pick<SiteSectionDraft, "title" | "body" | "badgeText" | "ctaLabel" | "secondaryCtaLabel" | "intentNotes">) {
-  return [draft.title, draft.body, draft.badgeText, draft.ctaLabel, draft.secondaryCtaLabel, draft.intentNotes]
+export function collectDraftCopy(
+  draft: Pick<
+    SiteSectionDraft,
+    "title" | "body" | "badgeText" | "ctaLabel" | "secondaryCtaLabel" | "intentNotes"
+  >,
+) {
+  return [
+    draft.title,
+    draft.body,
+    draft.badgeText,
+    draft.ctaLabel,
+    draft.secondaryCtaLabel,
+    draft.intentNotes,
+  ]
     .filter(Boolean)
     .join("\n");
 }
@@ -139,14 +164,20 @@ function asInt(value: unknown, fallback: number): number {
 export function assertSafeHref(href: string, field: string): void {
   const trimmed = href.trim();
   if (!trimmed) return;
-  if (trimmed.startsWith("/")) {
-    if (trimmed.startsWith("//")) {
-      throw new SiteContentError(`${field} must be a site path or http(s) URL`);
-    }
-    return;
+  const invalid = () => {
+    throw new SiteContentError(`${field} must be a site path or http(s) URL`);
+  };
+  if (/[\\\u0000-\u001f\u007f]/.test(trimmed)) invalid();
+  try {
+    const url = new URL(trimmed, "https://storefront.invalid");
+    if (!["http:", "https:"].includes(url.protocol) || url.username || url.password)
+      invalid();
+    if (trimmed.startsWith("/") && !trimmed.startsWith("//")) return;
+    if (/^https?:\/\//i.test(trimmed)) return;
+  } catch {
+    invalid();
   }
-  if (/^https?:\/\//i.test(trimmed)) return;
-  throw new SiteContentError(`${field} must be a site path or http(s) URL`);
+  invalid();
 }
 
 export function validateSiteSectionDraft(input: unknown, index = 0): SiteSectionDraft {
@@ -155,7 +186,10 @@ export function validateSiteSectionDraft(input: unknown, index = 0): SiteSection
   }
   const raw = input as Record<string, unknown>;
   const sectionId = asOptionalString(raw.sectionId).trim();
-  if (!sectionId || sectionId.length > 80) {
+  if (
+    !/^[a-zA-Z0-9_-]{1,80}$/.test(sectionId) ||
+    ["header", "footer", "announcement", "theme"].includes(sectionId)
+  ) {
     throw new SiteContentError(`section ${index} needs a sectionId`);
   }
   const typeRaw = asOptionalString(raw.type).trim();
@@ -181,6 +215,12 @@ export function validateSiteSectionDraft(input: unknown, index = 0): SiteSection
     styleVariant: styleRaw,
     intentNotes: asOptionalString(raw.intentNotes).slice(0, 2000),
   };
+  const presentation = presentationSchema.safeParse(raw);
+  if (!presentation.success)
+    throw new SiteContentError(
+      `section ${sectionId} has invalid image or layout settings`,
+    );
+  Object.assign(draft, presentation.data);
   assertSafeHref(draft.ctaHref, `${draft.sectionId}.ctaHref`);
   assertSafeHref(draft.secondaryCtaHref, `${draft.sectionId}.secondaryCtaHref`);
   return draft;
@@ -214,9 +254,11 @@ export const DEFAULT_HOME_SECTIONS: SiteSectionDraft[] = [
   {
     sectionId: "hero",
     type: "hero",
-    badgeText: "Weekly scheduled delivery",
-    title: "Detergent and everyday clean — delivered to your door.",
-    body: "Detergents Delivered is a neighborhood store for liquids, powders, pods, dish, paper, and cleaning consumables. Skip the bulk-aisle haul. We pack the heavy stuff and drop it on your porch on a weekly schedule across Chicagoland.",
+    badgeText: "Local delivery. Everyday value.",
+    title: "Laundry essentials, without the extra trip.",
+    imageId: "builtin:hero",
+    imageAlt: "Laundry essentials and folded towels prepared for home delivery",
+    body: "Stock up on detergent and household basics at straightforward prices, delivered on a dependable weekly route across Chicagoland.",
     ctaLabel: "Shop household staples",
     ctaHref: "/shop",
     secondaryCtaLabel: "Check delivery area",
@@ -277,8 +319,8 @@ export const DEFAULT_HOME_SECTIONS: SiteSectionDraft[] = [
     sectionId: "value-rhythm",
     type: "features",
     badgeText: "",
-    title: "Order once or set a rhythm",
-    body: "Order when the cabinet is running low. Subscriptions will refill the same SKUs on your cadence.",
+    title: "Dependable local routes",
+    body: "Order when the cabinet is running low. Check your ZIP for available delivery windows.",
     ctaLabel: "",
     ctaHref: "",
     secondaryCtaLabel: "",
@@ -290,10 +332,10 @@ export const DEFAULT_HOME_SECTIONS: SiteSectionDraft[] = [
   },
   {
     sectionId: "featured",
-    type: "cta",
+    type: "products",
     badgeText: "",
     title: "Featured this week",
-    body: "Live products from the same inventory database we receive against.",
+    body: "Everyday essentials for your next restock.",
     ctaLabel: "Shop all",
     ctaHref: "/shop",
     secondaryCtaLabel: "",
@@ -305,10 +347,10 @@ export const DEFAULT_HOME_SECTIONS: SiteSectionDraft[] = [
   },
   {
     sectionId: "how-it-works",
-    type: "features",
+    type: "steps",
     badgeText: "How it works",
     title: "How it works",
-    body: "Check your ZIP\nFill the cart\nWe bring it by",
+    body: "Check your ZIP | See whether your neighborhood is on an active route.\nChoose your essentials | Review your products and delivery cost before checkout.\nWe bring it by | Follow your order in your account.",
     ctaLabel: "",
     ctaHref: "",
     secondaryCtaLabel: "",
@@ -320,3 +362,125 @@ export const DEFAULT_HOME_SECTIONS: SiteSectionDraft[] = [
       "Step titles. Storefront fills step bodies from delivery settings (counties + weekly window).",
   },
 ];
+
+export const presentationSchema = z.object({
+  imageId: z
+    .string()
+    .max(100)
+    .regex(/^(?:[a-zA-Z0-9_-]+|builtin:(?:hero|logo))?$/)
+    .default(""),
+  imageAlt: z.string().max(300).default(""),
+  imageFit: z.enum(["cover", "contain"]).default("cover"),
+  imagePositionX: z.number().int().min(0).max(100).default(50),
+  imagePositionY: z.number().int().min(0).max(100).default(50),
+  mobileImagePositionX: z.number().int().min(0).max(100).default(50),
+  mobileImagePositionY: z.number().int().min(0).max(100).default(50),
+  alignment: z.enum(["left", "center"]).default("left"),
+  spacing: z.enum(["compact", "normal", "roomy"]).default("normal"),
+});
+const linkSchema = z
+  .object({
+    label: z.string().trim().min(1).max(60),
+    href: z.string().trim().min(1).max(300),
+  })
+  .superRefine((link, ctx) => {
+    try {
+      assertSafeHref(link.href, "Link");
+    } catch {
+      ctx.addIssue({ code: "custom", message: "Use a site path or http(s) URL." });
+    }
+  });
+export const siteSettingsSchema = z.object({
+  brandName: z.string().trim().min(1).max(80).default("Detergents Delivered"),
+  tagline: z.string().max(160).default("Weekly scheduled delivery · Chicagoland"),
+  logoId: presentationSchema.shape.imageId.default("builtin:logo"),
+  navigation: z
+    .array(linkSchema)
+    .max(6)
+    .default([
+      { label: "Shop", href: "/shop" },
+      { label: "Delivery", href: "/delivery-area" },
+      { label: "How it works", href: "/#how-it-works" },
+    ]),
+  footerText: z
+    .string()
+    .max(2000)
+    .default(
+      "Household essentials, packed locally and brought to your door. Check your ZIP for available routes.",
+    ),
+  footerLinks: z
+    .array(linkSchema)
+    .max(12)
+    .default([
+      { label: "Shop", href: "/shop" },
+      { label: "Delivery area", href: "/delivery-area" },
+      { label: "FAQ", href: "/faq" },
+      { label: "Contact", href: "/contact" },
+      { label: "Referrals", href: "/referrals" },
+    ]),
+  copyrightText: z
+    .string()
+    .max(200)
+    .default("Detergents Delivered. All rights reserved."),
+  announcement: z.string().max(300).default(""),
+  announcementHref: z
+    .string()
+    .max(300)
+    .default("")
+    .superRefine((href, ctx) => {
+      try {
+        assertSafeHref(href, "Announcement");
+      } catch {
+        ctx.addIssue({ code: "custom", message: "Use a site path or http(s) URL." });
+      }
+    }),
+  theme: z.enum(["ocean", "teal", "navy"]).default("ocean"),
+});
+export type SiteSettings = z.infer<typeof siteSettingsSchema>;
+export const DEFAULT_SITE_SETTINGS = siteSettingsSchema.parse({});
+export type SiteDocument = { sections: SiteSectionDraft[]; settings: SiteSettings };
+export function validateSiteDocument(input: unknown): SiteDocument {
+  if (!input || typeof input !== "object") throw new SiteContentError("Invalid page.");
+  const raw = input as Record<string, unknown>;
+  return {
+    sections: validateSiteSectionDrafts(raw.sections),
+    settings: siteSettingsSchema.parse(raw.settings ?? {}),
+  };
+}
+export function publicSiteDocument(document: SiteDocument): SiteDocument {
+  return {
+    settings: document.settings,
+    sections: document.sections
+      .filter((s) => s.visible)
+      .map((s) => ({ ...validateSiteSectionDraft(s), intentNotes: "" })),
+  };
+}
+export function documentMediaIds(document: SiteDocument): string[] {
+  return [
+    ...new Set(
+      [document.settings.logoId, ...document.sections.map((s) => s.imageId ?? "")].filter(
+        (id) => id && !id.startsWith("builtin:"),
+      ),
+    ),
+  ];
+}
+export function siteImageUrl(id: string): string {
+  if (id === "builtin:hero") return "/images/detergent-delivery-hero.png";
+  if (id === "builtin:logo") return "/brand/logo.png";
+  return `/api/site/media/${encodeURIComponent(id)}`;
+}
+DEFAULT_HOME_SECTIONS.push({
+  sectionId: "delivery-map",
+  type: "service-area",
+  title: "Is your neighborhood on the route?",
+  body: "Our delivery area grows as new ZIP codes join our local routes. Check your ZIP to get started.",
+  badgeText: "Delivery availability",
+  ctaLabel: "",
+  ctaHref: "",
+  secondaryCtaLabel: "",
+  secondaryCtaHref: "",
+  visible: true,
+  sortOrder: 7,
+  styleVariant: "muted",
+  intentNotes: "Map uses the active ZIP codes in Settings → Launch & capacity.",
+});
