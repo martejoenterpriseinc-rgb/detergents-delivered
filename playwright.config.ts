@@ -15,6 +15,11 @@ export default defineConfig({
   },
   projects: [
     { name: "desktop", use: { ...devices["Desktop Chrome"] } },
+    {
+      name: "tablet",
+      use: { ...devices["Desktop Chrome"], viewport: { width: 768, height: 1024 } },
+      testMatch: /customer-access\.spec\.ts/,
+    },
     { name: "mobile", use: { ...devices["Pixel 5"] } },
   ],
   webServer: {

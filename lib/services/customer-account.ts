@@ -157,6 +157,11 @@ export async function changeAccountPassword(userId: string, input: unknown) {
           afterJson: { sessionsRevoked: true },
         },
       });
+      await tx.passwordRecovery.updateMany({
+        where: { userId, consumedAt: null },
+        data: { consumedAt: now, tokenCiphertext: null },
+      });
+      await tx.session.deleteMany({ where: { userId } });
       return { ok: true };
     },
     { timeout: 15000 },

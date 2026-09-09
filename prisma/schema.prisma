@@ -63,6 +63,7 @@ model User {
   supportMessages SupportMessage[]
   deliveryActions DeliveryAction[]
   customerInvites CustomerInvite[]
+  passwordRecoveries PasswordRecovery[]
 
   @@index([deletedAt])
 }
@@ -103,6 +104,38 @@ model VerificationToken {
   expires    DateTime
 
   @@unique([identifier, token])
+}
+
+// Short-lived security records. Reset tokens are hashed for lookup and encrypted
+// only while awaiting email delivery. Never include these fields in API output.
+model PasswordRecovery {
+  id String @id @default(cuid())
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  email String
+  sessionVersion Int
+  tokenHash String @unique
+  tokenCiphertext Bytes?
+  expiresAt DateTime
+  consumedAt DateTime?
+  deliveredAt DateTime?
+  attempts Int @default(0)
+  nextAttemptAt DateTime @default(now())
+  leaseId String?
+  leasedUntil DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId, consumedAt])
+  @@index([nextAttemptAt, deliveredAt])
+  @@index([expiresAt])
+}
+
+model AuthenticationThrottle {
+  key String @id
+  hits Int
+  expiresAt DateTime
+
+  @@index([expiresAt])
 }
 
 model Role {

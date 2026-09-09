@@ -58,8 +58,7 @@ export type CredentialChangeInput = {
 };
 
 export type CredentialChangeValidation =
-  | { ok: true; email: string; password: string }
-  | { ok: false; error: string };
+  { ok: true; email: string; password: string } | { ok: false; error: string };
 
 export function validateCredentialChange(
   input: CredentialChangeInput,
@@ -90,6 +89,9 @@ export function validateCredentialChange(
       error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`,
     };
   }
+  if (new TextEncoder().encode(password).length > 72) {
+    return { ok: false, error: "Password must be at most 72 bytes." };
+  }
   if (password !== input.confirmPassword) {
     return { ok: false, error: "Password confirmation does not match." };
   }
@@ -109,9 +111,7 @@ export function validateCredentialChange(
 }
 
 export type StaffAccessDenial =
-  | "unauthenticated"
-  | "forbidden"
-  | "credentials_change_required";
+  "unauthenticated" | "forbidden" | "credentials_change_required";
 
 export function staffAccessDeniedReason(input: {
   authenticated: boolean;

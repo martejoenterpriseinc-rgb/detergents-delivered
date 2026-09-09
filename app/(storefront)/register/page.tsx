@@ -3,7 +3,9 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { registerWithCredentials } from "../actions";
+import { PasswordInput } from "@/components/ui/password-input";
+import { googleSignInConfigured } from "@/lib/domain/customer-access";
+import { registerWithCredentials, signInWithGoogle } from "../actions";
 
 export default async function RegisterPage({
   searchParams,
@@ -18,14 +20,15 @@ export default async function RegisterPage({
         Create your household account
       </h1>
       <p className="mt-2 text-sm text-teal-800">
-        Save an email and password for later phases. You can shop the demo cart without an
-        account.
+        Track your orders, save your delivery details, and manage your household account.
       </p>
       {params.error ? (
         <p className="mt-4 rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          {params.error === "exists"
-            ? "That email already has an account. Sign in instead."
-            : "Check your name, email, and a password of at least 8 characters."}
+          {params.error === "limited"
+            ? "Too many attempts. Try again in 15 minutes."
+            : params.error === "unavailable"
+              ? "An account could not be created with those details. Try signing in or recovering your password."
+              : "Check your name, email, and matching passwords of at least 12 characters (up to 72 bytes)."}
         </p>
       ) : null}
       <Card className="mt-8 space-y-4">
@@ -40,12 +43,23 @@ export default async function RegisterPage({
           </div>
           <div className="space-y-2">
             <Label htmlFor="password">Password</Label>
-            <Input
+            <PasswordInput
               id="password"
               name="password"
-              type="password"
               autoComplete="new-password"
-              minLength={8}
+              minLength={12}
+              maxLength={72}
+              required
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="confirmPassword">Confirm password</Label>
+            <PasswordInput
+              id="confirmPassword"
+              name="confirmPassword"
+              autoComplete="new-password"
+              minLength={12}
+              maxLength={72}
               required
             />
           </div>
@@ -53,6 +67,18 @@ export default async function RegisterPage({
             Create account
           </Button>
         </form>
+        {googleSignInConfigured() && (
+          <form action={signInWithGoogle}>
+            <Button type="submit" variant="outline" className="w-full">
+              Continue with Google
+            </Button>
+          </form>
+        )}
+        <p className="text-center text-sm">
+          <Link href="/forgot-password" className="font-semibold text-teal-800 underline">
+            Recover your account
+          </Link>
+        </p>
         <p className="text-center text-sm text-teal-800">
           Already have an account?{" "}
           <Link href="/sign-in" className="font-semibold text-teal-900 underline">

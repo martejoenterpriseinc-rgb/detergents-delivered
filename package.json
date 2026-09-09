@@ -2,7 +2,7 @@
   "name": "detergents-delivered",
   "version": "0.1.0",
   "private": true,
-  "description": "Detergents Delivered — household product ecommerce, subscriptions, inventory, delivery, and accounting.",
+  "description": "Detergents Delivered \u2014 household product ecommerce, subscriptions, inventory, delivery, and accounting.",
   "scripts": {
     "dev": "next dev",
     "build": "prisma generate && next build",
@@ -25,7 +25,8 @@
     "check:runtime": "node --import tsx scripts/check-runtime.ts",
     "db:preflight": "node --import tsx scripts/check-database.ts",
     "prestart": "npm run check:runtime && npm run db:preflight",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "auth:deliver": "node --import tsx scripts/deliver-recovery-emails.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
