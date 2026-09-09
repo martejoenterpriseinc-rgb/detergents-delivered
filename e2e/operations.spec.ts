@@ -39,10 +39,16 @@ test("delivery command center, customer directory and private completion", async
     await expect(
       page.getByRole("heading", { name: "Your neighborhood, connected." }),
     ).toBeVisible();
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    const layout = await page.evaluate(() => ({
+      width: innerWidth, rootWidth: document.documentElement.clientWidth,
+      scrollWidth: document.documentElement.scrollWidth,
+      scale: visualViewport?.scale,
+    }));
+    await info.attach("customer-map-viewport.json", { body: JSON.stringify(layout), contentType: "application/json" });
+    expect(layout).toMatchObject({ width: page.viewportSize()!.width, rootWidth: page.viewportSize()!.width, scrollWidth: page.viewportSize()!.width, scale: 1 });
     await page.screenshot({
       path: info.outputPath("02-customers-map-directory.png"),
-      // Capture the actual mobile viewport; full-page map captures disturb Chromium mobile hit testing.
+      // Capture the actual mobile viewport used for interaction assertions.
       fullPage: info.project.name !== "mobile",
     });
     expect(await page.evaluate(() => ({ width: innerWidth, scrollWidth: document.documentElement.scrollWidth, scale: visualViewport?.scale }))).toMatchObject({ width: page.viewportSize()!.width, scrollWidth: page.viewportSize()!.width, scale: 1 });

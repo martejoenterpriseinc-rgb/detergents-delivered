@@ -27,6 +27,12 @@ body {
 }
 
 /* Detergents Delivered operations workspace; storefront styles remain scoped. */
+/* Keep wide admin tables in their own scroll containers on mobile. */
+html:has(.ops-shell),
+body:has(.ops-shell) {
+  max-width: 100%;
+  overflow-x: hidden;
+}
 .ops-shell {
   width: 100%;
   overflow-x: clip;
