@@ -61,10 +61,9 @@ CREATE UNIQUE INDEX "SiteMedia_sha256_key" ON "SiteMedia"("sha256");
 ALTER TABLE "SiteRevision" ADD CONSTRAINT "SiteRevision_pageId_fkey" FOREIGN KEY ("pageId") REFERENCES "SitePage"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 
--- Preserve existing copy and visibility while connecting the previous fixed slots
--- to the shared renderer. No ordering ZIPs or checkout settings are changed.
-UPDATE "SiteSection" SET "type" = 'products' WHERE "sectionId" = 'featured' AND "type" = 'cta';
-UPDATE "SiteSection" SET "type" = 'steps' WHERE "sectionId" = 'how-it-works' AND "type" = 'features';
+-- Preserve existing copy, types and visibility so the previous renderer keeps
+-- serving during rollout. The new renderer adapts legacy fixed slots on read.
+-- No ordering ZIPs or checkout settings are changed.
 UPDATE "SiteSection" SET "presentationJson" = '{"imageId":"builtin:hero","imageAlt":"Laundry essentials and folded towels prepared for home delivery"}'::jsonb WHERE "type" = 'hero' AND "presentationJson" IS NULL;
 INSERT INTO "SiteSection" ("id", "pageId", "sectionId", "type", "title", "body", "badgeText", "visible", "sortOrder", "styleVariant", "createdAt", "updatedAt")
 SELECT 'delivery-map-' || p."id", p."id", 'delivery-map', 'service-area', 'Is your neighborhood on the route?', 'Our delivery area grows as new ZIP codes join our local routes. Check your ZIP to get started.', 'Delivery availability', true,

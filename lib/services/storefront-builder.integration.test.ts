@@ -20,6 +20,46 @@ describe.sequential("versioned website and durable media", () => {
   afterAll(async () => {
     await prisma.$disconnect();
   });
+  it("renders legacy fixed slots without changing the stored section types", async () => {
+    await ensureDefaultSiteContent();
+    const page = await prisma.sitePage.findUniqueOrThrow({ where: { slug: "home" } });
+    const saved = await prisma.siteSection.findMany({
+      where: { pageId: page.id, sectionId: { in: ["featured", "how-it-works"] } },
+    });
+    expect(saved).toHaveLength(2);
+    try {
+      for (const section of saved) {
+        await prisma.siteSection.update({
+          where: { id: section.id },
+          data: { type: section.sectionId === "featured" ? "cta" : "features" },
+        });
+      }
+      const before = await prisma.siteSection.findMany({
+        where: { id: { in: saved.map((section) => section.id) } },
+        orderBy: { id: "asc" },
+      });
+      const published = (await getHomePageForBuilder()).page;
+      expect(
+        published.sections.find((section) => section.sectionId === "featured")?.type,
+      ).toBe("products");
+      expect(
+        published.sections.find((section) => section.sectionId === "how-it-works")?.type,
+      ).toBe("steps");
+      expect(
+        await prisma.siteSection.findMany({
+          where: { id: { in: saved.map((section) => section.id) } },
+          orderBy: { id: "asc" },
+        }),
+      ).toEqual(before);
+    } finally {
+      for (const section of saved) {
+        await prisma.siteSection.update({
+          where: { id: section.id },
+          data: { type: section.type, updatedAt: section.updatedAt },
+        });
+      }
+    }
+  });
   it("saves drafts, handles concurrent editors and retries, and atomically publishes photos", async () => {
     await Promise.all([ensureDefaultSiteContent(), ensureDefaultSiteContent()]);
     await publishHomeSections(DEFAULT_HOME_SECTIONS);

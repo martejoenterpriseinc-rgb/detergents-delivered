@@ -64,10 +64,19 @@ function sectionData(section: SiteSectionDraft) {
   };
 }
 function toPublished(section: SiteSection): PublishedSiteSection {
+  // The previous deployed renderer still reads these rows during rollout.
+  // Adapt its fixed slots on read; never rewrite them merely by migrating.
+  const type =
+    section.sectionId === "featured" && section.type === "cta"
+      ? "products"
+      : section.sectionId === "how-it-works" && section.type === "features"
+        ? "steps"
+        : section.type;
   return {
     ...validateSiteSectionDraft({
       ...section,
       ...((section.presentationJson as object) ?? {}),
+      type,
     }),
     id: section.id,
     updatedAt: section.updatedAt,
