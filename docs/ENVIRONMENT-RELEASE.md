@@ -1,5 +1,7 @@
 # Sandbox API release acceptance
 
+This is the historical environment-isolation release. For the current line-by-line API editor and staging acceptance, read `API-ROW-EDITOR-RELEASE.md`.
+
 Status: the approved sandbox API release is published and deployed to staging. Live hosting/provider setup and the separately tracked delivery-refresh issue remain open.
 
 ## Source and approval
@@ -38,9 +40,9 @@ Builder-only CI71 at `5ef7f9ea771903263140d17747e8dbb8206e934f` passed 174 unit,
 
 Applied migration SHA-256 values:
 
-| Migration | SHA-256 |
-| --- | --- |
-| `20260912100000_customer_access` | `b576ee025538584024e2fcfee7b03f6f97d8bfcdfb0874b46a89e142497e6e23` |
+| Migration                           | SHA-256                                                            |
+| ----------------------------------- | ------------------------------------------------------------------ |
+| `20260912100000_customer_access`    | `b576ee025538584024e2fcfee7b03f6f97d8bfcdfb0874b46a89e142497e6e23` |
 | `20260913100000_storefront_builder` | `39df44de596f9f7882025f52fb069c70e8e40cd811f6543d6da96432adeb2027` |
 
 ## Release and recovery constraints

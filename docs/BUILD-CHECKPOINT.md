@@ -1,6 +1,6 @@
 # Current environment API checkpoint
 
-Latest continuation: both approved branches are published as PRs #21 and #22. The full environment revision `84db387` passed 299 checks and is deployed to staging; the latest builder-only CI has a separately tracked delivery-refresh failure. Read `docs/ENVIRONMENT-RELEASE.md` for the current source, CI corrections, migration compatibility fix and staging release status. The publication blockers below are historical and must not cause another permission request.
+Latest continuation: the owner's requested API row editor is now deployed to staging at `aaf9845b14eb2f22b6b4849fd600ae11eaec8e94` after CI77 passed 325 checks. Settings and Integrations share 23 fields with Edit, Save/Update, masked values and status, plus a prominent Sandbox/Production switch and separate-app destination setup. Read `docs/API-ROW-EDITOR-RELEASE.md` for the current acceptance and recovery limits. PRs #21 and #22 remain published; staging uses the tested application SHA, and subsequent release-record changes are documentation only. Earlier publication blockers are resolved and must not cause another permission request.
 
 Owner request: separate sandbox/live APIs in Settings, correct API selection by environment, red sandbox banner on every page. Earlier owner authorization allows pushing and deployment; the historical authorization block below is not a new instruction to request permission.
 
