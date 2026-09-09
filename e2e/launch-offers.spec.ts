@@ -27,7 +27,7 @@ test("shop, support KPI, configurable launch and promotions persist with custome
     const sku = `BROWSER-${randomUUID()}`;
     await page.locator('[name="title"]').fill("Synthetic launch bucket");
     await page
-      .locator('[name="description"]')
+      .getByRole("textbox", { name: "Description", exact: true })
       .fill("Synthetic browser entry; no real inventory");
     await page.locator('[name="sku"]').fill(sku);
     await page.getByLabel("Selling price ($)", { exact: true }).fill("35.00");

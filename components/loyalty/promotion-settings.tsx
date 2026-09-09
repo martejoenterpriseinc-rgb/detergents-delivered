@@ -131,7 +131,7 @@ export function PromotionSettings({ initial }: { initial: PromotionTerms[] }) {
           <Field label="Ends on, inclusive (Chicago)">
             <Input name="endsOn" type="date" required defaultValue={selected?.endsOn} />
           </Field>
-          <Field label="Minimum merchandise purchase ($)">
+          <Field label="Minimum purchase for this promotion ($)">
             <Input
               name="minimum"
               inputMode="decimal"

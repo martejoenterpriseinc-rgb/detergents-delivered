@@ -58,11 +58,11 @@ test("database-backed startup, separate sessions, persistence, and revoked acces
     await expect(page).toHaveURL(/error=credentials/);
     await login(page, `admin-${marker}@example.test`, password, "/admin");
     await expect(
-      page.getByRole("heading", { name: "Dashboard", exact: true }),
+      page.getByRole("heading", { name: "Your day, delivered.", exact: true }),
     ).toBeVisible();
     await page.reload();
     await expect(
-      page.getByRole("heading", { name: "Dashboard", exact: true }),
+      page.getByRole("heading", { name: "Your day, delivered.", exact: true }),
     ).toBeVisible();
     await page.screenshot({
       path: testInfo.outputPath("admin-after-refresh.png"),

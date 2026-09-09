@@ -38,6 +38,7 @@ test("delivery command center, customer directory and private completion", async
     await expect(
       page.getByRole("heading", { name: "Your neighborhood, connected." }),
     ).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.screenshot({
       path: info.outputPath("02-customers-map-directory.png"),
       fullPage: true,
@@ -174,6 +175,7 @@ test("delivery command center, customer directory and private completion", async
     const friendContext = await browser.newContext();
     const friend = await friendContext.newPage();
     await login(friend, f.customers[1].email);
+    await expect(friend).toHaveURL(/\/account$/);
     expect(
       (await friend.request.get((await photoLink.getAttribute("href"))!)).status(),
     ).toBe(404);
