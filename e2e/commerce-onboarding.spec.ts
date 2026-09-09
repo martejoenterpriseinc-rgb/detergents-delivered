@@ -71,7 +71,26 @@ test("address review saves with customer isolation and closed payment gate", asy
     await page.getByLabel("Password", { exact: true }).fill(operationsPassword);
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
     await expect(page).toHaveURL(/\/admin$/);
+    // A real review queue can exceed one page. The selected customer's new
+    // address must remain discoverable without clearing retained history.
+    await db.address.createMany({
+      data: Array.from({ length: 101 }, (_, i) => ({
+        customerId: f.customers[1].customer!.id,
+        line1: `Queue acceptance ${f.marker} ${i}`,
+        city: "Test City",
+        region: "IL",
+        postalCode: "60088",
+        createdAt: new Date("2020-01-01T00:00:00Z"),
+      })),
+    });
     await page.goto("/admin/customers/approvals");
+    await expect(
+      page.getByRole("link", { name: "Next page", exact: true }),
+    ).toBeVisible();
+    await page
+      .getByLabel("Find an address", { exact: true })
+      .fill("200 Synthetic Browser Lane");
+    await page.getByRole("button", { name: "Search addresses", exact: true }).click();
     const card = page
       .locator("section")
       .filter({ hasText: "200 Synthetic Browser Lane" });
@@ -108,6 +127,12 @@ test("address review saves with customer isolation and closed payment gate", asy
     });
   } finally {
     await context.close();
+    await db.address.deleteMany({
+      where: {
+        customerId: f.customers[1].customer!.id,
+        line1: { startsWith: `Queue acceptance ${f.marker} ` },
+      },
+    });
     await db.deliveryZone.update({ where: { id: zone.id }, data: { isActive: false } });
     await f.cleanup();
     await db.$disconnect();

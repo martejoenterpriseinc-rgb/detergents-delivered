@@ -66,13 +66,11 @@ test("product photos survive refresh and a lost save response without publishing
     })
       .png()
       .toBuffer();
-    await page
-      .getByLabel("File", { exact: true })
-      .setInputFiles({
-        name: "replacement.png",
-        mimeType: "image/png",
-        buffer: replacement,
-      });
+    await page.getByLabel("File", { exact: true }).setInputFiles({
+      name: "replacement.png",
+      mimeType: "image/png",
+      buffer: replacement,
+    });
     let dropResponse = true;
     await page.route(`**/api/products/${productId}/images`, async (route) => {
       if (route.request().method() !== "POST" || !dropResponse) return route.continue();
@@ -86,7 +84,9 @@ test("product photos survive refresh and a lost save response without publishing
       });
     });
     await page.getByRole("button", { name: "Upload", exact: true }).click();
-    await expect(page.getByRole("alert")).toContainText("Synthetic response lost");
+    await expect(
+      page.getByRole("alert").filter({ hasText: "Synthetic response lost" }),
+    ).toBeVisible();
     expect(
       await page
         .getByLabel("File", { exact: true })
