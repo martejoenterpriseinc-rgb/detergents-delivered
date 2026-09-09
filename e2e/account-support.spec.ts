@@ -226,6 +226,26 @@ test("customer account, order support, staff KPIs, failed saves, and password re
         () => document.documentElement.scrollWidth <= window.innerWidth,
       ),
     ).toBe(true);
+    const filters = [
+      adminPage.getByLabel("Lookup", { exact: true }),
+      adminPage.getByLabel("Status", { exact: true }),
+      adminPage.getByLabel("Sort", { exact: true }),
+      adminPage.getByRole("button", { name: "Apply filters" }),
+    ];
+    const boxes = await Promise.all(filters.map((field) => field.boundingBox()));
+    for (let i = 0; i < boxes.length; i++) {
+      expect(boxes[i]).not.toBeNull();
+      for (let j = i + 1; j < boxes.length; j++) {
+        const a = boxes[i]!;
+        const b = boxes[j]!;
+        const overlaps =
+          a.x < b.x + b.width &&
+          a.x + a.width > b.x &&
+          a.y < b.y + b.height &&
+          a.y + a.height > b.y;
+        expect(overlaps, "Support filters must not overlap").toBe(false);
+      }
+    }
     const exported = await adminPage.request.get(
       `/api/admin/support/export?status=OPEN&q=${marker}`,
     );

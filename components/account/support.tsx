@@ -41,7 +41,7 @@ export async function SupportList({
   });
   return (
     <div className="space-y-5">
-      <form className="flex flex-wrap items-end gap-3 rounded-2xl border border-teal-100 bg-white p-4">
+      <form className="grid grid-cols-1 items-end gap-3 rounded-2xl border border-teal-100 bg-white p-4 sm:grid-cols-2 xl:grid-cols-[minmax(12rem,1fr)_auto_auto_auto]">
         <label className="min-w-0 flex-1 text-sm font-semibold">
           Lookup
           <input
@@ -51,7 +51,7 @@ export async function SupportList({
             placeholder={
               staff ? "Ticket, order, subject, or email" : "Ticket, order, or subject"
             }
-            className="mt-1 w-full min-w-48 rounded-xl border border-teal-200 p-3 font-normal"
+            className="mt-1 w-full rounded-xl border border-teal-200 p-3 font-normal"
           />
         </label>
         <label className="text-sm font-semibold">
@@ -59,7 +59,7 @@ export async function SupportList({
           <select
             name="status"
             defaultValue={filters.status}
-            className="mt-1 block max-w-full rounded-xl border border-teal-200 p-3 font-normal"
+            className="mt-1 block w-full max-w-full rounded-xl border border-teal-200 p-3 font-normal"
           >
             <option value="ACTIVE">All active</option>
             <option value="ALL">All tickets</option>
@@ -75,7 +75,7 @@ export async function SupportList({
           <select
             name="sort"
             defaultValue={filters.sort}
-            className="mt-1 block rounded-xl border border-teal-200 p-3 font-normal"
+            className="mt-1 block w-full rounded-xl border border-teal-200 p-3 font-normal"
           >
             <option value="updated">Last updated</option>
             <option value="oldest">Oldest first</option>
