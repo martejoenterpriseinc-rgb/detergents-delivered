@@ -1,7 +1,22 @@
 import { describe, it, expect, vi } from "vitest";
-import { allocateCents, checkoutInput } from "./domain";
+import { allocateCents, checkoutInput, canonicalJson } from "./domain";
 import { commerceConfiguration, requireCommerce } from "./config";
 describe("checkout money and activation", () => {
+  it("compares saved JSONB without depending on object key order", () => {
+    const saved = {
+      lines: [{ quantity: 2, variantId: "a" }],
+      address: { id: "b", city: "Test" },
+    };
+    const fresh = {
+      address: { city: "Test", id: "b" },
+      lines: [{ variantId: "a", quantity: 2 }],
+    };
+    expect(canonicalJson(saved)).toBe(canonicalJson(fresh));
+    expect(canonicalJson(saved)).not.toBe(
+      canonicalJson({ ...fresh, lines: [{ variantId: "a", quantity: 3 }] }),
+    );
+    expect(canonicalJson([1, 2])).not.toBe(canonicalJson([2, 1]));
+  });
   it("allocates fractional discounts exactly once with deterministic ties", () => {
     expect(allocateCents(2, [1, 1, 1])).toEqual([1, 1, 0]);
     expect(allocateCents(100, [333, 333, 334])).toEqual([33, 33, 34]);

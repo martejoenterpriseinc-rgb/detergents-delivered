@@ -33,3 +33,9 @@ The additive migration creates CheckoutAttempt, CheckoutCostAllocation and Check
 `DD_CHECKOUT_ENABLED=true` is an operations-controlled server setting, not a public/admin form. Production additionally requires `DD_LIVE_CHECKOUT_ACCEPTED=true`; neither is an acceptance test or a substitute for the requirements above. Leave both off until the complete workflow passes. No domain/DNS or live launch is performed by this increment.
 
 Documentation: https://docs.stripe.com/api/checkout/sessions/create · https://docs.stripe.com/tax/standalone-tax-api · https://docs.stripe.com/tax/checkout
+
+## Review corrections
+
+- Checkout snapshot comparisons canonicalize object keys because PostgreSQL JSONB changes key order. Values and array order remain significant, and stale-price rejection remains enforced.
+- Delayed successful payments retain holds for staff review when their provisional date has passed or the vehicle's route has started. They cannot append an unplanned stop to an active route.
+- A targeted override pins Prisma's config-only `deepmerge-ts` dependency to 8.0.0 for GHSA-ggr8-5vv4-36mx. The upstream change affects Map merging; this project does not use Map-based Prisma config. Migration generation/replay and build checks are required with this override. Advisory: https://github.com/advisories/GHSA-ggr8-5vv4-36mx

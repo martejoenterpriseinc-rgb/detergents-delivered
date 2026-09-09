@@ -11,6 +11,7 @@ import { AccountError } from "@/lib/domain/account";
 import { pickCurrentPrice } from "@/lib/prices";
 import {
   checkoutInput,
+  canonicalJson,
   allocateCents,
   type CheckoutInput,
   type CheckoutSnapshot,
@@ -20,7 +21,7 @@ import { calculateCheckoutTax } from "./stripe";
 export const json = (v: unknown) =>
   JSON.parse(JSON.stringify(v)) as Prisma.InputJsonValue;
 export const fingerprint = (v: unknown) =>
-  createHash("sha256").update(JSON.stringify(v)).digest("hex");
+  createHash("sha256").update(canonicalJson(v)).digest("hex");
 export async function buildSnapshot(
   tx: Prisma.TransactionClient,
   userId: string,

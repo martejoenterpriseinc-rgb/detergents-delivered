@@ -72,6 +72,18 @@ export type CheckoutSnapshot = {
   taxCalculationId: string;
   taxBreakdown: unknown;
 };
+/** PostgreSQL JSONB reorders object keys. Array order and all values remain significant. */
+export function canonicalJson(value: unknown): string {
+  return JSON.stringify(value, (_key, item) =>
+    item && typeof item === "object" && !Array.isArray(item)
+      ? Object.fromEntries(
+          Object.keys(item)
+            .sort()
+            .map((key) => [key, item[key]]),
+        )
+      : item,
+  );
+}
 /** Largest remainder allocation: every cent allocated once, without floating point drift. */
 export function allocateCents(amount: number, weights: number[]) {
   const total = weights.reduce((a, b) => a + b, 0);

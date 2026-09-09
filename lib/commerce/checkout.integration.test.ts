@@ -412,6 +412,27 @@ it("rolls back finalization when its audit record cannot persist", async () => {
     }),
   ).toBe(0);
 });
+it("retains a delayed paid checkout for review if its reserved route has started", async () => {
+  const q = await quoteAndHold();
+  const a = await ownedCheckout(f.one.id, q.id);
+  await prisma.route.create({
+    data: {
+      number: `synthetic-started-${randomUUID()}`,
+      vehicleId: a.vehicleId!,
+      deliveryZoneId: a.zoneId!,
+      serviceDate: new Date(a.serviceDate!),
+      status: "IN_PROGRESS",
+    },
+  });
+  await settleVerifiedSession(session(q), evidence(), taxLines(q));
+  expect((await ownedCheckout(f.one.id, q.id)).state).toBe("REVIEW");
+  expect(await prisma.routeStop.count({ where: { orderId: a.orderId! } })).toBe(0);
+  expect(
+    await prisma.inventoryBalance.findUnique({
+      where: { productVariantId: f.variant.id },
+    }),
+  ).toMatchObject({ onHandQty: 10, reservedQty: 1 });
+});
 it("requires real staff authorization and preserves address changes as new unapproved rows", async () => {
   const saved = await saveDeliveryAddress(f.one.id, {
     line1: "200 Synthetic Road",

@@ -1,6 +1,7 @@
 import type Stripe from "stripe";
 import { prisma } from "@/lib/prisma";
 import { AccountError } from "@/lib/domain/account";
+import { businessDate } from "@/lib/domain/operations";
 import { customerIdentity } from "@/lib/services/customer-account";
 import { rewardBalance } from "@/lib/services/loyalty";
 import { persistInventoryTransaction } from "@/lib/services/inventory-ledger";
@@ -161,7 +162,19 @@ export async function settleVerifiedSession(
         });
         return;
       }
+      await tx.$queryRaw`SELECT id FROM "Vehicle" WHERE id = ${a.vehicleId} FOR UPDATE`;
+      // A driver may start a route after checkout was reserved but before payment clears.
+      await tx.$queryRaw`SELECT id FROM "Route" WHERE "vehicleId" = ${a.vehicleId} AND "serviceDate" = ${new Date(a.serviceDate!)} ORDER BY id FOR UPDATE`;
+      const departed = await tx.route.count({
+        where: {
+          vehicleId: a.vehicleId,
+          serviceDate: new Date(a.serviceDate!),
+          status: { in: ["IN_PROGRESS", "COMPLETED"] },
+        },
+      });
       try {
+        if (!a.serviceDate || a.serviceDate < businessDate() || departed)
+          throw new Error("Reserved delivery needs staff review");
         assertSessionIdentity(session, id, s, a.livemode);
         if (session.payment_status === "no_payment_required" && s.totalCents !== 0)
           throw new Error("Missing payment");
