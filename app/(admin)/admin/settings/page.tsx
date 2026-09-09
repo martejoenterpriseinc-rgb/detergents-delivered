@@ -33,6 +33,22 @@ export default async function SettingsPage() {
           Launch, area cadence & vehicle capacity
         </Link>
       )}
+      {canWrite && (
+        <Card>
+          <h2 className="text-xl font-semibold">Business Settings</h2>
+          <div className="mt-4 flex flex-wrap gap-3">
+            <Link className="ops-button" href="/admin/settings/business/setup">
+              Business Setup
+            </Link>
+            <Link
+              className="ops-button secondary"
+              href="/admin/settings/business/documents"
+            >
+              Business Documents
+            </Link>
+          </div>
+        </Card>
+      )}
       <DeliverySettingsForm initial={settings} canWrite={canWrite} />
     </div>
   );

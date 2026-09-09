@@ -88,6 +88,20 @@ export const ADMIN_NAV: AdminNavItem[] = [
   { href: "/admin/cpa", label: "CPA Center", phase: 6 },
   { href: "/admin/import-export", label: "Import/Export", phase: 7 },
   { href: "/admin/integrations", label: "Integrations", phase: 7 },
+  {
+    href: "/admin/settings/business/setup",
+    label: "Business Setup",
+    phase: 1,
+    ready: true,
+    roles: ["ADMIN", "SUPER_ADMIN"],
+  },
+  {
+    href: "/admin/settings/business/documents",
+    label: "Business Documents",
+    phase: 1,
+    ready: true,
+    roles: ["ADMIN", "SUPER_ADMIN"],
+  },
   { href: "/admin/settings", label: "Settings", phase: 1, ready: true },
 ];
 

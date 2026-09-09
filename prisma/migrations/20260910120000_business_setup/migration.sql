@@ -1,0 +1,10 @@
+-- Additive: does not alter business identity, commerce, customers or existing tables.
+CREATE TABLE "BusinessSetup" ("id" TEXT PRIMARY KEY, "version" INTEGER NOT NULL DEFAULT 0, "dataJson" JSONB NOT NULL, "updatedAt" TIMESTAMP(3) NOT NULL);
+CREATE TABLE "BusinessSetupRevision" ("id" TEXT PRIMARY KEY, "version" INTEGER NOT NULL, "actorId" TEXT NOT NULL, "action" TEXT NOT NULL, "dataJson" JSONB NOT NULL, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE UNIQUE INDEX "BusinessSetupRevision_version_key" ON "BusinessSetupRevision"("version");
+CREATE TABLE "BusinessAccess" ("userId" TEXT PRIMARY KEY, "grantedBy" TEXT NOT NULL, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE "BusinessDocument" ("id" TEXT PRIMARY KEY, "planId" TEXT, "stepKey" TEXT, "category" TEXT NOT NULL, "title" TEXT NOT NULL, "notes" TEXT NOT NULL DEFAULT '', "issueDate" TEXT, "expiryDate" TEXT, "version" INTEGER NOT NULL DEFAULT 1, "deletedAt" TIMESTAMP(3), "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" TIMESTAMP(3) NOT NULL);
+CREATE TABLE "BusinessDocumentVersion" ("id" TEXT PRIMARY KEY, "documentId" TEXT NOT NULL, "number" INTEGER NOT NULL, "requestKey" TEXT NOT NULL, "requestHash" TEXT NOT NULL, "metadataJson" JSONB NOT NULL, "uploadedBy" TEXT NOT NULL, "contentType" TEXT NOT NULL, "size" INTEGER NOT NULL, "sha256" TEXT NOT NULL, "keyId" TEXT NOT NULL, "ciphertext" BYTEA, "scanStatus" TEXT NOT NULL DEFAULT 'QUARANTINED', "scannedAt" TIMESTAMP(3), "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "deletedAt" TIMESTAMP(3), CONSTRAINT "BusinessDocumentVersion_documentId_fkey" FOREIGN KEY ("documentId") REFERENCES "BusinessDocument"("id") ON DELETE RESTRICT ON UPDATE CASCADE);
+CREATE UNIQUE INDEX "BusinessDocumentVersion_requestKey_key" ON "BusinessDocumentVersion"("requestKey");
+CREATE UNIQUE INDEX "BusinessDocumentVersion_documentId_number_key" ON "BusinessDocumentVersion"("documentId", "number");
+CREATE INDEX "BusinessDocumentVersion_scanStatus_createdAt_idx" ON "BusinessDocumentVersion"("scanStatus", "createdAt");
