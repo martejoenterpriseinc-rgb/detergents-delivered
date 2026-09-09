@@ -10,9 +10,10 @@ afterEach(() => {
 it("does not offer ephemeral catalog uploads on hosted environments", async () => {
   vi.stubEnv("APP_ENV", "staging");
   vi.stubEnv("DD_LOCAL_CATALOG_STORAGE", "true");
-  expect(catalogUploadReady()).toBe(false);
+  expect(catalogUploadReady()).toBe(true);
+  // Even with the legacy flag present, hosted saves cannot use the local adapter.
   await expect(saveCatalogImage(Buffer.from("invalid"))).rejects.toMatchObject({
-    status: 503,
+    status: 415,
   });
   expect(storage.put).not.toHaveBeenCalled();
 });

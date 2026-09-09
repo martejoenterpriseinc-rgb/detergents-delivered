@@ -949,6 +949,43 @@ model DeliveryPhoto {
   @@index([deliveryAttemptId])
 }
 
+/// Durable image bytes are deliberately separate from public product/order DTOs.
+/// Private proof photos are encrypted; reads require the existing proof authorization.
+model OperationalMedia {
+  key         String   @id
+  kind        String
+  environment String
+  bytes       Bytes
+  keyId       String?
+  sha256      String
+  byteSize    Int
+  createdAt   DateTime @default(now())
+
+  @@index([environment, kind, createdAt])
+}
+
+/// Short claims coordinate scheduler instances; provider work runs outside transactions.
+model OperationalJob {
+  id              String   @id
+  environment     String
+  state           String   @default("WAITING")
+  leaseId         String?
+  leasedUntil     DateTime?
+  nextRunAt       DateTime @default(now())
+  startedAt       DateTime?
+  finishedAt      DateTime?
+  heartbeatAt     DateTime?
+  lastSuccessAt   DateTime?
+  consecutiveFailures Int @default(0)
+  checked         Int @default(0)
+  completed       Int @default(0)
+  attention       Int @default(0)
+  reason          String?
+  updatedAt       DateTime @updatedAt
+
+  @@index([environment, nextRunAt])
+}
+
 model MileageTrip {
   id          String   @id @default(cuid())
   vehicleId   String
@@ -1418,6 +1455,7 @@ model CheckoutAttempt {
   detergentBuckets Int @default(0)
   scentBeadBuckets Int @default(0)
   lastError String?
+  recoveryCheckedAt DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   costs CheckoutCostAllocation[]

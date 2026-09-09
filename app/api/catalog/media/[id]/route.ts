@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { isLocalStorageKey, readLocalObject } from "@/lib/storage";
+import { loadCatalogImage } from "@/lib/services/catalog-images";
 
 export const dynamic = "force-dynamic";
 
@@ -21,22 +21,13 @@ export async function GET(
   if (!product || !product.isActive || !product.websiteVisible || product.deletedAt) {
     return Response.json({ error: "not found" }, { status: 404 });
   }
-  if (
-    !isLocalStorageKey(image.storageKey) ||
-    !image.storageKey.startsWith("local/catalog/")
-  ) {
-    return Response.json(
-      { error: "unsigned remote URLs are not issued" },
-      { status: 409 },
-    );
-  }
   try {
-    const bytes = await readLocalObject(image.storageKey);
+    const bytes = await loadCatalogImage(image.storageKey);
     return new Response(new Uint8Array(bytes), {
       headers: {
         "Content-Type": "image/jpeg",
         "X-Content-Type-Options": "nosniff",
-        "Cache-Control": "public, max-age=300",
+        "Cache-Control": "public, max-age=0, must-revalidate",
       },
     });
   } catch {

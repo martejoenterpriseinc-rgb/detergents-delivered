@@ -3,13 +3,12 @@ import type { Route } from "next";
 import { requireRole } from "@/lib/authz";
 import { getIntegrationStatus } from "@/lib/integrations/status";
 import { EnvironmentSettings } from "@/components/admin/environment-settings";
+import { OperationalHealth } from "@/components/admin/operational-health";
 export const dynamic = "force-dynamic";
 export default async function IntegrationsPage() {
   await requireRole("ADMIN", "SUPER_ADMIN");
   const status = await getIntegrationStatus();
-  const operations = status.connections.filter((c) =>
-    ["documents", "workers"].includes(c.id),
-  );
+  const operations = status.connections.filter((c) => ["documents"].includes(c.id));
   return (
     <div className="space-y-6">
       <div>
@@ -19,6 +18,7 @@ export default async function IntegrationsPage() {
         </p>
       </div>
       <EnvironmentSettings />
+      <OperationalHealth />
       <section
         aria-label="Operational connections"
         className="overflow-hidden rounded-xl border border-teal-100 bg-white"

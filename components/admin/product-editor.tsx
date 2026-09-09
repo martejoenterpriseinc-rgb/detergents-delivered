@@ -1,7 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -46,6 +47,7 @@ type Product = {
   websiteVisible: boolean;
   featured: boolean;
   variants: Variant[];
+  images?: { id: string; alt: string | null; isPrimary: boolean }[];
 };
 
 export function ProductEditor({
@@ -58,6 +60,8 @@ export function ProductEditor({
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [imageFeedback, setImageFeedback] = useState("");
+  const imageRequest = useRef<string | null>(null);
 
   async function saveProduct(formData: FormData) {
     setPending(true);
@@ -139,13 +143,19 @@ export function ProductEditor({
   }
 
   async function uploadImage(formData: FormData) {
+    if (pending) return;
+    if (!imageRequest.current) imageRequest.current = crypto.randomUUID();
+    formData.set("requestKey", imageRequest.current);
+    setImageFeedback("");
     if (!product) return;
     const file = formData.get("file");
     if (!(file instanceof File) || file.size === 0) return;
     setError(null);
+    setPending(true);
     try {
       const upload = new FormData();
       upload.set("file", file);
+      upload.set("requestKey", imageRequest.current);
       const response = await fetch(`/api/products/${product.id}/images`, {
         method: "POST",
         body: upload,
@@ -153,16 +163,22 @@ export function ProductEditor({
       const result = await response.json();
       if (!response.ok)
         throw new Error(result.error || "Image save could not be confirmed.");
+      setImageFeedback("Photo saved");
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not upload image");
+    } finally {
+      setPending(false);
     }
   }
 
   return (
     <div className="space-y-6">
       {error ? (
-        <p className="rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <p
+          role="alert"
+          className="rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-900"
+        >
           {error}
         </p>
       ) : null}
@@ -286,19 +302,49 @@ export function ProductEditor({
           <Card className="space-y-4">
             <h2 className="text-lg font-semibold text-teal-950">Image</h2>
             <p className="text-sm text-teal-800">
-              Upload a JPEG or PNG up to 4 MB. Hosted uploads require durable catalog
-              storage. Delivery proof photos remain private and cannot be used as catalog
-              images.
+              Upload a JPEG or PNG up to 4 MB. Your saved photo stays with this product.
+            </p>
+            <div className="flex flex-wrap gap-3">
+              {product.images?.map((photo) => (
+                <figure key={photo.id} className="w-28">
+                  <Image
+                    unoptimized
+                    src={`/api/products/${product.id}/images/${photo.id}`}
+                    alt={photo.alt || product.name}
+                    width={112}
+                    height={112}
+                    className="h-28 w-28 rounded-lg border border-teal-100 object-contain"
+                  />
+                  <figcaption className="mt-1 text-xs text-slate-500">
+                    {photo.isPrimary ? "Current photo" : "Previous photo"}
+                  </figcaption>
+                </figure>
+              ))}
+            </div>
+            <p role="status" className="text-sm text-emerald-800">
+              {imageFeedback}
             </p>
             <form
-              action={uploadImage}
+              onSubmit={(e) => {
+                e.preventDefault();
+                void uploadImage(new FormData(e.currentTarget));
+              }}
               className="flex flex-col gap-3 sm:flex-row sm:items-end"
             >
               <Field label="File">
-                <Input name="file" type="file" accept="image/jpeg,image/png" />
+                <Input
+                  name="file"
+                  type="file"
+                  accept="image/jpeg,image/png"
+                  disabled={pending}
+                  onChange={() => {
+                    imageRequest.current = crypto.randomUUID();
+                    setImageFeedback("");
+                  }}
+                />
               </Field>
-              <Button type="submit" variant="secondary">
-                Upload
+              <Button type="submit" variant="secondary" disabled={pending}>
+                {pending ? "Saving…" : "Upload"}
               </Button>
             </form>
           </Card>

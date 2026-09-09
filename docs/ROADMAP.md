@@ -6,6 +6,20 @@ Authoritative checklist for Detergents Delivered. A box is checked only when the
 
 Later phases stay unchecked until implemented.
 
+## Implementation reconciliation
+
+The older phase boxes below are not a current launch verdict. Source and acceptance evidence in the following documents supersede stale descriptions such as “tax stub” or “local-only uploads.” Broad phase completion remains unchecked where related workflows or provider acceptance are missing.
+
+| Area                                                            | Implemented evidence                                        | Remaining acceptance or scope                                                        |
+| --------------------------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| Checkout, tax, immutable sale snapshots, reservations           | `CONNECTED-CHECKOUT.md`, `CONNECTED-CHECKOUT-ACCEPTANCE.md` | Actual provider/live tax acceptance; refunds and stock/reward reversals              |
+| Customer account, support, access recovery                      | `ACCOUNT_SUPPORT.md`, `CUSTOMER-ACCESS.md`                  | Google and email provider acceptance; production owner onboarding                    |
+| Delivery capacity, driver operations, attempts and proof access | `DELIVERY-COMMAND-CENTER.md`, `LAUNCH-DATE-ACCEPTANCE.md`   | Real route/provider/notification acceptance                                          |
+| Loyalty, referral and promotion administration                  | `LOYALTY_DELIVERY.md`, `LAUNCH-OFFERS.md`                   | Refund reversals and full provider-backed lifecycle                                  |
+| Shared storefront/Website Builder and current API row editor    | `STOREFRONT-BUILDER.md`, `API-ROW-EDITOR-RELEASE.md`        | Durable marketing photo editing and remaining contract acceptance                    |
+| Durable operational photos and scheduled recovery               | `PRODUCTION-OPERATIONS.md`                                  | Exact CI/deployment evidence recorded there; hosted photo/redeploy and restore drill |
+| Subscriptions, expenses, mileage, CPA, QBO and agent gateway    | Contract and phase definitions below                        | Substantial implementation remains                                                   |
+
 ## Phase 1 — Foundation
 
 - [x] Next.js App Router scaffold with `(storefront)`, `(admin)`, `(driver)`, `app/api`, `lib/`, `prisma/`, `docs/`, `public/`

@@ -1,10 +1,18 @@
 import sharp from "sharp";
+import type { Prisma } from "@prisma/client";
 import { AccountError } from "@/lib/domain/account";
-import { putLocalObject } from "@/lib/storage";
-export const catalogUploadReady = () =>
+import { putLocalObject, readLocalObject } from "@/lib/storage";
+import {
+  operationalMediaReady,
+  putOperationalMedia,
+  readOperationalMedia,
+} from "@/lib/operations/media";
+const localCatalog = () =>
   process.env.APP_ENV === "development" &&
   process.env.DD_LOCAL_CATALOG_STORAGE === "true";
-export async function saveCatalogImage(image: Buffer) {
+export const catalogUploadReady = () =>
+  localCatalog() || operationalMediaReady("CATALOG");
+export async function saveCatalogImage(image: Buffer, tx?: Prisma.TransactionClient) {
   if (!catalogUploadReady())
     throw new AccountError(
       "Durable catalog image storage is not connected. No image has been saved.",
@@ -25,10 +33,19 @@ export async function saveCatalogImage(image: Buffer) {
   } catch {
     throw new AccountError("Choose a valid JPEG or PNG image.", 415);
   }
+  if (!localCatalog()) {
+    if (!tx) throw new AccountError("An atomic product save is required.", 503);
+    return putOperationalMedia(tx, sanitized, "CATALOG");
+  }
   return putLocalObject({
     bytes: sanitized,
     namespace: "catalog",
     filename: "product.jpg",
     contentType: "image/jpeg",
   });
+}
+export async function loadCatalogImage(key: string) {
+  if (key.startsWith("db/catalog/")) return readOperationalMedia(key, "CATALOG");
+  if (localCatalog() && key.startsWith("local/catalog/")) return readLocalObject(key);
+  throw new AccountError("Photo not found.", 404);
 }

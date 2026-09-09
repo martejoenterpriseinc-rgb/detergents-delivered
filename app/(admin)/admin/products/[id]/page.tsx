@@ -16,6 +16,10 @@ export default async function EditProductPage({
     prisma.product.findFirst({
       where: { id, deletedAt: null },
       include: {
+        images: {
+          select: { id: true, alt: true, isPrimary: true },
+          orderBy: [{ isPrimary: "desc" }, { createdAt: "desc" }],
+        },
         variants: {
           where: { deletedAt: null },
           include: {
