@@ -92,7 +92,7 @@ export function StorefrontHome({
                 </div>
                 {s.imageId && <Photo section={s} />}
                 {s.type === "products" && (
-                  <div className="sf-products">
+                  <div className="sf-product-grid">
                     {products.length ? (
                       products.map((p) => <ProductCard key={p.id} product={p} />)
                     ) : (
@@ -104,7 +104,7 @@ export function StorefrontHome({
                   </div>
                 )}
                 {s.type === "steps" && (
-                  <div className="sf-steps">
+                  <div className="sf-step-grid">
                     {s.body
                       .split("\n")
                       .filter(Boolean)

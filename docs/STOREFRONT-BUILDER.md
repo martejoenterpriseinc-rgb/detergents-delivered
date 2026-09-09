@@ -16,13 +16,23 @@ The storefront and builder use `StorefrontChrome` and `StorefrontHome`. Computer
 
 Essential sign-in/account/cart links, legal policy destinations and the authoritative ordering state remain connected to their real workflows. Editor notes, supplier costs, private inventory records and draft content are not serialized into the public home page.
 
+The How it works and product sections use distinct inner-grid classes. Reusing a section's type class for its inner grid previously constrained the whole section to one grid column, squeezing step titles into broken words. Both sections now use the full content width. Steps remain three columns on desktop/tablet and stack at widths up to 520px. Browser acceptance measures the actual section widths, row/column geometry and shared preview, and captures the How it works section at all three device sizes.
+
 ## Durable photos
 
 Website photo uploads are available in hosted environments without a temporary local-disk dependency. JPEG, PNG and WebP uploads up to 4 MiB and 24 megapixels are decoded, rotated, stripped of metadata and re-encoded as WebP (maximum dimension 2400). Animated and unsupported formats are rejected. Images are stored as immutable PostgreSQL bytes with dimensions, content hash and upload audit records. Duplicate image content reuses the same record. A transaction serializes quota checks; the initial shared website quota is 100 MiB.
 
 Unpublished photos require a website-manager session. A photo becomes publicly readable only while referenced by a visible published section or the published logo. Hidden or removed photos stop being publicly readable. Responses use no-store and nosniff to avoid serving a revoked draft through public caches. Uploaded images use unoptimized Next images so the media authorization endpoint sees the request session; bundled public assets may use Next's optimizer.
 
-Database backups therefore include website photos. Restore a backup to a separate database and verify content, media and revision records before a production switch. To grow beyond the initial photo quota, migrate this marketing-media service to an approved object store and retain the same publication checks. Do not mix this public marketing facility with private business documents or proof-of-delivery files. Existing catalog and proof image storage are separate workflows and must pass their own launch checks.
+Database backups therefore include website photos. Restore a backup to a separate database and verify content, media and revision records before a production switch. Do not mix this marketing facility with private business documents or proof-of-delivery files. Existing catalog and proof image storage are separate workflows and must pass their own launch checks.
+
+### Photo recovery and storage status increment
+
+Failed uploads retain the selected file in the current tab and leave the prior photo intact. Retry upload remains tied to the original section even after changing areas or preview devices. Save draft and Save & apply wait until unfinished uploads are retried or explicitly discarded. Reload saved version also explicitly discards pending files. Browser-close warnings still apply; files cannot be recovered from another device until the upload succeeds and its draft is saved. Retrying after a committed upload's response is lost reuses the same content hash, image and audit event.
+
+Integrations includes Website photos & logos with actual retained count, used bytes and an 80% capacity warning. The default limit remains 100 MiB; `DD_WEBSITE_MEDIA_LIMIT_MB` permits a reviewed limit of 1–1024 MiB. Review database capacity before increasing it. A full budget permits retries of an already saved image, while rejecting new content without changing the previous record. Stored bytes are checked against their saved size, content hash and content type before being served. Historical and published references are retained; this increment performs no media deletion or schema change.
+
+Native coverage verifies concurrent deduplication, one audit event, independent database-client reads, integrity failure, audit rollback and quota behavior. Desktop/tablet/mobile acceptance exercises failure, lost-response retry, area/device switching, discard, refresh, private drafts and final publication. Exact CI/deployment acceptance will be recorded after the required gate passes; implementation alone does not establish hosted photo/redeploy acceptance.
 
 ## Delivery coverage
 

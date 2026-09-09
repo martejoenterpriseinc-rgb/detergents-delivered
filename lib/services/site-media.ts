@@ -2,6 +2,43 @@ import sharp from "sharp";
 import { createHash } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { AccountError } from "@/lib/domain/account";
+import { integrationEnvironment } from "@/lib/integration-environment";
+
+export function siteMediaLimit() {
+  const value = Number(process.env.DD_WEBSITE_MEDIA_LIMIT_MB ?? 100);
+  if (!Number.isInteger(value) || value < 1 || value > 1024)
+    throw new AccountError(
+      "Website photo storage capacity is not configured correctly.",
+      503,
+    );
+  return value * 1024 * 1024;
+}
+
+export async function siteMediaStatus() {
+  const used = await prisma.siteMedia.aggregate({ _sum: { size: true }, _count: true });
+  const bytes = used._sum.size ?? 0;
+  const limit = siteMediaLimit();
+  return {
+    kind: "WEBSITE" as const,
+    ready: Boolean(integrationEnvironment()),
+    bytes,
+    limit,
+    count: used._count,
+    capacityWarning: bytes >= limit * 0.8,
+  };
+}
+
+export async function readSiteImage(id: string) {
+  const media = await prisma.siteMedia.findUnique({ where: { id } });
+  if (!media) throw new AccountError("Photo not found.", 404);
+  if (
+    media.mimeType !== "image/webp" ||
+    media.bytes.length !== media.size ||
+    createHash("sha256").update(media.bytes).digest("hex") !== media.sha256
+  )
+    throw new AccountError("Photo integrity could not be verified.", 503);
+  return media.bytes;
+}
 export async function saveSiteImage(bytes: Buffer, userId: string) {
   if (!bytes.length || bytes.length > 4 * 1024 * 1024)
     throw new AccountError("Choose a photo under 4 MB.", 413);
@@ -36,7 +73,7 @@ export async function saveSiteImage(bytes: Buffer, userId: string) {
     });
     if (existing) return existing;
     const total = await tx.siteMedia.aggregate({ _sum: { size: true } });
-    if ((total._sum.size ?? 0) + image.data.length > 100 * 1024 * 1024)
+    if ((total._sum.size ?? 0) + image.data.length > siteMediaLimit())
       throw new AccountError(
         "The website photo storage limit has been reached. Contact your administrator to increase storage.",
         409,
