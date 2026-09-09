@@ -1,13 +1,21 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Truck } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { deliveryStates, type DeliverySnapshot } from "@/lib/domain/loyalty";
 export function DeliveryWidget({ initial }: { initial: DeliverySnapshot }) {
+  const router = useRouter();
+  const savedKey = JSON.stringify([
+    initial.status,
+    initial.orderNumber,
+    initial.plannedArrival,
+  ]);
   const [snapshot, setSnapshot] = useState(initial);
   const [unavailable, setUnavailable] = useState(false);
   useEffect(() => {
+    let lastKey = savedKey;
     let stopped = false;
     let busy = false;
     let controller: AbortController | undefined;
@@ -27,6 +35,16 @@ export function DeliveryWidget({ initial }: { initial: DeliverySnapshot }) {
         if (!stopped) {
           setSnapshot(data);
           setUnavailable(false);
+          const nextKey = JSON.stringify([
+            data.status,
+            data.orderNumber,
+            data.plannedArrival,
+          ]);
+          if (nextKey !== lastKey) {
+            lastKey = nextKey;
+            // Refresh the saved order cards too, preserving scroll and client state.
+            router.refresh();
+          }
         }
       } catch {
         if (!stopped) setUnavailable(true);
@@ -47,7 +65,7 @@ export function DeliveryWidget({ initial }: { initial: DeliverySnapshot }) {
       window.removeEventListener("online", refresh);
       document.removeEventListener("visibilitychange", refresh);
     };
-  }, []);
+  }, [router, savedKey]);
   const state = deliveryStates[snapshot.status];
   return (
     <Link

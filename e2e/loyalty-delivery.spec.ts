@@ -193,6 +193,7 @@ test("owner entry, matched live tiles, referrals and safe checkout rewards previ
     await page.reload();
     await expect(page.getByTestId("reward-balance")).toHaveText("$50.00");
     await expect(page.getByText("Reward earned", { exact: true })).toBeVisible();
+    await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
     await page.screenshot({
       path: info.outputPath("loyalty-customer.png"),
       fullPage: true,
@@ -225,6 +226,12 @@ test("owner entry, matched live tiles, referrals and safe checkout rewards previ
       "Delivery completed",
       { timeout: 22000 },
     );
+    await expect(
+      page
+        .locator("section")
+        .filter({ has: page.getByRole("heading", { name: "Orders & delivery updates" }) })
+        .getByText("Delivery completed", { exact: true }),
+    ).toBeVisible();
     await page.route("**/api/account/delivery-status", (route) =>
       route.fulfill({
         status: 503,
@@ -241,6 +248,7 @@ test("owner entry, matched live tiles, referrals and safe checkout rewards previ
     await expect(page.getByTestId("delivery-widget")).toContainText(
       "Auto-updates every 15 seconds",
     );
+    await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
     await page.screenshot({
       path: info.outputPath("account-live-tiles.png"),
       fullPage: true,
@@ -300,6 +308,7 @@ test("owner entry, matched live tiles, referrals and safe checkout rewards previ
     await expect(
       page.getByRole("button", { name: "Checkout not available yet" }),
     ).toBeDisabled();
+    await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
     await page.screenshot({
       path: info.outputPath("checkout-rewards-preview.png"),
       fullPage: true,
@@ -329,6 +338,7 @@ test("owner entry, matched live tiles, referrals and safe checkout rewards previ
         customerIsolation: true,
         filteredCsvAndAdminOnlyExport: true,
         liveStatusPolling: true,
+        orderListRefreshesWithStatus: true,
         failedPollRecovery: true,
         matchingTileSizes: true,
         referralCreditCents: 5000,
