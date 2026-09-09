@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { providerConfiguration } from "@/lib/integration-environment";
 
 export const accountEmailSchema = z.string().trim().toLowerCase().email().max(320);
 export const newAccountPasswordSchema = z
@@ -33,10 +34,10 @@ export const RECOVERY_RESPONSE =
 export function googleSignInCredentials(
   env: Record<string, string | undefined> = process.env,
 ) {
+  const { values } = providerConfiguration("google", env);
   return {
-    clientId: env.GOOGLE_CLIENT_ID?.trim() || env.AUTH_GOOGLE_ID?.trim() || "",
-    clientSecret:
-      env.GOOGLE_CLIENT_SECRET?.trim() || env.AUTH_GOOGLE_SECRET?.trim() || "",
+    clientId: values.GOOGLE_CLIENT_ID,
+    clientSecret: values.GOOGLE_CLIENT_SECRET,
   };
 }
 export function googleSignInConfigured(

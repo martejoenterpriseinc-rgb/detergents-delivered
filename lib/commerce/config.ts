@@ -1,20 +1,27 @@
 import { AccountError } from "@/lib/domain/account";
+import {
+  applicationOrigin,
+  environmentProblems,
+  providerConfiguration,
+} from "@/lib/integration-environment";
 export function commerceConfiguration(
   env: Record<string, string | undefined> = process.env,
 ) {
-  const key = env.STRIPE_RESTRICTED_KEY || env.STRIPE_SECRET_KEY;
+  const provider = providerConfiguration("stripe", env);
+  const values = provider.values;
+  const key = values.STRIPE_RESTRICTED_KEY || values.STRIPE_SECRET_KEY;
   const live = env.APP_ENV === "production";
   const mode = live ? "live" : "test";
-  const origin = env.AUTH_URL;
-  const missing: string[] = [];
+  const origin = applicationOrigin(env.AUTH_URL, env.APP_ENV === "development");
+  const missing: string[] = [...environmentProblems(env)];
   if (!["development", "staging", "production"].includes(env.APP_ENV ?? ""))
     missing.push("Application environment");
   if (env.DD_CHECKOUT_ENABLED !== "true") missing.push("Checkout activation");
   if (!key || !new RegExp(`^(rk|sk)_${mode}_`).test(key))
     missing.push(`Stripe ${mode} server key`);
-  if (!/^acct_[A-Za-z0-9]+$/.test(env.DD_STRIPE_ACCOUNT_ID ?? ""))
+  if (!/^acct_[A-Za-z0-9]+$/.test(values.STRIPE_ACCOUNT_ID))
     missing.push("Stripe account identity");
-  if (!env.STRIPE_WEBHOOK_SECRET?.startsWith("whsec_"))
+  if (!values.STRIPE_WEBHOOK_SECRET?.startsWith("whsec_"))
     missing.push("Stripe webhook signing secret");
   if (
     !origin ||
@@ -32,12 +39,16 @@ export function commerceConfiguration(
     missing,
     live,
     key,
-    accountId: env.DD_STRIPE_ACCOUNT_ID ?? "",
+    accountId: values.STRIPE_ACCOUNT_ID,
+    webhookSecret: values.STRIPE_WEBHOOK_SECRET,
     origin: origin ?? "",
   };
 }
-export function requireCommerce(recovery = false) {
-  const config = commerceConfiguration();
+export function requireCommerce(
+  recovery = false,
+  env: Record<string, string | undefined> = process.env,
+) {
+  const config = commerceConfiguration(env);
   const blocking = recovery
     ? config.missing.filter(
         (v) => !["Checkout activation", "Production checkout acceptance"].includes(v),

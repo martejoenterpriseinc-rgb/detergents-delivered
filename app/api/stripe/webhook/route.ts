@@ -1,5 +1,5 @@
 import { stripeClient } from "@/lib/commerce/stripe";
-import { requireCommerce } from "@/lib/commerce/config";
+import { readCommerce } from "@/lib/commerce/runtime";
 import { reconcileCheckout } from "@/lib/commerce/checkout";
 import { prisma } from "@/lib/prisma";
 import type Stripe from "stripe";
@@ -8,6 +8,7 @@ export async function POST(request: Request) {
   const signature = request.headers.get("stripe-signature");
   if (!signature) return new Response("Signature required", { status: 400 });
   let event: Stripe.Event;
+  let config: Awaited<ReturnType<typeof readCommerce>>;
   try {
     const reader = request.body?.getReader();
     if (!reader) return new Response("Body required", { status: 400 });
@@ -23,15 +24,15 @@ export async function POST(request: Request) {
       }
       parts.push(part.value);
     }
-    event = stripeClient().webhooks.constructEvent(
+    config = await readCommerce(true);
+    event = (await stripeClient(config)).webhooks.constructEvent(
       Buffer.concat(parts),
       signature,
-      process.env.STRIPE_WEBHOOK_SECRET!,
+      config.webhookSecret,
     );
   } catch {
     return new Response("Webhook could not be verified", { status: 400 });
   }
-  const config = requireCommerce(true);
   if (
     event.livemode !== config.live ||
     (event.account && event.account !== config.accountId)

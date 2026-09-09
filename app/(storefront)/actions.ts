@@ -1,5 +1,6 @@
 "use server";
 
+import { runtimeGoogleConfigured } from "@/lib/integrations/google";
 import { safeLoginCallback } from "@/lib/domain/login-destination";
 import { AuthError } from "next-auth";
 import { redirect } from "next/navigation";
@@ -7,10 +8,7 @@ import { Prisma } from "@prisma/client";
 import { signIn, signOut } from "@/auth";
 import { CHANGE_CREDENTIALS_PATH } from "@/lib/domain/credentials";
 import { prisma } from "@/lib/prisma";
-import {
-  googleSignInConfigured,
-  registerAccountSchema,
-} from "@/lib/domain/customer-access";
+import { registerAccountSchema } from "@/lib/domain/customer-access";
 import { registerCustomer } from "@/lib/services/customer-registration";
 import { consumeAuthenticationLimit } from "@/lib/services/authentication-throttle";
 
@@ -44,7 +42,7 @@ export async function signInWithCredentials(formData: FormData) {
 }
 
 export async function signInWithGoogle(formData: FormData) {
-  if (!googleSignInConfigured()) redirect("/sign-in?error=unavailable");
+  if (!(await runtimeGoogleConfigured())) redirect("/sign-in?error=unavailable");
   const callbackUrl = safeLoginCallback(formData.get("callbackUrl"));
   await signIn("google", { redirectTo: callbackUrl });
 }

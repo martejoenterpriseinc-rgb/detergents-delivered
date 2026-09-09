@@ -2,13 +2,13 @@ import { validateRuntimeConfig } from "../lib/runtime-config";
 import { prisma } from "../lib/prisma";
 import {
   deliverRecoveryEmails,
-  recoveryEmailConfiguration,
+  runtimeRecoveryEmailConfiguration,
 } from "../lib/services/password-recovery";
 
 async function main() {
   try {
     validateRuntimeConfig(process.env);
-    recoveryEmailConfiguration();
+    await runtimeRecoveryEmailConfiguration();
     const result = await deliverRecoveryEmails(20);
     console.log(JSON.stringify(result));
     if (result.failed) process.exitCode = 1;

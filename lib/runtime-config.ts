@@ -1,3 +1,5 @@
+import { environmentProblems } from "./integration-environment";
+
 type Environment = Record<string, string | undefined>;
 
 // Messages name configuration keys only. Never interpolate URLs or secret values.
@@ -7,6 +9,8 @@ export function validateRuntimeConfig(env: Environment): void {
       "APP_ENV must be explicitly set to development, staging, or production.",
     );
   }
+  const integrationProblems = environmentProblems(env);
+  if (integrationProblems.length) throw new Error(integrationProblems.join(" "));
   let database: URL;
   try {
     database = new URL(env.DATABASE_URL ?? "");

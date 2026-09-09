@@ -16,7 +16,7 @@ import {
   type CheckoutInput,
   type CheckoutSnapshot,
 } from "./domain";
-import { requireCommerce } from "./config";
+import { readCommerce } from "./runtime";
 import { calculateCheckoutTax } from "./stripe";
 export const json = (v: unknown) =>
   JSON.parse(JSON.stringify(v)) as Prisma.InputJsonValue;
@@ -181,7 +181,7 @@ export async function buildSnapshot(
   };
 }
 export async function createQuote(userId: string, raw: unknown) {
-  const config = requireCommerce();
+  const config = await readCommerce();
   const input = checkoutInput.parse(raw);
   input.lines.sort((a, b) => a.variantId.localeCompare(b.variantId));
   const { customer } = await customerIdentity(prisma, userId);

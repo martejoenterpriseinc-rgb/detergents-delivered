@@ -1,4 +1,4 @@
-import { commerceConfiguration } from "@/lib/commerce/config";
+import { runtimeCommerceConfiguration } from "@/lib/commerce/runtime";
 import { ConnectedCheckout } from "@/components/commerce/connected-checkout";
 import { customerIdentity } from "@/lib/services/customer-account";
 import { prisma } from "@/lib/prisma";
@@ -8,7 +8,7 @@ import { getPublicDeliveryInfo } from "@/lib/services/delivery-settings";
 
 export default async function CheckoutPage() {
   const session = await requireAuth();
-  if (commerceConfiguration().enabled) {
+  if ((await runtimeCommerceConfiguration()).enabled) {
     const { customer } = await customerIdentity(prisma, session.user.id);
     const addresses = await prisma.address.findMany({
       where: {

@@ -1,19 +1,23 @@
 import Stripe from "stripe";
-import { requireCommerce } from "./config";
+import type { requireCommerce } from "./config";
+import { readCommerce } from "./runtime";
 import { AccountError } from "@/lib/domain/account";
 import type { CheckoutSnapshot } from "./domain";
 
-export function stripeClient() {
-  const config = requireCommerce(true);
+export async function stripeClient(supplied?: ReturnType<typeof requireCommerce>) {
+  const config = supplied ?? (await readCommerce(true));
   return new Stripe(config.key!, {
     apiVersion: "2026-08-26.dahlia",
     timeout: 20000,
     maxNetworkRetries: 2,
   });
 }
-export async function verifyStripeSetup(region: string) {
-  const config = requireCommerce();
-  const stripe = stripeClient();
+export async function verifyStripeSetup(
+  region: string,
+  supplied?: ReturnType<typeof requireCommerce>,
+) {
+  const config = supplied ?? (await readCommerce());
+  const stripe = await stripeClient(config);
   const [account, settings, registrations] = await Promise.all([
     stripe.accounts.retrieve(null),
     stripe.tax.settings.retrieve(),
@@ -42,7 +46,8 @@ const destination = (s: CheckoutSnapshot) => ({
   country: s.address.country,
 });
 export async function calculateCheckoutTax(s: CheckoutSnapshot) {
-  const stripe = await verifyStripeSetup(s.address.region);
+  const config = await readCommerce();
+  const stripe = await verifyStripeSetup(s.address.region, config);
   const calc = await stripe.tax.calculations.create({
     currency: "usd",
     customer_details: { address: destination(s), address_source: "shipping" },
@@ -55,7 +60,7 @@ export async function calculateCheckoutTax(s: CheckoutSnapshot) {
     })),
     expand: ["line_items"],
   });
-  if (calc.livemode !== requireCommerce().live || calc.tax_amount_inclusive !== 0)
+  if (calc.livemode !== config.live || calc.tax_amount_inclusive !== 0)
     throw new AccountError("Tax quote cannot be confirmed.", 503);
   return {
     taxCents: calc.tax_amount_exclusive,
@@ -69,8 +74,8 @@ export async function createStripeCheckout(
   s: CheckoutSnapshot,
   expiresAt: Date,
 ) {
-  const stripe = await verifyStripeSetup(s.address.region);
-  const config = requireCommerce();
+  const config = await readCommerce();
+  const stripe = await verifyStripeSetup(s.address.region, config);
   // One immutable shipping snapshot per checkout: another browser cannot change the tax address.
   const customer = await stripe.customers.create(
     {

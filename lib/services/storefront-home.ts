@@ -1,9 +1,9 @@
 import { listFeaturedShopProducts } from "@/lib/catalog-public";
 import { launchConfig } from "@/lib/services/launch";
-import { commerceConfiguration } from "@/lib/commerce/config";
+import { runtimeCommerceConfiguration } from "@/lib/commerce/runtime";
 export async function storefrontLaunchNotice() {
   const launch = await launchConfig();
-  return launch.enabled && !commerceConfiguration().enabled
+  return launch.enabled && !(await runtimeCommerceConfiguration()).enabled
     ? `Planned launch: ${launch.launchDate}. First delivery window: ${launch.launchDate}–${launch.firstDeliveryBy}. Ordering is not open yet.`
     : "";
 }

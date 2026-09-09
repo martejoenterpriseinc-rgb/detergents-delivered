@@ -1,3 +1,23 @@
+# Current environment API checkpoint
+
+Latest continuation: the owner's requested API row editor is now deployed to staging at `aaf9845b14eb2f22b6b4849fd600ae11eaec8e94` after CI77 passed 325 checks. Settings and Integrations share 23 fields with Edit, Save/Update, masked values and status, plus a prominent Sandbox/Production switch and separate-app destination setup. Read `docs/API-ROW-EDITOR-RELEASE.md` for the current acceptance and recovery limits. PRs #21 and #22 remain published; staging uses the tested application SHA, and subsequent release-record changes are documentation only. Earlier publication blockers are resolved and must not cause another permission request.
+
+Owner request: separate sandbox/live APIs in Settings, correct API selection by environment, red sandbox banner on every page. Earlier owner authorization allows pushing and deployment; the historical authorization block below is not a new instruction to request permission.
+
+- Worktree: `/workspace/detergents-environments`; branch `feature/environment-api-isolation`, based on local builder `c8c4e21`.
+- Implemented separate environment panels in Settings/Integrations, secure hosting credential links, server-authoritative provider namespaces, webhook selection and a persistent runtime sandbox banner.
+- Local verification: lint, TypeScript, 200 unit/security tests and optimized Next.js webpack build passed. Fresh Prisma generation was interrupted when network approval was cancelled; no fresh generation success is claimed. PostgreSQL/browser checks remain CI work, with new desktop/tablet/mobile environment acceptance added.
+- Render discovery confirms only the DetergentsDelivered staging service exists. Live switch stays disabled without its separately provisioned URL. Staging auto-deploy is off and its configured main branch is older than the manually deployed source.
+- No new migration. Inherited customer-access and builder migrations still require their existing release checks. No hosted data, credentials or payments changed during implementation.
+- See `docs/ENVIRONMENT-APIS.md` for migration: hosted generic credentials need an explicit matching environment binding before rollout, or complete prefixed provider configuration. Do not silently disable an already working provider during deployment.
+- Local implementation commit: `80d3421da99ccbb04253e36ae861ddf0a9acb231`, followed by this checkpoint/banner-offset adjustment.
+- Automatic approval review rejected the atomic push of `feature/storefront-builder` and `feature/environment-api-isolation` to `https://github.com/martejoenterpriseinc-rgb/detergents-delivered.git`. Stated reason: newly committed code was being pushed to an unverified private remote and the user had not explicitly approved publishing to that named destination. No alternate publishing path or reattempt was used. Source remains committed locally; CI, fresh Prisma generation, database/browser acceptance and deployment are pending.
+- Publication approval received: the owner explicitly approved pushing both feature branches to `martejoenterpriseinc-rgb/detergents-delivered`. The approval block is resolved. The shell push then failed because no command-line GitHub credential is installed; publication is proceeding through the authenticated GitHub connector. Preserve the existing stacked branches and reviewed deployed SHA; never force-push or deploy the older main branch.
+
+---
+
+## Previous builder checkpoint (historical)
+
 # DetergentsDelivered build checkpoint
 
 Status: local implementation and local checks only. The changes in this checkpoint are not pushed, deployed or accepted for launch.

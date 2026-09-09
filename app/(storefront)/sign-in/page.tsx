@@ -1,3 +1,4 @@
+import { runtimeGoogleConfigured } from "@/lib/integrations/google";
 import { safeLoginCallback } from "@/lib/domain/login-destination";
 import Link from "next/link";
 import { Card } from "@/components/ui/card";
@@ -5,7 +6,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { PasswordInput } from "@/components/ui/password-input";
-import { googleSignInConfigured } from "@/lib/domain/customer-access";
 import { signInWithCredentials, signInWithGoogle } from "../actions";
 
 export default async function SignInPage({
@@ -15,7 +15,7 @@ export default async function SignInPage({
 }) {
   const params = await searchParams;
   const callbackUrl = safeLoginCallback(params.callbackUrl);
-  const googleEnabled = googleSignInConfigured();
+  const googleEnabled = await runtimeGoogleConfigured();
 
   return (
     <div className="mx-auto flex w-full max-w-md flex-col px-4 py-16">
