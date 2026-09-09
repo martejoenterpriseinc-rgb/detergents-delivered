@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { requireRole } from "@/lib/authz";
 import { integrationStatus } from "@/lib/services/integration-status";
+import { EnvironmentSettings } from "@/components/admin/environment-settings";
 export const dynamic = "force-dynamic";
 const states = {
   "configuration-needed": "Setup required",
@@ -49,6 +50,7 @@ export default async function IntegrationsPage() {
           Refresh status
         </Link>
       </div>
+      <EnvironmentSettings />
       <div className="rounded-2xl border border-sky-200 bg-sky-50 p-5">
         <p className="font-semibold capitalize">
           {status.environment} · Checkout{" "}

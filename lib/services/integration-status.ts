@@ -2,6 +2,7 @@ import { commerceConfiguration } from "@/lib/commerce/config";
 import { googleSignInConfigured, recoveryOrigin } from "@/lib/domain/customer-access";
 import { recoveryEmailConfiguration } from "@/lib/services/password-recovery";
 import { documentReadiness } from "@/lib/business/document-security";
+import { environmentSettings } from "@/lib/integration-environment";
 
 export type IntegrationStatus = {
   id: string;
@@ -172,6 +173,7 @@ export function integrationStatus() {
     },
   ];
   return {
+    apiEnvironments: environmentSettings(),
     environment: ["development", "staging", "production"].includes(
       process.env.APP_ENV ?? "",
     )

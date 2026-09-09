@@ -26,7 +26,7 @@ export async function POST(request: Request) {
     event = stripeClient().webhooks.constructEvent(
       Buffer.concat(parts),
       signature,
-      process.env.STRIPE_WEBHOOK_SECRET!,
+      requireCommerce(true).webhookSecret,
     );
   } catch {
     return new Response("Webhook could not be verified", { status: 400 });

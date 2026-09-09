@@ -11,6 +11,7 @@ afterEach(() => {
 });
 function staging() {
   vi.stubEnv("APP_ENV", "staging");
+  vi.stubEnv("DD_LEGACY_INTEGRATION_ENVIRONMENT", "sandbox");
   vi.stubEnv("AUTH_URL", "https://store.example.test");
   vi.stubEnv("DD_CHECKOUT_ENABLED", "true");
   vi.stubEnv("STRIPE_RESTRICTED_KEY", "rk_test_synthetic-private-key");

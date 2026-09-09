@@ -42,6 +42,7 @@ describe("checkout money and activation", () => {
   it("fails closed for wrong environment keys and missing webhook identity", () => {
     const env = {
       APP_ENV: "staging",
+      DD_LEGACY_INTEGRATION_ENVIRONMENT: "sandbox",
       DD_CHECKOUT_ENABLED: "true",
       AUTH_URL: "https://example.test",
       DD_STRIPE_ACCOUNT_ID: "acct_synthetic",
@@ -68,6 +69,7 @@ describe("checkout money and activation", () => {
 
 it("checkout kill switch leaves verified payment recovery available", () => {
   vi.stubEnv("APP_ENV", "staging");
+  vi.stubEnv("DD_LEGACY_INTEGRATION_ENVIRONMENT", "sandbox");
   vi.stubEnv("DD_CHECKOUT_ENABLED", "false");
   vi.stubEnv("AUTH_URL", "https://example.test");
   vi.stubEnv("DD_STRIPE_ACCOUNT_ID", "acct_synthetic");

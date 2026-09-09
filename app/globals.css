@@ -40,8 +40,8 @@ body {
   background: #103c38;
   color: #c2d7d2;
   position: sticky;
-  top: 0;
-  height: 100vh;
+  top: var(--environment-bar-height, 0px);
+  height: calc(100vh - var(--environment-bar-height, 0px));
   display: flex;
   flex-direction: column;
   padding: 22px 13px 18px;
@@ -1266,7 +1266,7 @@ body {
 }
 .sf-header {
   position: sticky;
-  top: 0;
+  top: var(--environment-bar-height, 0px);
   z-index: 40;
   background: #fffffff5;
   border-bottom: 1px solid #dfebef;
@@ -1838,7 +1838,7 @@ body {
   border-radius: 14px;
   padding: 14px;
   position: sticky;
-  top: 12px;
+  top: calc(var(--environment-bar-height, 0px) + 12px);
 }
 .wb-preview-tools {
   justify-content: space-between;
@@ -2059,4 +2059,30 @@ body {
     width: 96px;
     height: 44px;
   }
+}
+
+/* The environment bar stays above every app surface, including dialogs. */
+html[data-environment="sandbox"],
+html[data-environment="unknown"] {
+  --environment-bar-height: 40px;
+}
+html[data-environment="sandbox"] body,
+html[data-environment="unknown"] body {
+  padding-top: var(--environment-bar-height);
+}
+.environment-bar {
+  position: fixed;
+  inset: 0 0 auto;
+  height: var(--environment-bar-height);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #b91c1c;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+  padding: 4px 12px;
+  text-align: center;
 }

@@ -11,6 +11,7 @@ import {
 describe("customer access boundaries", () => {
   it("requires complete Google configuration", () => {
     const fallback = {
+      APP_ENV: "development",
       GOOGLE_CLIENT_ID: " ",
       GOOGLE_CLIENT_SECRET: "",
       AUTH_GOOGLE_ID: " client ",
@@ -21,15 +22,22 @@ describe("customer access boundaries", () => {
       clientId: "client",
       clientSecret: "secret",
     });
-    expect(googleSignInConfigured({ GOOGLE_CLIENT_ID: "client" })).toBe(false);
+    expect(
+      googleSignInConfigured({ APP_ENV: "development", GOOGLE_CLIENT_ID: "client" }),
+    ).toBe(false);
     expect(
       googleSignInConfigured({
+        APP_ENV: "development",
         GOOGLE_CLIENT_ID: "client",
         GOOGLE_CLIENT_SECRET: "secret",
       }),
     ).toBe(true);
     expect(
-      googleSignInConfigured({ AUTH_GOOGLE_ID: "client", AUTH_GOOGLE_SECRET: "secret" }),
+      googleSignInConfigured({
+        APP_ENV: "development",
+        AUTH_GOOGLE_ID: "client",
+        AUTH_GOOGLE_SECRET: "secret",
+      }),
     ).toBe(true);
   });
   it("rejects unsafe recovery origins independently of request headers", () => {

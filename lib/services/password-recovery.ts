@@ -15,6 +15,7 @@ import {
 } from "@/lib/domain/customer-access";
 import { consumeAuthenticationLimit } from "@/lib/services/authentication-throttle";
 import { rejectTemporaryPassword } from "@/lib/services/customer-registration";
+import { providerConfiguration } from "@/lib/integration-environment";
 
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 function encryptionKey() {
@@ -41,19 +42,19 @@ function decryptToken(bytes: Uint8Array, context: string) {
 }
 
 export function recoveryEmailConfiguration() {
-  const apiKey = process.env.EMAIL_API_KEY?.trim();
-  const from = process.env.EMAIL_FROM?.trim() ?? "";
+  const { values } = providerConfiguration("email");
+  const apiKey = values.EMAIL_API_KEY;
+  const from = values.EMAIL_FROM;
   const match = from.match(/^(.*?)\s*<([^<>]+)>$/);
   const email = accountEmailSchema.safeParse(match?.[2] ?? from);
-  if (process.env.EMAIL_PROVIDER !== "sendgrid" || !apiKey || !email.success)
+  if (values.EMAIL_PROVIDER !== "sendgrid" || !apiKey || !email.success)
     throw new AccountError(
       "Password recovery is temporarily unavailable. Please try again later.",
       503,
     );
   const origin = recoveryOrigin();
   encryptionKey();
-  const allowed = (process.env.DD_EMAIL_ALLOWED_RECIPIENTS ?? "")
-    .split(",")
+  const allowed = values.EMAIL_ALLOWED_RECIPIENTS.split(",")
     .map((value) => value.trim().toLowerCase())
     .filter(Boolean);
   if (process.env.APP_ENV !== "production" && !allowed.length)
