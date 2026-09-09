@@ -60,8 +60,13 @@ export async function customerDirectory(userId: string, input: unknown = {}) {
         take: 1,
       },
       orders: {
-        where: { currency: "USD", status: { in: [...paidStatuses] } },
-        select: { totalCents: true, refunds: { select: { amountCents: true } } },
+        where: { status: { not: "DRAFT" } },
+        select: {
+          status: true,
+          currency: true,
+          totalCents: true,
+          refunds: { select: { amountCents: true } },
+        },
       },
       referredBy: {
         include: {
@@ -93,7 +98,13 @@ export async function customerDirectory(userId: string, input: unknown = {}) {
       lat: a?.lat ?? null,
       lng: a?.lng ?? null,
       totalOrders: c.orders.length,
-      revenueCents: c.orders.reduce((n, o) => n + countedRevenue(o), 0),
+      revenueCents: c.orders
+        .filter(
+          (o) =>
+            o.currency === "USD" &&
+            paidStatuses.includes(o.status as (typeof paidStatuses)[number]),
+        )
+        .reduce((n, o) => n + countedRevenue(o), 0),
       referrer: c.referredBy ? customerName(c.referredBy.referrer) : null,
     };
   });

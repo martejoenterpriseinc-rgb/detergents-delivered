@@ -9,8 +9,8 @@ import { loadProof, proofStorageReady, saveProof } from "./proof-storage";
 import { accountIdentity } from "./customer-account";
 
 async function lockedRoute(tx: Prisma.TransactionClient, actor: string, routeId: string) {
-  const { isAdmin } = await operationsStaff(tx, actor, true);
   await tx.$queryRaw`SELECT id FROM "User" WHERE id=${actor} FOR UPDATE`;
+  const { isAdmin } = await operationsStaff(tx, actor, true);
   await tx.$queryRaw`SELECT id FROM "Route" WHERE id=${routeId} FOR UPDATE`;
   const route = await tx.route.findUnique({
     where: { id: routeId },

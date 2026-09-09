@@ -123,7 +123,7 @@ export function CustomerDirectory({
                   "Email",
                   "City",
                   "Signup date",
-                  "Paid orders",
+                  "Total orders",
                   "Revenue cents",
                   "Referred by",
                 ],
@@ -190,7 +190,7 @@ export function CustomerDirectory({
                 <th>Customer</th>
                 <th>Location</th>
                 <th>Date signed up</th>
-                <th>Paid orders</th>
+                <th>Total orders</th>
                 <th>Total revenue</th>
                 <th>Referred by</th>
                 <th>
@@ -277,8 +277,7 @@ export function CustomerDirectory({
         </div>
       </section>
       <p className="ops-footnote">
-        Revenue includes tax and subtracts recorded refunds. Customer totals count paid
-        orders. Edits update contact details; login email and validated delivery addresses
+        Revenue includes tax and subtracts recorded refunds. Order counts include non-draft orders. Edits update contact details; login email and validated delivery addresses
         retain their separate verification rules.
       </p>
       {edit && (
