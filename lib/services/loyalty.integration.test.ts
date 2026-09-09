@@ -198,6 +198,10 @@ describe("loyalty ledger and live delivery (native isolated PG; synthetic provid
     ]);
     expect((await getLoyalty(s.a.id)).balance.availableCents).toBe(5000);
     expect((await getLoyalty(s.b.id)).balance.availableCents).toBe(500);
+    expect(
+      (await getLoyalty(s.a.id)).entries.every((entry) => entry.order === null),
+    ).toBe(true);
+    expect(JSON.stringify(await getLoyalty(s.a.id))).not.toContain(p.order.number);
     expect(await prisma.rewardEntry.count({ where: { sourceId: s.referral.id } })).toBe(
       2,
     );

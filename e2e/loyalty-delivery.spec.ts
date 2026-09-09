@@ -254,7 +254,7 @@ test("owner entry, matched live tiles, referrals and safe checkout rewards previ
                 brand: "Synthetic",
                 sizeLabel: null,
                 scent: null,
-                unitPriceCents: 1,
+                unitPriceCents: 1200,
                 quantity: 1,
                 imageId: null,
               },

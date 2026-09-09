@@ -1,32 +1,35 @@
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { DemoBanner } from "@/components/storefront/demo-banner";
-
-export default function ReferralsPage() {
+import { programConfig } from "@/lib/services/loyalty";
+import { formatCents } from "@/lib/domain/money";
+export const dynamic = "force-dynamic";
+export default async function ReferralsPage() {
+  const program = await programConfig();
   return (
-    <div className="mx-auto w-full max-w-3xl px-4 py-12">
-      <h1 className="text-3xl font-semibold text-teal-950">Refer a household</h1>
-      <p className="mt-3 text-lg text-teal-800">
-        Neighbors run out of detergent on the same week. When referrals launch, you will
-        share a code and both households will get credit on a future delivery.
-      </p>
-      <DemoBanner className="mt-6">
-        Referral tracking, credits, and promo codes are not live. This page is a
-        placeholder for the Phase 5 program.
-      </DemoBanner>
-      <Card className="mt-6 space-y-4">
-        <p className="font-semibold text-teal-950">How it will work</p>
-        <ol className="list-decimal space-y-2 pl-5 text-sm text-teal-800">
-          <li>You get a short code from your account.</li>
-          <li>A neighbor uses it on their first paid order in our delivery area.</li>
-          <li>Both of you receive store credit after that order is delivered.</li>
-        </ol>
-        <p className="rounded-2xl bg-teal-50 px-4 py-3 font-mono text-sm text-teal-900">
-          Your preview code: CLEAN-PORCH
+    <div className="mx-auto max-w-3xl space-y-6 px-4 py-12">
+      <h1 className="text-3xl font-semibold">Refer a household</h1>
+      <Card className="space-y-4">
+        <h2 className="text-xl font-semibold">Loyalty Club</h2>
+        <p>
+          {program.enabled
+            ? `Earn ${formatCents(program.referrerRewardCents)} when a referred neighbor makes a qualifying first paid purchase. Your neighbor earns ${formatCents(program.friendRewardCents)} for a future purchase.`
+            : "New referrals are currently paused. You can view existing links and earned credits in your account."}
         </p>
-        <Link href="/shop">
-          <Button>Shop while this is in preview</Button>
+        <p className="text-sm text-teal-700">
+          Verified accounts and delivery eligibility are required. Minimum merchandise
+          purchase: {formatCents(program.minimumPurchaseCents)}. Referral credits are
+          awarded after a qualifying paid first order; refunds or cancellations reverse
+          those rewards.
+        </p>
+        <p className="rounded-2xl bg-amber-50 p-4 text-sm">
+          Purchasing and verified payment processing are not connected yet. No reward is
+          earned just by creating, sharing or opening a link.
+        </p>
+        <Link
+          href="/account/loyalty"
+          className="inline-block rounded-full bg-teal-700 px-5 py-3 font-semibold text-white"
+        >
+          Open Loyalty Club
         </Link>
       </Card>
     </div>

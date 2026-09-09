@@ -82,7 +82,7 @@ export async function getLoyalty(userId: string) {
             amountCents: true,
             description: true,
             createdAt: true,
-            order: { select: { number: true } },
+            order: { select: { number: true, customerId: true } },
           },
         }),
         tx.rewardEntry.aggregate({
@@ -96,7 +96,10 @@ export async function getLoyalty(userId: string) {
         verified: Boolean(user.emailVerified),
         balance,
         links,
-        entries,
+        entries: entries.map(({ order, ...item }) => ({
+          ...item,
+          order: order?.customerId === customerId ? { number: order.number } : null,
+        })),
         earnedCents: earned._sum.amountCents ?? 0,
       };
     },
