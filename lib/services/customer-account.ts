@@ -188,6 +188,14 @@ export async function getCustomerOrders(userId: string, orderId?: string) {
         take: 1,
         select: {
           completedAt: true,
+          startedAt: true,
+          arrivedAt: true,
+          deliveryAttempts: {
+            where: { result: "DELIVERED", order: { customerId: user.customer.id } },
+            orderBy: { attemptedAt: "desc" },
+            take: 1,
+            select: { photos: { select: { id: true } } },
+          },
           plannedArriveAt: true,
           route: { select: { serviceDate: true, status: true } },
         },

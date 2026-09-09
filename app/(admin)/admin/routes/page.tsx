@@ -1,11 +1,4 @@
-import { PhasePlaceholder } from "@/components/admin/phase-placeholder";
-
+import { redirect } from "next/navigation";
 export default function Page() {
-  return (
-    <PhasePlaceholder
-      title="Routes"
-      phase={4}
-      summary="Zone scheduling and stop sequencing will live here. The Route tables exist in Prisma."
-    />
-  );
+  redirect("/admin/deliveries");
 }

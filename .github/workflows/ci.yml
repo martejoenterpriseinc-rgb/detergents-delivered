@@ -32,6 +32,8 @@ jobs:
       DATABASE_URL: postgresql://dd_ci:dd_ci_password@localhost:5432/detergents_delivered_ci?schema=public
       AUTH_SECRET: synthetic-ci-only-runtime-secret-do-not-reuse-12345
       DD_ALLOW_DATABASE_TESTS: "true"
+      DD_LOCAL_PROOF_STORAGE: "true"
+      DD_SYNTHETIC_PREVIEW: "true"
       DEMO_MODE: "false"
       SEED_DEMO_CATALOG: "false"
       SEED_BOOTSTRAP_ADMIN: "false"

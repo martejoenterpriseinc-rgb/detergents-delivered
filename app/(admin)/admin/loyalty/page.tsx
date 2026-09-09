@@ -1,3 +1,5 @@
+import { PromotionSettings } from "@/components/loyalty/promotion-settings";
+import { promotionSchema } from "@/lib/domain/promotions";
 import Link from "next/link";
 import { requireRole } from "@/lib/authz";
 import { prisma } from "@/lib/prisma";
@@ -16,6 +18,25 @@ export default async function Page() {
       _sum: { amountCents: true },
     }),
   ]);
+  const promotions = (
+    await prisma.promotion.findMany({ orderBy: { createdAt: "desc" }, take: 200 })
+  ).flatMap((p) => {
+    const parsed = promotionSchema.safeParse({
+      code: p.code,
+      name: p.name,
+      value: p.value,
+      valueType: p.valueType,
+      startsOn: p.startsOn,
+      endsOn: p.endsOn,
+      minimumPurchaseCents: p.minimumPurchaseCents,
+      maximumDiscountCents: p.maximumDiscountCents,
+      audience: p.audience,
+      allowRewards: p.allowRewards,
+      isActive: p.isActive,
+      version: p.version,
+    });
+    return parsed.success ? [parsed.data] : [];
+  });
   return (
     <div className="mx-auto max-w-5xl space-y-6">
       <h1 className="text-3xl font-semibold">Loyalty program</h1>
@@ -49,6 +70,7 @@ export default async function Page() {
         </Link>
       </div>
       <ProgramSettings initial={config} />
+      <PromotionSettings initial={promotions} />
       <Link
         href="/admin/loyalty/rewards"
         className="inline-block font-semibold underline"

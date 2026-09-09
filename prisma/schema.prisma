@@ -61,6 +61,8 @@ model User {
   assignedRouteStops   RouteStop[]            @relation("StopDriver")
   updatedSiteSections  SiteSection[]          @relation("SiteSectionUpdatedBy")
   supportMessages SupportMessage[]
+  deliveryActions DeliveryAction[]
+  customerInvites CustomerInvite[]
 
   @@index([deletedAt])
 }
@@ -146,6 +148,7 @@ model UserRole {
 // ---------------------------------------------------------------------------
 
 model Customer {
+  purchaseApprovedAt DateTime?
   id        String    @id @default(cuid())
   userId    String    @unique
   user      User      @relation(fields: [userId], references: [id])
@@ -174,6 +177,8 @@ model Customer {
 }
 
 model Address {
+  validatedAt DateTime?
+  validationSource String?
   id           String    @id @default(cuid())
   customerId   String
   customer     Customer  @relation(fields: [customerId], references: [id])
@@ -242,6 +247,7 @@ model Category {
 }
 
 model Product {
+  loadKind String @default("OTHER")
   id                    String      @id @default(cuid())
   slug                  String      @unique
   name                  String
@@ -805,6 +811,9 @@ enum RouteStatus {
 }
 
 model Vehicle {
+  capacityUnits Int @default(0)
+  detergentBucketLimit Int @default(0)
+  scentBeadBucketLimit Int @default(0)
   id           String    @id @default(cuid())
   name         String
   plate        String?   @unique
@@ -831,6 +840,8 @@ model Route {
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
 
+  deliveryActions DeliveryAction[]
+  legs RouteLeg[]
   stops        RouteStop[]
   mileageTrips MileageTrip[]
 
@@ -850,10 +861,15 @@ model RouteStop {
   driverUserId    String?
   driver          User?    @relation("StopDriver", fields: [driverUserId], references: [id])
   plannedArriveAt DateTime?
+  startedAt       DateTime?
+  arrivedAt       DateTime?
   completedAt     DateTime?
   createdAt       DateTime @default(now())
 
   deliveryAttempts DeliveryAttempt[]
+  actions DeliveryAction[]
+  legsFrom RouteLeg[] @relation("LegFrom")
+  legsTo RouteLeg[] @relation("LegTo")
 
   @@unique([routeId, sequence])
   @@index([orderId])
@@ -922,6 +938,13 @@ model MileageTrip {
 // ---------------------------------------------------------------------------
 
 model Promotion {
+  minimumPurchaseCents Int @default(0)
+  maximumDiscountCents Int?
+  audience String @default("ALL")
+  allowRewards Boolean @default(false)
+  version Int @default(0)
+  startsOn String?
+  endsOn String?
   id              String    @id @default(cuid())
   code            String    @unique
   name            String
@@ -1181,4 +1204,53 @@ model SupportMessage {
 
   @@unique([ticketId, authorUserId, requestKey])
   @@index([ticketId, createdAt])
+}
+
+
+/// Request receipts prevent replayed driver transitions from creating duplicate events.
+model DeliveryAction {
+  actor User @relation(fields:[actorUserId],references:[id],onDelete:Restrict)
+  route Route @relation(fields:[routeId],references:[id],onDelete:Restrict)
+  stop RouteStop? @relation(fields:[stopId],references:[id],onDelete:Restrict)
+  id String @id @default(cuid())
+  requestKey String @unique
+  actorUserId String
+  routeId String
+  stopId String?
+  action String
+  requestHash String
+  createdAt DateTime @default(now())
+}
+
+/// Each saved route leg keeps planned and actual mileage separate.
+model RouteLeg {
+  route Route @relation(fields:[routeId],references:[id],onDelete:Restrict)
+  fromStop RouteStop? @relation("LegFrom",fields:[fromStopId],references:[id],onDelete:Restrict)
+  toStop RouteStop? @relation("LegTo",fields:[toStopId],references:[id],onDelete:Restrict)
+  id String @id @default(cuid())
+  routeId String
+  sequence Int
+  fromStopId String?
+  toStopId String?
+  plannedMiles Decimal? @db.Decimal(10,2)
+  actualMiles Decimal? @db.Decimal(10,2)
+  source String
+  createdAt DateTime @default(now())
+  @@unique([routeId, sequence])
+}
+
+/// A secure signup invitation is not account approval or email verification.
+model CustomerInvite {
+  createdBy User @relation(fields:[createdByUserId],references:[id],onDelete:Restrict)
+  id String @id @default(cuid())
+  email String
+  firstName String
+  token String @unique
+  requestKey String @unique
+  requestHash String
+  createdByUserId String
+  status String @default("CREATED")
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  @@index([email])
 }

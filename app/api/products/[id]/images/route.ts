@@ -1,40 +1,58 @@
-import { z } from "zod";
-import { requireApiRole } from "@/lib/api-auth";
-import { serviceErrorResponse } from "@/lib/api-errors";
-import { addProductImage } from "@/lib/services/catalog";
-
-export const dynamic = "force-dynamic";
-
-const imageSchema = z.object({
-  storageKey: z.string().min(1),
-  productVariantId: z.string().optional(),
-  alt: z.string().optional(),
-  sortOrder: z.number().int().optional(),
-  isPrimary: z.boolean().optional(),
-});
-
-export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await requireApiRole(["ADMIN", "INVENTORY", "SUPER_ADMIN"]);
-  if (gate.error) return gate.error;
-  const { id } = await params;
-  const body = imageSchema.safeParse(await request.json().catch(() => null));
-  if (!body.success) {
-    return Response.json({ error: "invalid_body", details: body.error.flatten() }, { status: 400 });
-  }
+import { prisma } from "@/lib/prisma";
+import { accountRequest, accountJson, accountFailure } from "@/lib/account-api";
+import { AccountError } from "@/lib/domain/account";
+import { accountIdentity } from "@/lib/services/customer-account";
+import { saveCatalogImage } from "@/lib/services/catalog-images";
+import { boundedImageForm } from "@/lib/multipart-form";
+export async function POST(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
   try {
-    const image = await addProductImage(
-      {
-        productId: id,
-        productVariantId: body.data.productVariantId,
-        storageKey: body.data.storageKey,
-        alt: body.data.alt,
-        sortOrder: body.data.sortOrder,
-        isPrimary: body.data.isPrimary,
+    const userId = await accountRequest();
+    const user = await accountIdentity(prisma, userId);
+    if (
+      !user.userRoles.some(({ role }) =>
+        ["ADMIN", "INVENTORY", "SUPER_ADMIN"].includes(role.code),
+      )
+    )
+      throw new AccountError("Catalog manager access required.", 403);
+    const { id } = await params;
+    const form = await boundedImageForm(request);
+    const file = form.get("file");
+    if (!(file instanceof File) || !file.size) throw new AccountError("Select an image.");
+    const image = await prisma.$transaction(
+      async (tx) => {
+        await tx.$queryRaw`SELECT id FROM "Product" WHERE id = ${id} FOR UPDATE`;
+        const product = await tx.product.findFirst({ where: { id, deletedAt: null } });
+        if (!product) throw new AccountError("Product not found.", 404);
+        const stored = await saveCatalogImage(Buffer.from(await file.arrayBuffer()));
+        await tx.productImage.updateMany({
+          where: { productId: id },
+          data: { isPrimary: false },
+        });
+        const saved = await tx.productImage.create({
+          data: {
+            productId: id,
+            storageKey: stored.storageKey,
+            alt: product.name,
+            isPrimary: true,
+          },
+        });
+        await tx.auditLog.create({
+          data: {
+            actorUserId: userId,
+            action: "catalog.image.saved",
+            entityType: "ProductImage",
+            entityId: saved.id,
+          },
+        });
+        return { id: saved.id };
       },
-      gate.session.user.id,
+      { timeout: 15000 },
     );
-    return Response.json({ image }, { status: 201 });
+    return accountJson({ image }, 201);
   } catch (error) {
-    return serviceErrorResponse(error);
+    return accountFailure(error);
   }
 }

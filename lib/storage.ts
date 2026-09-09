@@ -24,13 +24,23 @@ export async function putLocalObject(input: {
   bytes: Buffer;
   filename: string;
   contentType?: string;
-}): Promise<{ storageKey: string; byteSize: number; contentType?: string; filename: string }> {
-  const safeName = input.filename.replace(/[^a-zA-Z0-9._-]+/g, "-").slice(0, 80) || "file";
+  namespace?: "catalog";
+}): Promise<{
+  storageKey: string;
+  byteSize: number;
+  contentType?: string;
+  filename: string;
+}> {
+  const safeName =
+    input.filename.replace(/[^a-zA-Z0-9._-]+/g, "-").slice(0, 80) || "file";
   const now = new Date();
   const year = String(now.getUTCFullYear());
   const month = String(now.getUTCMonth() + 1).padStart(2, "0");
-  const storageKey = `${LOCAL_STORAGE_PREFIX}${year}/${month}/${randomUUID()}-${safeName}`;
-  const destFromKey = path.join(UPLOADS_DIR, storageKey.slice(LOCAL_STORAGE_PREFIX.length));
+  const storageKey = `${LOCAL_STORAGE_PREFIX}${input.namespace ? input.namespace + "/" : ""}${year}/${month}/${randomUUID()}-${safeName}`;
+  const destFromKey = path.join(
+    UPLOADS_DIR,
+    storageKey.slice(LOCAL_STORAGE_PREFIX.length),
+  );
   await mkdir(path.dirname(destFromKey), { recursive: true });
   await writeFile(destFromKey, input.bytes);
   return {

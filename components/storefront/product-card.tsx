@@ -24,6 +24,13 @@ export function ProductCard({ product }: { product: ShopProductCard }) {
     .map((variant) => variant.salePrice?.amountCents ?? variant.retailPrice?.amountCents)
     .filter((amount): amount is number => typeof amount === "number");
   const lowest = priceCents.length > 0 ? Math.min(...priceCents) : null;
+  const lowestVariant = product.variants.find(
+    (v) => (v.salePrice?.amountCents ?? v.retailPrice?.amountCents) === lowest,
+  );
+  const saving =
+    lowest !== null
+      ? Math.max(0, (lowestVariant?.retailPrice?.amountCents ?? lowest) - lowest)
+      : 0;
   const image = product.images[0] ?? product.variants[0]?.images[0];
   const available = product.variants.reduce((sum, variant) => sum + variant.available, 0);
 
@@ -41,6 +48,11 @@ export function ProductCard({ product }: { product: ShopProductCard }) {
           {product.brand}
         </p>
         <p className="text-lg leading-snug font-semibold text-teal-950">{product.name}</p>
+        {saving > 0 && (
+          <p className="text-sm font-semibold text-teal-700">
+            Save {formatCents(saving)} on this option
+          </p>
+        )}
         <p className="mt-auto text-sm text-teal-800">
           {lowest !== null ? `From ${formatCents(lowest)}` : "See details"}
           {" · "}

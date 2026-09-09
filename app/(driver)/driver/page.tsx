@@ -1,19 +1,21 @@
-import { Card } from "@/components/ui/card";
-
-export default function DriverHomePage() {
+import { requireRole } from "@/lib/authz";
+import { dailyQueue } from "@/lib/services/operations";
+import { businessDate, dateSchema } from "@/lib/domain/operations";
+import { DeliveryQueue } from "@/components/admin/delivery-queue";
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>;
+}) {
+  const session = await requireRole("DRIVER", "ADMIN", "SUPER_ADMIN");
+  const q = await searchParams;
+  const d = dateSchema.safeParse(q.date);
+  const data = await dailyQueue(session.user.id, d.success ? d.data : businessDate());
   return (
-    <div className="space-y-4">
-      <h1 className="text-2xl font-semibold text-teal-950">Today&apos;s route</h1>
-      <Card>
-        <p className="text-sm font-semibold uppercase tracking-wide text-amber-700">
-          Phase 4
-        </p>
-        <p className="mt-2 text-sm text-teal-800">
-          Driver mode is a shell only. Stops, photos, and mileage capture are
-          not implemented. This screen exists so /driver is a first-class mode
-          of the same app.
-        </p>
-      </Card>
-    </div>
+    <DeliveryQueue
+      key={`${data.date}-${q.status ?? "all"}`}
+      initial={data}
+      initialStatus={q.status === "completed" ? "completed" : "all"}
+    />
   );
 }

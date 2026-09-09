@@ -41,6 +41,31 @@ describe("runtime configuration", () => {
   ])("rejects unsafe configuration %j", (overrides) => {
     expect(() => validateRuntimeConfig({ ...valid, ...overrides })).toThrow();
   });
+  it.each([
+    "DD_ALLOW_DATABASE_TESTS",
+    "DD_SYNTHETIC_PREVIEW",
+    "DD_LOCAL_PROOF_STORAGE",
+    "DD_LOCAL_CATALOG_STORAGE",
+  ])("rejects test-only production flag %s", (flag) => {
+    expect(() =>
+      validateRuntimeConfig({ ...valid, APP_ENV: "production", [flag]: "true" }),
+    ).toThrow();
+  });
+  it("rejects sandbox resources and test Stripe keys in production", () => {
+    expect(() => validateRuntimeConfig({ ...valid, APP_ENV: "production" })).toThrow();
+    const live = {
+      ...valid,
+      APP_ENV: "production",
+      DATABASE_URL: "postgresql://synthetic:synthetic@dd-live/dd_live",
+      DD_DATABASE_HOST: "dd-live",
+      DD_DATABASE_NAME: "dd_live",
+      AUTH_URL: "https://shop.example.invalid",
+    };
+    expect(() => validateRuntimeConfig(live)).not.toThrow();
+    expect(() =>
+      validateRuntimeConfig({ ...live, STRIPE_SECRET_KEY: "sk_test_synthetic" }),
+    ).toThrow();
+  });
   it("never discloses a rejected connection string", () => {
     expect(() =>
       validateRuntimeConfig({

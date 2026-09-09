@@ -12,9 +12,10 @@ const createProductSchema = z.object({
   brand: z.string().min(1).max(120),
   description: z.string().optional(),
   categoryId: z.string().optional(),
+  loadKind: z.enum(["OTHER", "DETERGENT", "SCENT_BEADS"]).optional(),
   form: z.enum(["LIQUID", "POWDER", "PODS", "SHEETS", "OTHER"]).optional(),
   taxCategory: z.string().optional(),
-  deliveryCapacityUnits: z.number().int().min(0).optional(),
+  deliveryCapacityUnits: z.number().int().min(1).max(1000).optional(),
   allowPreorder: z.boolean().optional(),
   isActive: z.boolean().optional(),
   websiteVisible: z.boolean().optional(),
@@ -28,7 +29,10 @@ export async function GET() {
   const products = await prisma.product.findMany({
     where: { deletedAt: null },
     include: {
-      variants: { where: { deletedAt: null }, include: { prices: true, inventoryBalance: true } },
+      variants: {
+        where: { deletedAt: null },
+        include: { prices: true, inventoryBalance: true },
+      },
       category: true,
       images: true,
     },
@@ -43,7 +47,10 @@ export async function POST(request: Request) {
 
   const body = createProductSchema.safeParse(await request.json().catch(() => null));
   if (!body.success) {
-    return Response.json({ error: "invalid_body", details: body.error.flatten() }, { status: 400 });
+    return Response.json(
+      { error: "invalid_body", details: body.error.flatten() },
+      { status: 400 },
+    );
   }
 
   try {

@@ -183,7 +183,7 @@ test("customer account, order support, staff KPIs, failed saves, and password re
     await expect(adminPage).toHaveURL(/\/admin$/);
     await adminPage.goto("/admin");
     await adminPage
-      .getByRole("link", { name: /Support tickets.*Active tickets/ })
+      .getByRole("link", { name: /Support tickets.*View support queue/ })
       .click();
     await expect(adminPage).toHaveURL(/\/admin\/support\?status=ACTIVE/);
     await adminPage.getByLabel("Lookup", { exact: true }).fill(marker);

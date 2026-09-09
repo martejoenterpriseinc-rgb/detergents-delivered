@@ -15,11 +15,8 @@ import {
   weeklyDeliverySummary,
   type DeliverySettings,
 } from "@/lib/domain/delivery-schedule";
-import {
-  deliveryZipsForCounties,
-  deliveryZonesForCounties,
-  EXAMPLE_DELIVERY_ZIP,
-} from "@/lib/delivery-area";
+import { EXAMPLE_DELIVERY_ZIP } from "@/lib/delivery-area";
+import { zonePostalCodes } from "@/lib/domain/launch";
 
 export type PublicDeliveryInfo = {
   settings: DeliverySettings;
@@ -31,7 +28,7 @@ export type PublicDeliveryInfo = {
   nextWindowLabel: string | null;
   exampleZip: string;
   exampleZips: string[];
-  zones: ReturnType<typeof deliveryZonesForCounties>;
+  zones: { code: string; name: string; towns: string; zips: string[] }[];
   noSameDaySummary: string;
 };
 
@@ -95,8 +92,19 @@ export async function getPublicDeliveryInfo(
   const settings = await getDeliverySettings();
   const slot = nextDeliverySlot(settings, now);
   const names = enabledCountyNames(settings);
-  const zones = deliveryZonesForCounties(settings.enabledCountyCodes);
-  const zips = deliveryZipsForCounties(settings.enabledCountyCodes);
+  const configured = await prisma.deliveryZone.findMany({
+    where: { isActive: true },
+    orderBy: { name: "asc" },
+  });
+  const zones = configured
+    .map((zone) => ({
+      code: zone.slug,
+      name: zone.name,
+      towns: "Only listed ZIP codes are eligible for address validation.",
+      zips: zonePostalCodes(zone.boundaryJson),
+    }))
+    .filter((zone) => zone.zips.length > 0);
+  const zips = zones.flatMap((zone) => zone.zips);
   return {
     settings,
     enabledCountyCodes: settings.enabledCountyCodes,

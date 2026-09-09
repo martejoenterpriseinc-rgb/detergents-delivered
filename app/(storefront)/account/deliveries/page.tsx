@@ -12,8 +12,9 @@ export default async function Page() {
       </Link>
       <h1 className="text-3xl font-semibold">Delivery status</h1>
       <p className="text-sm text-teal-800">
-        Updates come from your saved orders and route schedule. Live driver tracking, Waze
-        ETA, and private delivery photo viewing are not connected yet.
+        Updates come from your saved orders and driver actions. Completed deliveries
+        include their private proof photo when available. Arrival estimates use the saved
+        route schedule; Waze provides navigation only.
       </p>
       <AccountOrders orders={orders} />
     </div>
