@@ -1,5 +1,9 @@
 import Link from "next/link";
-import { z } from "zod";
+import {
+  rewardsFilterSchema,
+  rewardsWhere,
+  loyaltyOrder,
+} from "@/lib/domain/loyalty-filters";
 import { requireRole } from "@/lib/authz";
 import { prisma } from "@/lib/prisma";
 import { Card } from "@/components/ui/card";
@@ -10,39 +14,26 @@ export default async function Page({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   await requireRole("ADMIN", "SUPER_ADMIN");
-  const parsed = z
-    .object({
-      kind: z
-        .enum(["ALL", "REFERRAL", "REDEMPTION", "REVERSAL", "RESTORE"])
-        .default("ALL"),
-      q: z.string().trim().max(100).default(""),
-      page: z.coerce.number().int().min(1).max(10000).default(1),
-    })
-    .safeParse(await searchParams);
+  const parsed = rewardsFilterSchema.safeParse(await searchParams);
   if (!parsed.success)
     return (
       <p>
         Invalid filters. <Link href="/admin/loyalty/rewards">Clear filters</Link>
       </p>
     );
-  const { kind, q, page } = parsed.data;
-  const where = {
-    ...(kind === "ALL" ? {} : { kind }),
-    ...(q
-      ? { customer: { user: { email: { contains: q, mode: "insensitive" as const } } } }
-      : {}),
-  };
+  const { kind, q, page, sort } = parsed.data;
+  const where = rewardsWhere(parsed.data);
   const [rows, count] = await Promise.all([
     prisma.rewardEntry.findMany({
       where,
-      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      orderBy: loyaltyOrder(sort),
       skip: (page - 1) * 25,
       take: 25,
       include: { customer: { include: { user: { select: { email: true } } } } },
     }),
     prisma.rewardEntry.count({ where }),
   ]);
-  const query = new URLSearchParams({ kind, q });
+  const query = new URLSearchParams({ kind, q, sort });
   return (
     <div className="mx-auto max-w-5xl space-y-5">
       <Link href="/admin/loyalty">← Loyalty program</Link>
@@ -50,7 +41,7 @@ export default async function Page({
       <p>
         Original entries are never edited or deleted. Corrections appear as new entries.
       </p>
-      <form className="grid gap-3 sm:grid-cols-3">
+      <form className="grid gap-3 sm:grid-cols-4">
         <label>
           Account lookup
           <input
@@ -71,11 +62,30 @@ export default async function Page({
             ))}
           </select>
         </label>
+        <label>
+          Sort
+          <select
+            name="sort"
+            defaultValue={sort}
+            className="mt-1 w-full rounded-xl border p-3"
+          >
+            <option value="newest">Newest first</option>
+            <option value="oldest">Oldest first</option>
+          </select>
+        </label>
         <button className="self-end rounded-full bg-teal-700 p-3 text-white">
           Apply filters
         </button>
       </form>
-      <p>{count} matching entries · newest first</p>
+      <p>
+        {count} matching entries · {sort === "newest" ? "newest first" : "oldest first"}
+      </p>
+      <a
+        className="inline-block rounded-full border border-teal-200 px-4 py-2"
+        href={`/api/admin/loyalty/export?scope=rewards&${query}`}
+      >
+        Export filtered CSV
+      </a>
       {rows.map((r) => (
         <Card key={r.id}>
           <div className="flex flex-wrap justify-between gap-3">

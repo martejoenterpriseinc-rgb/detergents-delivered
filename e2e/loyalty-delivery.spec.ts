@@ -166,6 +166,30 @@ test("owner entry, matched live tiles, referrals and safe checkout rewards previ
         db.rewardEntry.count({ where: { customerId: a.customer!.id, kind: "REFERRAL" } }),
       )
       .toBe(1);
+    await ownerPage.getByLabel("Status", { exact: true }).selectOption("REWARDED");
+    await ownerPage.getByLabel("Sort", { exact: true }).selectOption("oldest");
+    await ownerPage.getByRole("button", { name: "Apply filters", exact: true }).click();
+    await expect(ownerPage.getByLabel("Sort", { exact: true })).toHaveValue("oldest");
+    const csvUrl = await ownerPage
+      .getByRole("link", { name: "Export filtered CSV" })
+      .getAttribute("href");
+    const referralCsv = await ownerPage.request.get(csvUrl!);
+    expect(referralCsv.status()).toBe(200);
+    const referralText = await referralCsv.text();
+    expect(referralText).toContain(referral.id);
+    expect(referralText).toContain(b.email);
+    expect(referralText).toContain("REWARDED");
+    expect(referralText.split("\r\n")).toHaveLength(2);
+    expect((await page.request.get(csvUrl!)).status()).toBe(403);
+    const rewardCsv = await ownerPage.request.get(
+      `/api/admin/loyalty/export?scope=rewards&kind=REFERRAL&q=${encodeURIComponent(a.email)}&sort=oldest`,
+    );
+    expect(rewardCsv.status()).toBe(200);
+    const rewardText = await rewardCsv.text();
+    expect(rewardText).toContain(a.email);
+    expect(rewardText).toContain('"5000"');
+    expect(rewardText).not.toContain(b.email);
+    expect(rewardText.split("\r\n")).toHaveLength(2);
     await page.reload();
     await expect(page.getByTestId("reward-balance")).toHaveText("$50.00");
     await expect(page.getByText("Reward earned", { exact: true })).toBeVisible();
@@ -267,9 +291,12 @@ test("owner entry, matched live tiles, referrals and safe checkout rewards previ
     );
     await page.goto("/checkout");
     await page.getByRole("button", { name: "Apply rewards", exact: true }).click();
-    await expect(page.getByRole("status")).toContainText("$12.00 would apply");
-    await expect(page.getByRole("status")).toContainText("$38.00 would remain");
-    await expect(page.getByRole("status")).toContainText("No rewards have been used");
+    const rewardsNotice = page
+      .getByRole("status")
+      .filter({ hasText: "Rewards preview:" });
+    await expect(rewardsNotice).toContainText("$12.00 would apply");
+    await expect(rewardsNotice).toContainText("$38.00 would remain");
+    await expect(rewardsNotice).toContainText("No rewards have been used");
     await expect(
       page.getByRole("button", { name: "Checkout not available yet" }),
     ).toBeDisabled();
@@ -300,6 +327,7 @@ test("owner entry, matched live tiles, referrals and safe checkout rewards previ
         customerViewSameIdentity: true,
         rolesPreserved: true,
         customerIsolation: true,
+        filteredCsvAndAdminOnlyExport: true,
         liveStatusPolling: true,
         failedPollRecovery: true,
         matchingTileSizes: true,
