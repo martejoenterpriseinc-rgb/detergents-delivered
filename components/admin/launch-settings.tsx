@@ -242,7 +242,7 @@ export function LaunchSettings({ initial }: { initial: Workspace }) {
         </button>
       </form>
       <section className="space-y-4 rounded-3xl border border-teal-100 bg-white p-6">
-        <h2 className="text-xl font-semibold">Monthly calendar — unsaved preview</h2>
+        <h2 className="text-xl font-semibold">Monthly calendar — cadence preview</h2>
         <label>
           Month{" "}
           <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
