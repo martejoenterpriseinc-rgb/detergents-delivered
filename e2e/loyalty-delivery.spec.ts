@@ -75,7 +75,14 @@ test("owner entry, matched live tiles, referrals and safe checkout rewards previ
     await ownerPage.getByRole("link", { name: "Back to admin", exact: true }).click();
     await expect(ownerPage).toHaveURL(/\/admin$/);
     expect(await db.userRole.count({ where: { userId: owner.id } })).toBe(2);
-    await ownerPage.getByRole("link", { name: "Loyalty program", exact: true }).click();
+    await ownerPage
+      .getByRole("navigation", { name: "Admin navigation" })
+      .getByRole("link", { name: "Customers", exact: true })
+      .click();
+    await ownerPage
+      .getByRole("navigation", { name: "Workspace tools" })
+      .getByRole("link", { name: "Loyalty program", exact: true })
+      .click();
     await ownerPage.getByLabel("Enable new referrals").check();
     await ownerPage.getByLabel("Referrer reward ($)", { exact: true }).fill("50.00");
     await ownerPage
