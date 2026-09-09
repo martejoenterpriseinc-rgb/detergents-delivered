@@ -166,6 +166,10 @@ afterEach(async () => {
   vi.restoreAllMocks();
   vi.unstubAllEnvs();
   if (f) {
+    await prisma.route.updateMany({
+      where: { vehicleId: f.vehicle.id },
+      data: { status: "CANCELLED" },
+    });
     await prisma.deliveryZone.update({
       where: { id: f.zone.id },
       data: { isActive: false },
