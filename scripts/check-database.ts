@@ -4,6 +4,10 @@ import { resolve, join } from "node:path";
 import { PrismaClient } from "@prisma/client";
 import { validateRuntimeConfig } from "../lib/runtime-config";
 import { assessDatabaseHistory, type AppliedMigration } from "../lib/database-history";
+import {
+  ENVIRONMENT_KEY,
+  validateDatabaseEnvironment,
+} from "../lib/database-environment";
 
 async function main() {
   validateRuntimeConfig(process.env);
@@ -29,6 +33,14 @@ async function main() {
           Array<{ table_name: string }>
         >`SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name`;
         const names = tables.map((table) => table.table_name);
+        const marker = names.includes("Setting")
+          ? await tx.setting.findUnique({ where: { key: ENVIRONMENT_KEY } })
+          : null;
+        validateDatabaseEnvironment(
+          marker?.valueJson,
+          process.env.APP_ENV!,
+          decodeURIComponent(new URL(process.env.DATABASE_URL!).pathname.slice(1)),
+        );
         const applied = names.includes("_prisma_migrations")
           ? await tx.$queryRaw<
               AppliedMigration[]

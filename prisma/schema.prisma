@@ -148,6 +148,7 @@ model UserRole {
 // ---------------------------------------------------------------------------
 
 model Customer {
+  purchaseApprovedAt DateTime?
   id        String    @id @default(cuid())
   userId    String    @unique
   user      User      @relation(fields: [userId], references: [id])
@@ -176,6 +177,8 @@ model Customer {
 }
 
 model Address {
+  validatedAt DateTime?
+  validationSource String?
   id           String    @id @default(cuid())
   customerId   String
   customer     Customer  @relation(fields: [customerId], references: [id])
@@ -244,6 +247,7 @@ model Category {
 }
 
 model Product {
+  loadKind String @default("OTHER")
   id                    String      @id @default(cuid())
   slug                  String      @unique
   name                  String
@@ -807,6 +811,9 @@ enum RouteStatus {
 }
 
 model Vehicle {
+  capacityUnits Int @default(0)
+  detergentBucketLimit Int @default(0)
+  scentBeadBucketLimit Int @default(0)
   id           String    @id @default(cuid())
   name         String
   plate        String?   @unique
@@ -931,6 +938,13 @@ model MileageTrip {
 // ---------------------------------------------------------------------------
 
 model Promotion {
+  minimumPurchaseCents Int @default(0)
+  maximumDiscountCents Int?
+  audience String @default("ALL")
+  allowRewards Boolean @default(false)
+  version Int @default(0)
+  startsOn String?
+  endsOn String?
   id              String    @id @default(cuid())
   code            String    @unique
   name            String

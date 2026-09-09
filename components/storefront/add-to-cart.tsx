@@ -1,5 +1,6 @@
 "use client";
 
+import { PurchaseCheck } from "@/components/storefront/purchase-check";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -17,6 +18,7 @@ export type AddToCartVariant = {
   unitPriceCents: number | null;
   subscriptionCents: number | null;
   imageId: string | null;
+  retailCents?: number | null;
 };
 
 export function AddToCart({
@@ -36,6 +38,7 @@ export function AddToCart({
   const { addLine } = useCart();
   const [variantId, setVariantId] = useState(variants[0]?.id ?? "");
   const [quantity, setQuantity] = useState(1);
+  const [eligible, setEligible] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   const selected = useMemo(
@@ -51,10 +54,16 @@ export function AddToCart({
     );
   }
 
-  const canAdd = selected.unitPriceCents !== null && selected.available > 0;
+  const canAdd = selected.unitPriceCents !== null && selected.available > 0 && eligible;
 
   function handleAdd(goToCart = false) {
-    if (!selected?.unitPriceCents) return;
+    if (
+      !canAdd ||
+      !selected?.unitPriceCents ||
+      !Number.isInteger(quantity) ||
+      quantity > selected.available
+    )
+      return;
     const line: CartLine = {
       variantId: selected.id,
       productId,
@@ -76,6 +85,7 @@ export function AddToCart({
 
   return (
     <div className="space-y-4">
+      <PurchaseCheck onEligibility={setEligible} />
       <fieldset className="space-y-2">
         <legend className="text-sm font-medium text-teal-950">Choose a size</legend>
         <div className="grid gap-2">
@@ -114,6 +124,14 @@ export function AddToCart({
                   <span className="block text-base font-semibold text-teal-950">
                     {price ? formatCents(price) : "—"}
                   </span>
+                  {variant.retailCents != null &&
+                    price != null &&
+                    variant.retailCents > price && (
+                      <span className="block text-xs text-teal-700">
+                        <s>{formatCents(variant.retailCents)}</s> · Save{" "}
+                        {formatCents(variant.retailCents - price)}
+                      </span>
+                    )}
                   {variant.subscriptionCents ? (
                     <span className="block text-xs text-teal-700">
                       Subscribe {formatCents(variant.subscriptionCents)}
@@ -144,14 +162,16 @@ export function AddToCart({
         <Button
           type="button"
           variant="outline"
-          disabled={!canAdd}
-          onClick={() => handleAdd(true)}
+          disabled
+          title="Ordering opens after payment, tax and delivery reservations pass testing."
         >
-          Add & view cart
+          Buy it now
         </Button>
       </div>
       <p className="text-xs text-teal-700">
-        Client cart for this mockup — nothing is charged and inventory is not reserved.
+        Buy it now opens after checkout is connected. Account approval, validated address,
+        stock and delivery capacity will be rechecked before payment. No payment or
+        reservation is made here.
       </p>
       {message ? <p className="text-sm font-medium text-teal-800">{message}</p> : null}
     </div>

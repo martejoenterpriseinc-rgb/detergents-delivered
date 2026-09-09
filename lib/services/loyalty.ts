@@ -10,6 +10,8 @@ import {
   rewardQuoteSchema,
 } from "@/lib/domain/loyalty";
 import { accountIdentity, customerIdentity } from "./customer-account";
+import { pickCurrentPrice } from "@/lib/prices";
+import { quotePromotion } from "./promotions";
 
 export async function loyaltyAdmin(db: Prisma.TransactionClient, userId: string) {
   const user = await accountIdentity(db, userId);
@@ -286,7 +288,7 @@ export async function publicReferral(token: string) {
     : null;
 }
 export async function quoteCartRewards(userId: string, input: unknown) {
-  const { lines } = rewardQuoteSchema.parse(input);
+  const { lines, promotionCode, applyRewards } = rewardQuoteSchema.parse(input);
   if (new Set(lines.map((l) => l.variantId)).size !== lines.length)
     throw new AccountError("Duplicate cart lines.");
   return prisma.$transaction(
@@ -303,29 +305,49 @@ export async function quoteCartRewards(userId: string, input: unknown) {
         include: {
           prices: {
             where: {
-              kind: "RETAIL",
+              kind: { in: ["RETAIL", "SALE"] },
               currency: "USD",
               startsAt: { lte: new Date() },
               OR: [{ endsAt: null }, { endsAt: { gt: new Date() } }],
             },
             orderBy: [{ startsAt: "desc" }, { createdAt: "desc" }, { id: "desc" }],
-            take: 1,
           },
         },
       });
       let merchandiseCents = 0;
       for (const line of lines) {
         const variant = variants.find((v) => v.id === line.variantId);
-        if (!variant?.prices[0] || variant.prices[0].amountCents < 0)
+        const selling =
+          variant &&
+          (pickCurrentPrice(variant.prices, new Date(), "SALE") ??
+            pickCurrentPrice(variant.prices));
+        if (!selling || selling.amountCents <= 0)
           throw new AccountError(
             "A cart product is unavailable. Refresh your cart.",
             409,
           );
-        merchandiseCents += variant.prices[0].amountCents * line.quantity;
+        merchandiseCents += selling.amountCents * line.quantity;
+        if (!Number.isSafeInteger(merchandiseCents) || merchandiseCents > 100000000)
+          throw new AccountError("Cart amount exceeds the supported limit.");
       }
       const balance = await rewardBalance(tx, customer.id);
+      const promotion = await quotePromotion(
+        tx,
+        customer.id,
+        promotionCode,
+        merchandiseCents,
+      );
+      const canUseRewards = applyRewards && promotion.allowRewards;
+      const allocation = rewardAllocation(
+        canUseRewards ? balance.availableCents : 0,
+        merchandiseCents - promotion.discountCents,
+      );
       return {
-        ...rewardAllocation(balance.availableCents, merchandiseCents),
+        ...allocation,
+        remainingCents: balance.availableCents - allocation.appliedCents,
+        discountCents: promotion.discountCents,
+        promotion: promotion.promotion,
+        rewardsAllowed: promotion.allowRewards,
         availableCents: balance.availableCents,
         merchandiseCents,
         previewOnly: true as const,

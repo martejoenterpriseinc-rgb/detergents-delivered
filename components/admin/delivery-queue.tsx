@@ -1,6 +1,7 @@
 "use client";
 /* eslint-disable @next/next/no-img-element */
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import {
   Camera,
   Check,
@@ -149,6 +150,16 @@ export function DeliveryQueue({
         start={false}
         invite={data.canManage}
       />
+      {data.canManage && (
+        <div className="flex flex-wrap gap-3">
+          <Link className="ops-button secondary" href="/admin/settings/launch">
+            Delivery settings · Launch & capacity
+          </Link>
+          <Link className="ops-button secondary" href="/admin/deliveries/launch">
+            Review launch demand
+          </Link>
+        </div>
+      )}
       <div className="ops-toolbar">
         <DatePicker
           date={data.date}

@@ -55,6 +55,7 @@ export default async function ShopProductPage({
                   sizeLabel: variant.sizeLabel,
                   scent: variant.scent,
                   available: variant.available,
+                  retailCents: variant.retailPrice?.amountCents ?? null,
                   unitPriceCents: selling?.amountCents ?? null,
                   subscriptionCents: variant.subscriptionPrice?.amountCents ?? null,
                   imageId: variant.images[0]?.id ?? image?.id ?? null,

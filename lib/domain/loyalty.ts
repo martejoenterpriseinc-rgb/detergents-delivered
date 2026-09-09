@@ -31,6 +31,13 @@ export const loyaltyActionSchema = z.discriminatedUnion("action", [
 ]);
 export const rewardQuoteSchema = z
   .object({
+    promotionCode: z
+      .string()
+      .trim()
+      .toUpperCase()
+      .regex(/^[A-Z0-9_-]{3,32}$/)
+      .optional(),
+    applyRewards: z.boolean().default(true),
     lines: z
       .array(
         z

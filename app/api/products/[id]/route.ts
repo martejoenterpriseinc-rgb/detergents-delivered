@@ -12,16 +12,20 @@ const updateSchema = z.object({
   brand: z.string().min(1).max(120).optional(),
   description: z.string().nullable().optional(),
   categoryId: z.string().nullable().optional(),
+  loadKind: z.enum(["OTHER", "DETERGENT", "SCENT_BEADS"]).optional(),
   form: z.enum(["LIQUID", "POWDER", "PODS", "SHEETS", "OTHER"]).optional(),
   taxCategory: z.string().nullable().optional(),
-  deliveryCapacityUnits: z.number().int().min(0).optional(),
+  deliveryCapacityUnits: z.number().int().min(1).max(1000).optional(),
   allowPreorder: z.boolean().optional(),
   isActive: z.boolean().optional(),
   websiteVisible: z.boolean().optional(),
   featured: z.boolean().optional(),
 });
 
-export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
   const gate = await requireApiRole(["ADMIN", "INVENTORY", "CPA", "SUPER_ADMIN"]);
   if (gate.error) return gate.error;
   const { id } = await params;
@@ -46,13 +50,19 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   return Response.json({ product });
 }
 
-export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function PATCH(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
   const gate = await requireApiRole(["ADMIN", "INVENTORY", "SUPER_ADMIN"]);
   if (gate.error) return gate.error;
   const { id } = await params;
   const body = updateSchema.safeParse(await request.json().catch(() => null));
   if (!body.success) {
-    return Response.json({ error: "invalid_body", details: body.error.flatten() }, { status: 400 });
+    return Response.json(
+      { error: "invalid_body", details: body.error.flatten() },
+      { status: 400 },
+    );
   }
   try {
     const product = await updateProduct(id, body.data, gate.session.user.id);
@@ -62,7 +72,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
 }
 
-export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
   const gate = await requireApiRole(["ADMIN", "INVENTORY", "SUPER_ADMIN"]);
   if (gate.error) return gate.error;
   const { id } = await params;

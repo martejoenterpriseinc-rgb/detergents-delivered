@@ -1,7 +1,9 @@
 import type { PriceKind, ProductPrice } from "@prisma/client";
 
 export function pickCurrentPrice(
-  prices: Pick<ProductPrice, "kind" | "amountCents" | "startsAt" | "endsAt">[],
+  prices: (Pick<ProductPrice, "kind" | "amountCents" | "startsAt" | "endsAt"> & {
+    currency?: string;
+  })[],
   at = new Date(),
   kind: PriceKind = "RETAIL",
 ) {
@@ -10,6 +12,7 @@ export function pickCurrentPrice(
       .filter(
         (price) =>
           price.kind === kind &&
+          (price.currency === undefined || price.currency === "USD") &&
           price.startsAt <= at &&
           (price.endsAt === null || price.endsAt > at),
       )

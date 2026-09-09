@@ -20,7 +20,10 @@ async function uniqueSlug(base: string, exists: (slug: string) => Promise<boolea
   throw new CatalogError("could not allocate a unique slug");
 }
 
-async function assertCategoryParent(parentId: string | null | undefined, selfId?: string) {
+async function assertCategoryParent(
+  parentId: string | null | undefined,
+  selfId?: string,
+) {
   if (!parentId) return;
   if (parentId === selfId) {
     throw new CatalogError("a category cannot be its own parent");
@@ -150,6 +153,7 @@ export async function createProduct(
     description?: string;
     categoryId?: string | null;
     form?: ProductForm;
+    loadKind?: string;
     taxCategory?: string | null;
     deliveryCapacityUnits?: number;
     allowPreorder?: boolean;
@@ -172,6 +176,7 @@ export async function createProduct(
       description: input.description,
       categoryId: input.categoryId ?? undefined,
       form: input.form ?? "OTHER",
+      loadKind: input.loadKind ?? "OTHER",
       taxCategory: input.taxCategory,
       deliveryCapacityUnits: input.deliveryCapacityUnits ?? 1,
       allowPreorder: input.allowPreorder ?? false,
@@ -199,6 +204,7 @@ export async function updateProduct(
     description?: string | null;
     categoryId?: string | null;
     form?: ProductForm;
+    loadKind?: string;
     taxCategory?: string | null;
     deliveryCapacityUnits?: number;
     allowPreorder?: boolean;
@@ -271,7 +277,9 @@ export async function createVariant(
   },
   actorUserId?: string,
 ) {
-  const product = await prisma.product.findFirst({ where: { id: productId, deletedAt: null } });
+  const product = await prisma.product.findFirst({
+    where: { id: productId, deletedAt: null },
+  });
   if (!product) throw new CatalogError("product not found");
   const variant = await prisma.productVariant.create({
     data: {
@@ -314,7 +322,9 @@ export async function updateVariant(
   input: Partial<Parameters<typeof createVariant>[1]>,
   actorUserId?: string,
 ) {
-  const existing = await prisma.productVariant.findFirst({ where: { id, deletedAt: null } });
+  const existing = await prisma.productVariant.findFirst({
+    where: { id, deletedAt: null },
+  });
   if (!existing) throw new CatalogError("variant not found");
   const variant = await prisma.productVariant.update({
     where: { id },
@@ -341,7 +351,9 @@ export async function updateVariant(
 }
 
 export async function deleteVariant(id: string, actorUserId?: string) {
-  const existing = await prisma.productVariant.findFirst({ where: { id, deletedAt: null } });
+  const existing = await prisma.productVariant.findFirst({
+    where: { id, deletedAt: null },
+  });
   if (!existing) throw new CatalogError("variant not found");
   const variant = await prisma.productVariant.update({
     where: { id },
@@ -408,6 +420,10 @@ export async function addProductImage(
   },
   actorUserId?: string,
 ) {
+  if (!input.storageKey.startsWith("local/catalog/"))
+    throw new CatalogError(
+      "Use the catalog image uploader. Private attachments and delivery photos cannot be published as product images.",
+    );
   if (!input.productId && !input.productVariantId) {
     throw new CatalogError("image must belong to a product or variant");
   }

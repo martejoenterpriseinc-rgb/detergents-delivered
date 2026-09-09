@@ -87,8 +87,36 @@ export function validateRuntimeConfig(env: Environment): void {
   }
   if (
     env.APP_ENV === "production" &&
-    [env.DEMO_MODE, env.SEED_DEMO_CATALOG, env.SEED_BOOTSTRAP_ADMIN].includes("true")
+    [
+      env.DEMO_MODE,
+      env.SEED_DEMO_CATALOG,
+      env.SEED_BOOTSTRAP_ADMIN,
+      env.DD_ALLOW_DATABASE_TESTS,
+      env.DD_SYNTHETIC_PREVIEW,
+      env.DD_LOCAL_PROOF_STORAGE,
+      env.DD_LOCAL_CATALOG_STORAGE,
+    ].includes("true")
   ) {
     throw new Error("Demo and bootstrap flags must be disabled in production.");
+  }
+  if (
+    env.APP_ENV === "production" &&
+    [
+      database.hostname,
+      decodeURIComponent(database.pathname.slice(1)),
+      origin.hostname,
+    ].some((part) =>
+      /(^|[_.-])(staging|sandbox|test|ci|development|dev|localhost)([_.-]|$)/i.test(part),
+    )
+  ) {
+    throw new Error("Production cannot use a development, staging or sandbox target.");
+  }
+  if (
+    env.APP_ENV === "production" &&
+    Object.entries(env).some(
+      ([key, value]) => /STRIPE.*KEY/.test(key) && /^(sk|rk|pk)_test_/.test(value ?? ""),
+    )
+  ) {
+    throw new Error("Sandbox Stripe keys belong in the isolated sandbox service.");
   }
 }

@@ -56,3 +56,7 @@ Extends PR #13 without replacing its tested account/support work. See LOYALTY_DE
 ## Delivery command center increment (2026-09-09)
 
 See [DELIVERY-COMMAND-CENTER.md](DELIVERY-COMMAND-CENTER.md) for the incremental requirement matrix, exact KPI definitions, new delivery permissions and remaining launch blockers. This is a gap-closing change on the retained application. Hosted deployment and durable proof storage remain gated; invitation email and live checkout are not connected. Test evidence is recorded there after CI completion.
+
+## Launch, offers and vehicle-capacity increment
+
+See [LAUNCH-OFFERS.md](LAUNCH-OFFERS.md) for the next incremental matrix: retained Shop online/add-inventory pages, database-owned ZIP gates, support KPI, launch window/cadence locks, read-only demand planning, mixed vehicle capacity, dated purchase promotions and production database isolation. Implemented locally only. Payment, tax, reservations, account/address approval workflows, durable storage and native/browser acceptance remain gates. No new provider or production completion is claimed.

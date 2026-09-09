@@ -27,15 +27,15 @@ export default async function DeliveryAreaPage() {
           />
         </Card>
         <Card className="space-y-4">
-          <h2 className="text-lg font-semibold text-teal-950">
-            Currently enabled counties
-          </h2>
+          <h2 className="text-lg font-semibold text-teal-950">Approved delivery areas</h2>
           <p className="text-sm text-teal-800">
-            Admins choose from the Chicagoland-area county list. These are the counties
-            enabled right now, with select towns only — not every ZIP in the county.
+            These are the saved delivery areas and their approved ZIP codes. An approved
+            account and a validated address are still required before purchase.
           </p>
           {delivery.zones.length === 0 ? (
-            <p className="text-sm text-teal-800">No counties are enabled yet.</p>
+            <p className="text-sm text-teal-800">
+              No delivery ZIP codes have been approved yet.
+            </p>
           ) : (
             <ul className="space-y-3">
               {delivery.zones.map((zone) => (

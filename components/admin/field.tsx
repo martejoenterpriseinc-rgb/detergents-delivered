@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import { Label } from "@/components/ui/label";
 
 export function Field({
   label,
@@ -12,7 +11,7 @@ export function Field({
 }) {
   return (
     <label className="block space-y-2">
-      <Label>{label}</Label>
+      <span className="text-sm font-medium text-teal-950">{label}</span>
       {children}
       {hint ? <p className="text-xs text-teal-700">{hint}</p> : null}
     </label>
