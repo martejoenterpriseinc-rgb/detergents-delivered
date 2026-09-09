@@ -70,3 +70,56 @@ export async function registerCustomer(input: unknown) {
     passwordHash: await bcrypt.hash(data.password, 12),
   });
 }
+
+// Older Google logins used the generic adapter and could lack a household/role.
+// Repair only that incomplete customer identity after Auth.js verifies Google.
+// Staff identities and suspended households are never promoted or reactivated.
+export async function ensureGoogleHousehold(userId: string, verifiedEmail: string) {
+  return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`;
+    const user = await tx.user.findUnique({
+      where: { id: userId },
+      include: { customer: true, userRoles: { include: { role: true } } },
+    });
+    if (!user || user.deletedAt || user.customer?.deletedAt) return false;
+    if (user.userRoles.some((row) => row.role.code !== "CUSTOMER")) return true;
+    let changed = false;
+    if (!user.userRoles.length) {
+      const role = await tx.role.upsert({
+        where: { code: "CUSTOMER" },
+        update: {},
+        create: { code: "CUSTOMER", name: "Customer" },
+      });
+      await tx.userRole.create({ data: { userId, roleId: role.id } });
+      changed = true;
+    }
+    if (!user.customer) {
+      await tx.customer.create({
+        data: {
+          userId,
+          firstName: user.name?.split(" ")[0] || null,
+          lastName: user.name?.split(" ").slice(1).join(" ") || null,
+        },
+      });
+      changed = true;
+    }
+    if (!user.emailVerified && user.email === verifiedEmail.trim().toLowerCase()) {
+      await tx.user.update({
+        where: { id: userId },
+        data: { emailVerified: new Date() },
+      });
+      changed = true;
+    }
+    if (changed)
+      await tx.auditLog.create({
+        data: {
+          actorUserId: userId,
+          action: "user.google.household.completed",
+          entityType: "User",
+          entityId: userId,
+          afterJson: { role: "CUSTOMER" },
+        },
+      });
+    return true;
+  });
+}

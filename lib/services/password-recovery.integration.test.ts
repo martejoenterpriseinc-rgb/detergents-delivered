@@ -2,7 +2,11 @@ import { randomUUID, createHash } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { prisma } from "@/lib/prisma";
-import { registerCustomer, createHouseholdUser } from "./customer-registration";
+import {
+  registerCustomer,
+  createHouseholdUser,
+  ensureGoogleHousehold,
+} from "./customer-registration";
 import {
   deliverRecoveryEmails,
   requestPasswordRecovery,
@@ -48,6 +52,41 @@ async function requestedToken() {
 }
 
 describe("durable customer recovery", () => {
+  it("repairs legacy Google households once without elevating staff or reviving suspended customers", async () => {
+    const user = await prisma.user.create({ data: { email, name: "Legacy Google" } });
+    await Promise.all([
+      ensureGoogleHousehold(user.id, email),
+      ensureGoogleHousehold(user.id, email),
+    ]);
+    const saved = await prisma.user.findUniqueOrThrow({
+      where: { id: user.id },
+      include: { customer: true, userRoles: { include: { role: true } } },
+    });
+    expect(saved.customer?.userId).toBe(user.id);
+    expect(saved.userRoles.map((value) => value.role.code)).toEqual(["CUSTOMER"]);
+    expect(saved.emailVerified).not.toBeNull();
+    expect(
+      await prisma.auditLog.count({
+        where: { actorUserId: user.id, action: "user.google.household.completed" },
+      }),
+    ).toBe(1);
+    await prisma.customer.update({
+      where: { userId: user.id },
+      data: { deletedAt: new Date() },
+    });
+    expect(await ensureGoogleHousehold(user.id, email)).toBe(false);
+    const adminRole = await prisma.role.upsert({
+      where: { code: "ADMIN" },
+      update: {},
+      create: { code: "ADMIN", name: "Admin" },
+    });
+    const admin = await prisma.user.create({
+      data: { email: `admin-${email}`, userRoles: { create: { roleId: adminRole.id } } },
+    });
+    expect(await ensureGoogleHousehold(admin.id, admin.email)).toBe(true);
+    expect(await prisma.customer.count({ where: { userId: admin.id } })).toBe(0);
+    expect(await prisma.userRole.count({ where: { userId: admin.id } })).toBe(1);
+  });
   it("creates one complete household under duplicate registration and never grants staff roles", async () => {
     const results = await Promise.allSettled([
       registerCustomer(registration()),

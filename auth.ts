@@ -7,7 +7,10 @@ import { authConfig } from "@/auth.config";
 import { prisma } from "@/lib/prisma";
 import type { RoleCode } from "@/lib/domain/authz";
 import { loadSessionAccount } from "@/lib/services/session-account";
-import { createHouseholdUser } from "@/lib/services/customer-registration";
+import {
+  createHouseholdUser,
+  ensureGoogleHousehold,
+} from "@/lib/services/customer-registration";
 import { consumeAuthenticationLimit } from "@/lib/services/authentication-throttle";
 
 const credentialsSchema = z.object({
@@ -89,7 +92,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         },
         include: { user: { select: { deletedAt: true } } },
       });
-      if (linked) return !linked.user.deletedAt;
+      if (linked)
+        return (
+          !linked.user.deletedAt && ensureGoogleHousehold(linked.userId, profile.email)
+        );
       const existing = await prisma.user.findUnique({
         where: { email: profile.email.trim().toLowerCase() },
         select: { id: true },
