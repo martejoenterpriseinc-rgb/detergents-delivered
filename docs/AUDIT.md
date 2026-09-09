@@ -37,3 +37,17 @@ The historical startup evidence above is superseded operationally by PR #12's ho
 Migration, security review, test scope and staging approval requirements: ACCOUNT_SUPPORT.md.
 
 Validated account/support implementation: [CI 34296706230](https://github.com/martejoenterpriseinc-rgb/detergents-delivered/actions/runs/34296706230) at `7c6d29f351e683f65ae3d1bda8edc7c27b7bcafb`: 109 unit/HTTP, 23 native PG integrations, 4 browser cases and all build/migration gates pass. Exact [artifact](https://github.com/martejoenterpriseinc-rgb/detergents-delivered/actions/runs/34296706230/artifacts/10083442163) and security/recovery review are documented in ACCOUNT_SUPPORT.md. Hosted verification and production remain gated.
+
+## Loyalty / delivery widget / owner entry increment
+
+Extends PR #13 without replacing its tested account/support work. See LOYALTY_DELIVERY.md for boundaries and review. Final exact revision and CI evidence are recorded in the new incremental PR.
+
+| Requirement | Implemented in review | Remaining acceptance |
+| --- | --- | --- |
+| Owner default admin; View as customer | Persistent-role sign-in destination, same-identity household view, return to admin | Hosted deployment/owner confirmation |
+| Live colored delivery widget; matched loyalty tile | 15-second owned-status refresh, focus/reconnection, stale/failure indicator, equal tile sizes | Driver transition/photo/ETA provider integration |
+| Loyalty balance / referral links / statuses | USD ledger, held/earned balance, invitation/claim/copy/share history, customer ownership | Public email verification and provider sends are unconnected |
+| Admin loyalty controls / KPI | Program rules, pause, snapshot terms, full referral/ledger drilldowns, staff-only review | Automatic verified payment award/reversal worker |
+| Apply rewards / remaining balance | Catalog-owned preview and internal atomic hold/use/release helpers | Actual payment/tax/stock/capacity finalization and confirmed checkout notice; no live spending claimed |
+| Financial safety | Cents, locking/idempotency, audit rollback, immutable entries and qualifying-referral reversal | Redemption refund allocation/restoration and provider reconciliation |
+| Production | NO LAUNCH | Full commerce acceptance and owner approval |

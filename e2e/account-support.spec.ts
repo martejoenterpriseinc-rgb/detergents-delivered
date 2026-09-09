@@ -180,7 +180,7 @@ test("customer account, order support, staff KPIs, failed saves, and password re
       ).status(),
     ).toBe(403);
     await login(adminPage, admin.email, password);
-    await expect(adminPage).toHaveURL(/\/account$/);
+    await expect(adminPage).toHaveURL(/\/admin$/);
     await adminPage.goto("/admin");
     await adminPage
       .getByRole("link", { name: /Support tickets.*Active tickets/ })

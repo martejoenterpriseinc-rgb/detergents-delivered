@@ -1,7 +1,9 @@
+import { requireAuth } from "@/lib/authz";
 import { CheckoutForm } from "@/components/storefront/checkout-form";
 import { getPublicDeliveryInfo } from "@/lib/services/delivery-settings";
 
 export default async function CheckoutPage() {
+  await requireAuth();
   const delivery = await getPublicDeliveryInfo();
 
   return (

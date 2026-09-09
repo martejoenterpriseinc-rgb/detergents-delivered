@@ -20,6 +20,13 @@ export const ADMIN_NAV: AdminNavItem[] = [
     ready: true,
     roles: ["ADMIN", "SUPER_ADMIN"],
   },
+  {
+    href: "/admin/loyalty",
+    label: "Loyalty program",
+    phase: 5,
+    ready: true,
+    roles: ["ADMIN", "SUPER_ADMIN"],
+  },
   { href: "/admin/customers", label: "Customers", phase: 3 },
   { href: "/admin/products", label: "Products", phase: 2, ready: true },
   { href: "/admin/categories", label: "Categories", phase: 2, ready: true },
