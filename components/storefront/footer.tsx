@@ -1,53 +1,49 @@
 import Link from "next/link";
-import { BrandLogo } from "@/components/brand/logo";
-import { getPublicDeliveryInfo } from "@/lib/services/delivery-settings";
-
-const FOOTER_LINKS = [
-  { href: "/shop", label: "Shop" },
-  { href: "/delivery-area", label: "Delivery area" },
-  { href: "/faq", label: "FAQ" },
-  { href: "/contact", label: "Contact" },
-  { href: "/referrals", label: "Referrals" },
-  { href: "/terms", label: "Terms" },
-  { href: "/privacy", label: "Privacy" },
-  { href: "/refunds", label: "Refunds" },
-] as const;
-
-export async function StorefrontFooter() {
-  const delivery = await getPublicDeliveryInfo();
-
+import Image from "next/image";
+import type { Route } from "next";
+import {
+  DEFAULT_SITE_SETTINGS,
+  siteImageUrl,
+  type SiteSettings,
+} from "@/lib/domain/site-content";
+export function StorefrontFooter({
+  settings = DEFAULT_SITE_SETTINGS,
+}: {
+  settings?: SiteSettings;
+}) {
   return (
-    <footer className="border-t border-teal-100 bg-white">
-      <div className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-10 sm:grid-cols-[1.2fr_1fr]">
-        <div className="space-y-3">
-          <div className="flex items-center gap-3">
-            <BrandLogo size={36} />
-            <p className="text-sm font-semibold text-teal-950">Detergents Delivered</p>
+    <footer className="sf-footer" data-site-area="footer">
+      <div className="sf-container sf-footer-grid">
+        <div>
+          <div
+            className={`sf-brand ${settings.logoId === "builtin:logo" ? "sf-brand-wordmark" : ""}`}
+          >
+            {settings.logoId && (
+              <Image
+                unoptimized={!settings.logoId.startsWith("builtin:")}
+                src={siteImageUrl(settings.logoId)}
+                width={64}
+                height={48}
+                alt=""
+              />
+            )}
+            <strong>{settings.brandName}</strong>
           </div>
-          <p className="max-w-md text-sm leading-6 text-teal-800">
-            Household detergent, dish, paper, and cleaning staples — packed locally and
-            brought to your door. {delivery.weeklySummary} Currently serving select towns
-            in {delivery.countyListLabel}. {delivery.noSameDaySummary} No warehouse-club
-            haul. No membership required.
-          </p>
+          <p>{settings.footerText}</p>
         </div>
-        <nav className="grid grid-cols-2 gap-2 text-sm">
-          {FOOTER_LINKS.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className="text-teal-800 hover:text-teal-950"
-            >
-              {link.label}
+        <nav aria-label="Footer">
+          {settings.footerLinks.map((n, i) => (
+            <Link key={i} href={n.href as Route}>
+              {n.label}
             </Link>
           ))}
+          <Link href="/terms">Terms</Link>
+          <Link href="/privacy">Privacy</Link>
+          <Link href="/refunds">Refunds</Link>
         </nav>
       </div>
-      <div className="border-t border-teal-100">
-        <div className="mx-auto flex w-full max-w-6xl flex-col gap-2 px-4 py-4 text-xs text-teal-700 sm:flex-row sm:justify-between">
-          <p>© {new Date().getFullYear()} Detergents Delivered. All rights reserved.</p>
-          <p>Storefront mockup — payments, SMS, and live routing are not connected.</p>
-        </div>
+      <div className="sf-container sf-copyright">
+        © {new Date().getFullYear()} {settings.copyrightText}
       </div>
     </footer>
   );

@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 
 export default async function WebsitePage() {
   await requireRole(...WEBSITE_MANAGER_ROLES);
-  const { page, counties } = await getHomePageForBuilder();
+  const { page, draft } = await getHomePageForBuilder();
 
   return (
     <div className="space-y-6">
@@ -18,9 +18,9 @@ export default async function WebsitePage() {
         <div>
           <h1 className="text-3xl font-semibold text-teal-950">Website</h1>
           <p className="mt-2 max-w-2xl text-sm text-teal-800">
-            Edit storefront sections and publish them. This is a section-based
-            click-to-edit builder, not a drag-and-drop visual designer. Chicagoland
-            counties stay in Settings.
+            Select any home page area to edit its text, photos, buttons and layout.
+            Preview the actual storefront on computer, tablet and mobile, then save to
+            apply.
           </p>
         </div>
         <Link href={"/admin/website/builder" as Route}>
@@ -39,14 +39,19 @@ export default async function WebsitePage() {
         </p>
       </Card>
       <Card className="space-y-3">
-        <p className="text-sm font-semibold text-teal-950">Service counties</p>
+        <p className="text-sm font-semibold text-teal-950">Delivery ZIP codes</p>
         <p className="text-sm text-teal-800">
-          Weekly scheduled delivery uses the enabled Chicagoland counties from Settings.
-          The home page ZIP checker reads the same list.
+          The map and delivery checker use the active ZIP codes in Launch & capacity.
+          Adding or removing an active ZIP updates the customer delivery map
+          automatically.
         </p>
-        <p className="text-sm text-teal-900">{counties.join(", ") || "None enabled"}</p>
-        <Link href={"/admin/settings" as Route}>
-          <Button variant="outline">Edit counties in Settings</Button>
+        <p className="text-sm text-teal-900">
+          {draft
+            ? "An unpublished website draft is saved."
+            : "The current website version is published."}
+        </p>
+        <Link href={"/admin/settings/launch" as Route}>
+          <Button variant="outline">Edit delivery ZIP codes</Button>
         </Link>
       </Card>
     </div>

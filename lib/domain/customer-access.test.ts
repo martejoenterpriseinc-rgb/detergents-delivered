@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   googleSignInConfigured,
+  googleSignInCredentials,
   newAccountPasswordSchema,
   recoveryOrigin,
   registerAccountSchema,
@@ -9,6 +10,17 @@ import {
 
 describe("customer access boundaries", () => {
   it("requires complete Google configuration", () => {
+    const fallback = {
+      GOOGLE_CLIENT_ID: " ",
+      GOOGLE_CLIENT_SECRET: "",
+      AUTH_GOOGLE_ID: " client ",
+      AUTH_GOOGLE_SECRET: " secret ",
+    };
+    expect(googleSignInConfigured(fallback)).toBe(true);
+    expect(googleSignInCredentials(fallback)).toEqual({
+      clientId: "client",
+      clientSecret: "secret",
+    });
     expect(googleSignInConfigured({ GOOGLE_CLIENT_ID: "client" })).toBe(false);
     expect(
       googleSignInConfigured({
