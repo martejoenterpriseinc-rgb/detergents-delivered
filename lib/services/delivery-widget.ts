@@ -23,7 +23,13 @@ export async function getDeliveryWidget(userId: string): Promise<DeliverySnapsho
       },
       orderBy: { createdAt: "desc" as const },
       take: 1,
-      select: { plannedArriveAt: true },
+      select: {
+        plannedArriveAt: true,
+        startedAt: true,
+        arrivedAt: true,
+        completedAt: true,
+        route: { select: { status: true } },
+      },
     },
   };
   const active = await prisma.order.findFirst({
@@ -41,7 +47,16 @@ export async function getDeliveryWidget(userId: string): Promise<DeliverySnapsho
   return order
     ? {
         ...base,
-        status: order.status,
+        status:
+          order.status === "DELIVERED" || ["CANCELLED", "REFUNDED"].includes(order.status)
+            ? order.status
+            : order.routeStops[0]?.arrivedAt
+              ? "ARRIVED"
+              : order.routeStops[0]?.startedAt
+                ? "EN_ROUTE"
+                : order.routeStops[0]?.route.status === "IN_PROGRESS"
+                  ? "TODAY"
+                  : order.status,
         orderNumber: order.number,
         plannedArrival: order.routeStops[0]?.plannedArriveAt?.toISOString() ?? null,
       }

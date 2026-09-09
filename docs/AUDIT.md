@@ -51,3 +51,8 @@ Extends PR #13 without replacing its tested account/support work. See LOYALTY_DE
 | Apply rewards / remaining balance | Catalog-owned preview and internal atomic hold/use/release helpers | Actual payment/tax/stock/capacity finalization and confirmed checkout notice; no live spending claimed |
 | Financial safety | Cents, locking/idempotency, audit rollback, immutable entries and qualifying-referral reversal | Redemption refund allocation/restoration and provider reconciliation |
 | Production | NO LAUNCH | Full commerce acceptance and owner approval |
+
+
+## Delivery command center increment (2026-09-09)
+
+See [DELIVERY-COMMAND-CENTER.md](DELIVERY-COMMAND-CENTER.md) for the incremental requirement matrix, exact KPI definitions, new delivery permissions and remaining launch blockers. This is a gap-closing change on the retained application. Hosted deployment and durable proof storage remain gated; invitation email and live checkout are not connected. Test evidence is recorded there after CI completion.

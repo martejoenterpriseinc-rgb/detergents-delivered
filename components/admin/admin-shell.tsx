@@ -1,8 +1,43 @@
+"use client";
 import type { ReactNode } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
+import {
+  LayoutDashboard,
+  Truck,
+  Users,
+  Package,
+  ShoppingBag,
+  Gift,
+  Headphones,
+  Settings,
+  ArrowUpRight,
+  ChevronDown,
+  Box,
+  BarChart3,
+} from "lucide-react";
 import { BrandLogo } from "@/components/brand/logo";
 import { visibleAdminNav } from "@/lib/admin-nav";
-
+const navIcon = (href: string) =>
+  href === "/admin"
+    ? LayoutDashboard
+    : href.includes("deliveries") || href.includes("routes")
+      ? Truck
+      : href.includes("customers")
+        ? Users
+        : href.includes("loyalty")
+          ? Gift
+          : href.includes("support")
+            ? Headphones
+            : href.includes("settings")
+              ? Settings
+              : href.includes("products") || href.includes("inventory")
+                ? Package
+                : href.includes("reports")
+                  ? BarChart3
+                  : href.includes("orders")
+                    ? ShoppingBag
+                    : Box;
 export function AdminShell({
   children,
   email,
@@ -12,43 +47,62 @@ export function AdminShell({
   email?: string | null;
   roles?: readonly string[];
 }) {
+  const path = usePathname();
   return (
-    <div className="min-h-full bg-teal-50/60 lg:grid lg:grid-cols-[16rem_1fr]">
-      <aside className="border-b border-teal-100 bg-white lg:min-h-full lg:border-r lg:border-b-0">
-        <div className="flex items-center gap-3 px-4 py-4">
-          <BrandLogo size={36} />
-          <div>
-            <p className="text-sm font-semibold text-teal-950">Admin</p>
-            <p className="text-xs text-teal-700">Detergents Delivered</p>
-          </div>
-        </div>
-        <nav className="grid max-h-[50vh] grid-cols-2 gap-1 overflow-auto px-3 pb-4 sm:grid-cols-3 lg:max-h-none lg:grid-cols-1">
-          {visibleAdminNav(roles).map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className="rounded-2xl px-3 py-2 text-sm text-teal-900 hover:bg-teal-50"
-            >
-              <span>{item.label}</span>
-              {!item.ready ? (
-                <span className="ml-2 text-[10px] tracking-wide text-teal-600 uppercase">
-                  Phase {item.phase}
-                </span>
-              ) : null}
-            </Link>
-          ))}
+    <div className="ops-shell">
+      <aside className="ops-sidebar">
+        <Link href="/admin" className="ops-brand">
+          <BrandLogo size={44} />
+          <span>BUSINESS ADMIN</span>
+        </Link>
+        <div className="ops-nav-label">WORKSPACE</div>
+        <nav aria-label="Admin navigation">
+          {visibleAdminNav(roles).map((item) => {
+            const Icon = navIcon(item.href);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={
+                  path === item.href ||
+                  (item.href !== "/admin" && path.startsWith(item.href + "/"))
+                    ? "selected"
+                    : ""
+                }
+              >
+                <Icon size={18} />
+                <span>{item.label}</span>
+              </Link>
+            );
+          })}
         </nav>
+        <div className="ops-sidebar-bottom">
+          <span className="ops-brand-dot" />
+          Detergents Delivered<small>Local delivery. Everyday value.</small>
+        </div>
       </aside>
-      <div className="min-w-0">
-        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-teal-100 bg-white px-4 py-3">
-          <p className="min-w-0 flex-1 text-sm break-all text-teal-800">
-            {email ?? "Signed in"}
-          </p>
-          <Link href="/account" className="shrink-0 text-sm font-medium text-teal-800">
-            View as customer
-          </Link>
+      <div className="ops-workspace">
+        <header className="ops-topbar">
+          <span className="ops-topbar-title">
+            Detergents Delivered <span>/</span> Admin
+          </span>
+          <div className="ops-topbar-actions">
+            <Link href="/account">
+              View as customer
+              <ArrowUpRight size={15} />
+            </Link>
+            <span className="ops-topbar-divider" />
+            <span className="ops-avatar">{email?.slice(0, 2).toUpperCase() ?? "DD"}</span>
+            <div className="ops-identity">
+              <strong>{email ?? "Signed in"}</strong>
+              <small>
+                {roles.includes("SUPER_ADMIN") ? "Owner / Admin" : "Team member"}
+              </small>
+            </div>
+            <ChevronDown size={14} />
+          </div>
         </header>
-        <div className="p-4 sm:p-8">{children}</div>
+        <main className="ops-main">{children}</main>
       </div>
     </div>
   );

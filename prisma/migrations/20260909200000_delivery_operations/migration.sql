@@ -1,0 +1,7 @@
+BEGIN;
+ALTER TABLE "RouteStop" ADD COLUMN "startedAt" TIMESTAMP(3), ADD COLUMN "arrivedAt" TIMESTAMP(3);
+CREATE TABLE "DeliveryAction" ("id" TEXT PRIMARY KEY, "requestKey" TEXT NOT NULL UNIQUE, "actorUserId" TEXT NOT NULL REFERENCES "User"("id"), "routeId" TEXT NOT NULL REFERENCES "Route"("id"), "stopId" TEXT REFERENCES "RouteStop"("id"), "action" TEXT NOT NULL, "requestHash" TEXT NOT NULL, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE "RouteLeg" ("id" TEXT PRIMARY KEY, "routeId" TEXT NOT NULL REFERENCES "Route"("id"), "sequence" INTEGER NOT NULL, "fromStopId" TEXT REFERENCES "RouteStop"("id"), "toStopId" TEXT REFERENCES "RouteStop"("id"), "plannedMiles" DECIMAL(10,2), "actualMiles" DECIMAL(10,2), "source" TEXT NOT NULL, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, CONSTRAINT "RouteLeg_routeId_sequence_key" UNIQUE ("routeId","sequence"), CHECK ("plannedMiles" >= 0 AND "actualMiles" >= 0));
+CREATE TABLE "CustomerInvite" ("id" TEXT PRIMARY KEY, "email" TEXT NOT NULL, "firstName" TEXT NOT NULL, "token" TEXT NOT NULL UNIQUE, "requestKey" TEXT NOT NULL UNIQUE, "requestHash" TEXT NOT NULL, "createdByUserId" TEXT NOT NULL REFERENCES "User"("id"), "status" TEXT NOT NULL DEFAULT 'CREATED', "expiresAt" TIMESTAMP(3) NOT NULL, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE INDEX "CustomerInvite_email_idx" ON "CustomerInvite"("email");
+COMMIT;

@@ -32,7 +32,15 @@ export function AccountOrders({
               </p>
             </div>
             <p className="text-sm font-semibold text-teal-800">
-              {ORDER_LABELS[order.status]}
+              {["DELIVERED", "CANCELLED", "REFUNDED"].includes(order.status)
+                ? ORDER_LABELS[order.status]
+                : stop?.arrivedAt
+                  ? "Driver has arrived"
+                  : stop?.startedAt
+                    ? "Driver en route"
+                    : stop?.route.status === "IN_PROGRESS"
+                      ? "Your items will be delivered today"
+                      : ORDER_LABELS[order.status]}
             </p>
             <p className="text-sm text-teal-800">
               Ordered{" "}
@@ -68,6 +76,18 @@ export function AccountOrders({
                 )}
               </div>
             )}
+            {stop?.completedAt &&
+              stop.deliveryAttempts[0]?.photos.map((photo) => (
+                <a
+                  key={photo.id}
+                  className="inline-flex rounded-full border border-teal-200 px-4 py-2 text-sm font-semibold"
+                  href={`/api/account/proof/${photo.id}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  View delivery photo
+                </a>
+              ))}
             <p className="text-sm text-teal-800">
               {order.items.map((i) => `${i.nameSnapshot} × ${i.quantity}`).join(" · ")}
             </p>

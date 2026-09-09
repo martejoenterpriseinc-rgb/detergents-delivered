@@ -61,6 +61,8 @@ model User {
   assignedRouteStops   RouteStop[]            @relation("StopDriver")
   updatedSiteSections  SiteSection[]          @relation("SiteSectionUpdatedBy")
   supportMessages SupportMessage[]
+  deliveryActions DeliveryAction[]
+  customerInvites CustomerInvite[]
 
   @@index([deletedAt])
 }
@@ -831,6 +833,8 @@ model Route {
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
 
+  deliveryActions DeliveryAction[]
+  legs RouteLeg[]
   stops        RouteStop[]
   mileageTrips MileageTrip[]
 
@@ -850,10 +854,15 @@ model RouteStop {
   driverUserId    String?
   driver          User?    @relation("StopDriver", fields: [driverUserId], references: [id])
   plannedArriveAt DateTime?
+  startedAt       DateTime?
+  arrivedAt       DateTime?
   completedAt     DateTime?
   createdAt       DateTime @default(now())
 
   deliveryAttempts DeliveryAttempt[]
+  actions DeliveryAction[]
+  legsFrom RouteLeg[] @relation("LegFrom")
+  legsTo RouteLeg[] @relation("LegTo")
 
   @@unique([routeId, sequence])
   @@index([orderId])
@@ -1181,4 +1190,53 @@ model SupportMessage {
 
   @@unique([ticketId, authorUserId, requestKey])
   @@index([ticketId, createdAt])
+}
+
+
+/// Request receipts prevent replayed driver transitions from creating duplicate events.
+model DeliveryAction {
+  actor User @relation(fields:[actorUserId],references:[id],onDelete:Restrict)
+  route Route @relation(fields:[routeId],references:[id],onDelete:Restrict)
+  stop RouteStop? @relation(fields:[stopId],references:[id],onDelete:Restrict)
+  id String @id @default(cuid())
+  requestKey String @unique
+  actorUserId String
+  routeId String
+  stopId String?
+  action String
+  requestHash String
+  createdAt DateTime @default(now())
+}
+
+/// Each saved route leg keeps planned and actual mileage separate.
+model RouteLeg {
+  route Route @relation(fields:[routeId],references:[id],onDelete:Restrict)
+  fromStop RouteStop? @relation("LegFrom",fields:[fromStopId],references:[id],onDelete:Restrict)
+  toStop RouteStop? @relation("LegTo",fields:[toStopId],references:[id],onDelete:Restrict)
+  id String @id @default(cuid())
+  routeId String
+  sequence Int
+  fromStopId String?
+  toStopId String?
+  plannedMiles Decimal? @db.Decimal(10,2)
+  actualMiles Decimal? @db.Decimal(10,2)
+  source String
+  createdAt DateTime @default(now())
+  @@unique([routeId, sequence])
+}
+
+/// A secure signup invitation is not account approval or email verification.
+model CustomerInvite {
+  createdBy User @relation(fields:[createdByUserId],references:[id],onDelete:Restrict)
+  id String @id @default(cuid())
+  email String
+  firstName String
+  token String @unique
+  requestKey String @unique
+  requestHash String
+  createdByUserId String
+  status String @default("CREATED")
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  @@index([email])
 }
