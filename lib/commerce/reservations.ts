@@ -142,7 +142,17 @@ export async function reserveCheckout(
               ),
             );
           }
-        if (fitsVehicle(vehicle, addLoad(used, load))) {
+        if (
+          fitsVehicle(
+            {
+              capacityStops: vehicle.capacityStops,
+              capacityUnits: vehicle.capacityUnits,
+              detergentBucketLimit: vehicle.detergentBucketLimit,
+              scentBeadBucketLimit: vehicle.scentBeadBucketLimit,
+            },
+            addLoad(used, load),
+          )
+        ) {
           serviceDate = date;
           break;
         }
@@ -236,7 +246,8 @@ export async function reserveCheckout(
             customerId: customer.id,
             requestKey: a.requestKey,
             amountCents: saved.rewardsCents,
-            orderTotalCents: saved.totalCents,
+            // This ledger field is the amount due before applying the held credit.
+            orderTotalCents: saved.totalCents + saved.rewardsCents,
           },
         });
       const updated = await tx.checkoutAttempt.update({

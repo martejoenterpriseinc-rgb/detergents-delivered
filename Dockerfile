@@ -11,6 +11,7 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV DD_BUILD_STANDALONE=true
 ENV APP_ENV=staging
 # Prisma generate + Next standalone build. AUTH_SECRET is required at build
 # for Auth.js module init; this value is not used for live sessions.
