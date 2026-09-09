@@ -54,6 +54,7 @@ export default async function Page({
           Entry type
           <select
             name="kind"
+            aria-label="Entry type"
             defaultValue={kind}
             className="mt-1 w-full rounded-xl border p-3"
           >
@@ -66,6 +67,7 @@ export default async function Page({
           Sort
           <select
             name="sort"
+            aria-label="Sort"
             defaultValue={sort}
             className="mt-1 w-full rounded-xl border p-3"
           >
