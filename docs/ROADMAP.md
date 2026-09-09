@@ -1,5 +1,7 @@
 # Roadmap
 
+Current owner-directed build scope: [full build and go-live contract](GO-LIVE-BUILD-CONTRACT.md). It includes the Render application authority, preferred storefront, dynamic ZIP map, matching responsive Website Builder, durable photos, Google login and password recovery. Reconcile the older phase statuses below against tested source before claiming completion.
+
 Authoritative checklist for Detergents Delivered. A box is checked only when the work exists in this repo **with tests** (or an explicit non-testable artifact such as documentation or Docker files) **and** a working UI plus server-side security where the item is a product feature.
 
 Later phases stay unchecked until implemented.
