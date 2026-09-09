@@ -1,3 +1,4 @@
+import { BusinessSetupCard } from "@/components/business/dashboard-card";
 import Link from "next/link";
 import { Card } from "@/components/ui/card";
 import { DeliverySettingsForm } from "@/components/admin/delivery-settings-form";
@@ -49,6 +50,7 @@ export default async function SettingsPage() {
           </div>
         </Card>
       )}
+      <BusinessSetupCard userId={session.user.id} showCompleted />
       <DeliverySettingsForm initial={settings} canWrite={canWrite} />
     </div>
   );

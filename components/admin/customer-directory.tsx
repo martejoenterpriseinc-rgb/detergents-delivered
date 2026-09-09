@@ -2,7 +2,16 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Users, Gift, Search, Download, Pencil, MapPin } from "lucide-react";
+import {
+  Users,
+  Gift,
+  Headphones,
+  UserPlus,
+  Search,
+  Download,
+  Pencil,
+  MapPin,
+} from "lucide-react";
 import type { customerDirectory } from "@/lib/services/operations";
 import { type CustomerRow, money } from "@/lib/domain/operations";
 import { exportCsv } from "@/lib/domain/operations-export";
@@ -10,8 +19,10 @@ import { AreaMap } from "./area-map";
 import { Kpi, OperationsHeading } from "./operations-ui";
 export function CustomerDirectory({
   data,
+  supportCount,
 }: {
   data: Awaited<ReturnType<typeof customerDirectory>>;
+  supportCount?: number;
 }) {
   const router = useRouter();
   const [edit, setEdit] = useState<CustomerRow | null>(null);
@@ -101,6 +112,22 @@ export function CustomerDirectory({
           href="/admin/customers?group=referred"
           icon={<Gift size={21} />}
         />
+        <Kpi
+          label="New customers"
+          value={data.newCustomers}
+          detail="Signed up this month"
+          href={`/admin/customers?group=new&date=${data.filter.date}`}
+          icon={<UserPlus size={21} />}
+        />
+        {supportCount !== undefined && (
+          <Kpi
+            label="Support tickets"
+            value={supportCount}
+            detail="Open the active support queue"
+            href="/admin/support?status=ACTIVE"
+            icon={<Headphones size={21} />}
+          />
+        )}
       </div>
       <section className="ops-panel">
         <div className="ops-section-title">
@@ -277,8 +304,9 @@ export function CustomerDirectory({
         </div>
       </section>
       <p className="ops-footnote">
-        Revenue includes tax and subtracts recorded refunds. Order counts include non-draft orders. Edits update contact details; login email and validated delivery addresses
-        retain their separate verification rules.
+        Revenue includes tax and subtracts recorded refunds. Order counts include
+        non-draft orders. Edits update contact details; login email and validated delivery
+        addresses retain their separate verification rules.
       </p>
       {edit && (
         <div

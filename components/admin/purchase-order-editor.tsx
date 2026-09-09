@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -51,17 +52,20 @@ export function PurchaseOrderEditor({
   async function createPo(formData: FormData) {
     setError(null);
     try {
-      const created = await adminFetch<{ purchaseOrder: { id: string } }>("/api/purchase-orders", {
-        method: "POST",
-        body: JSON.stringify({
-          vendorId: String(formData.get("vendorId") ?? ""),
-          freightCents: dollarsToCents(String(formData.get("freight") ?? "0")),
-          feeCents: dollarsToCents(String(formData.get("fees") ?? "0")),
-          taxCents: dollarsToCents(String(formData.get("tax") ?? "0")),
-          otherCostCents: dollarsToCents(String(formData.get("other") ?? "0")),
-          notes: String(formData.get("notes") ?? "") || null,
-        }),
-      });
+      const created = await adminFetch<{ purchaseOrder: { id: string } }>(
+        "/api/purchase-orders",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            vendorId: String(formData.get("vendorId") ?? ""),
+            freightCents: dollarsToCents(String(formData.get("freight") ?? "0")),
+            feeCents: dollarsToCents(String(formData.get("fees") ?? "0")),
+            taxCents: dollarsToCents(String(formData.get("tax") ?? "0")),
+            otherCostCents: dollarsToCents(String(formData.get("other") ?? "0")),
+            notes: String(formData.get("notes") ?? "") || null,
+          }),
+        },
+      );
       router.push(`/admin/purchase-orders/${created.purchaseOrder.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not create PO");
@@ -105,21 +109,40 @@ export function PurchaseOrderEditor({
     return (
       <form action={createPo} className="space-y-4">
         {error ? (
-          <p className="rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-900">{error}</p>
+          <p className="rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            {error}
+          </p>
         ) : null}
         <Card className="grid gap-4 sm:grid-cols-2">
-          <Field label="Vendor">
-            <Select name="vendorId" required defaultValue="">
-              <option value="" disabled>
-                Choose vendor
-              </option>
-              {vendors.map((vendor) => (
-                <option key={vendor.id} value={vendor.id}>
-                  {vendor.name}
+          <div>
+            <Link
+              href="/admin/vendors/new"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mb-2 block underline"
+            >
+              + Vendor (opens a new tab)
+            </Link>
+            <button
+              type="button"
+              className="mb-2 underline"
+              onClick={() => router.refresh()}
+            >
+              Refresh vendor list
+            </button>
+            <Field label="Vendor">
+              <Select name="vendorId" required defaultValue="">
+                <option value="" disabled>
+                  Choose vendor
                 </option>
-              ))}
-            </Select>
-          </Field>
+                {vendors.map((vendor) => (
+                  <option key={vendor.id} value={vendor.id}>
+                    {vendor.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          </div>
           <Field label="Freight">
             <Input name="freight" placeholder="0.00" />
           </Field>
@@ -148,7 +171,9 @@ export function PurchaseOrderEditor({
   return (
     <div className="space-y-6">
       {error ? (
-        <p className="rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-900">{error}</p>
+        <p className="rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          {error}
+        </p>
       ) : null}
       <Card className="flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -175,7 +200,7 @@ export function PurchaseOrderEditor({
         </p>
         <div className="mt-4 overflow-x-auto">
           <table className="min-w-full text-left text-sm">
-            <thead className="text-xs uppercase text-teal-700">
+            <thead className="text-xs text-teal-700 uppercase">
               <tr>
                 <th className="py-2">SKU</th>
                 <th className="py-2">Ordered</th>
@@ -189,7 +214,9 @@ export function PurchaseOrderEditor({
                 <tr key={item.id} className="border-t border-teal-50">
                   <td className="py-2">
                     {item.productVariant.sku}
-                    <div className="text-xs text-teal-700">{item.productVariant.product.name}</div>
+                    <div className="text-xs text-teal-700">
+                      {item.productVariant.product.name}
+                    </div>
                   </td>
                   <td className="py-2">{item.quantityOrdered}</td>
                   <td className="py-2">{item.quantityReceived}</td>
@@ -218,7 +245,13 @@ export function PurchaseOrderEditor({
               </Select>
             </Field>
             <Field label="Qty">
-              <Input name="quantityOrdered" type="number" min={1} required defaultValue={1} />
+              <Input
+                name="quantityOrdered"
+                type="number"
+                min={1}
+                required
+                defaultValue={1}
+              />
             </Field>
             <Field label="Unit cost">
               <Input name="unitCost" placeholder="8.50" required />
