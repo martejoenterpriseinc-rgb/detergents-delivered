@@ -1,5 +1,7 @@
 # Startup repair evidence
 
+Latest September 9 continuation: see [LAUNCH-DATE-ACCEPTANCE.md](LAUNCH-DATE-ACCEPTANCE.md) for CI47/48 acceptance, source publication and staging migration/deployment evidence. Earlier blocked/not-run statements below describe the recorded state before this continuation. Provider checkout and production remain gated.
+
 Read RENDER_REPAIR.md and TEST_PLAN.md for scope and remaining gates.
 
 - Local: 104 unit/mocked-HTTP tests pass after final review, plus lint/typecheck. Optimized build passed on the initial repair. Approved Sites regressions: 24/24 pass; Site source unchanged. These local checks do not claim a hosted database connection.
@@ -46,3 +48,7 @@ The additive `20260909210000_launch_offers` migration was generated/reviewed loc
 Launch-date follow-up: changed-date/revision persistence and injected failed-save browser assertions added, plus unauthorized/invalid-date database rollback assertions. Execution remains pending native CI; no new database/browser pass is claimed.
 
 CI run 34351876850 applied/replayed all eight migrations, passed lint/typecheck and 138 unit cases, and ran all 38 PostgreSQL cases: 35 passed, three failed on Prisma void-column decoding from advisory-lock SELECTs. Changed those lock calls to executeRaw, matching the existing bootstrap lock pattern. Follow-up CI required. No hosted writes occurred.
+
+## Current native/browser/staging acceptance — September 9
+
+CI47 runs all retained suites with 138 unit, 38 native PostgreSQL and 10 desktop/mobile browser passes. The eight migrations apply and replay cleanly. Original migration SQL remains unchanged. Native lock and mobile table-scroller defects found by these runs were corrected without lowering thresholds or skipping cases. See LAUNCH-DATE-ACCEPTANCE.md for exact source trees, run/artifact IDs, staging migration preservation, deployment and hosted saved-date assertions. Provider payment/tax/cloud storage were not tested; production remains gated.

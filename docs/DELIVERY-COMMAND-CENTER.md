@@ -1,6 +1,8 @@
 # Delivery command center increment — 2026-09-09
 
-This increment retains the existing Next/Prisma/PostgreSQL app and builds on PR14 / 6a8e268. It does not redeploy, migrate a hosted database, enable checkout, change DNS or provision resources.
+Latest September 9 continuation: see [LAUNCH-DATE-ACCEPTANCE.md](LAUNCH-DATE-ACCEPTANCE.md) for CI47/48 acceptance, source publication and staging migration/deployment evidence. Earlier blocked/not-run statements below describe the recorded state before this continuation. Provider checkout and production remain gated.
+
+This increment retains the existing Next/Prisma/PostgreSQL app and builds on PR14 / 6a8e268. The later accepted continuation deployed this source and its additive migration to staging; it did not enable checkout, change DNS or provision resources.
 
 ## Requirement matrix
 
@@ -24,7 +26,7 @@ Daily delivery revenue counts each paid USD order once from the selected route s
 
 ## Migration and recovery
 
-One additive migration adds RouteStop timestamps, immutable action receipts, route legs and invite records. No prior migration is rewritten. Foreign keys preserve historical records. New code requires this migration before hosted deployment; no hosted migration has been authorized/applied for this increment. Record/audit changes are atomic. Development photo writes precede transaction commit: a DB rollback can leave an unreferenced private file, never a falsely completed order. Durable-object cleanup and production recovery policy remain adapter work.
+One additive migration adds RouteStop timestamps, immutable action receipts, route legs and invite records. No prior migration is rewritten. Foreign keys preserve historical records. New code requires this migration before hosted deployment; the owner-authorized staging migration was applied after CI47 and backup/preservation review. Record/audit changes are atomic. Development photo writes precede transaction commit: a DB rollback can leave an unreferenced private file, never a falsely completed order. Durable-object cleanup and production recovery policy remain adapter work.
 
 Route execution preserves saved paid booking assignments and original order totals. Schedule consolidation/editing and stock/capacity booking races belong to the pending commerce/scheduling integration and are not represented as complete here.
 
@@ -39,7 +41,7 @@ Target service: detergents-delivered-staging.onrender.com. Before changing DNS: 
 References checked 2026-09-09: Render configure-cloudflare-dns; WebKit Web Push for Web Apps on iOS and iPadOS; Waze Deep Links; OSM tile usage policy; Sharp constructor/output options.
 
 
-## Recorded verification and blocked publication
+## Historical verification before publication approval
 
 - Local TypeScript, ESLint, Next production build succeeded on Node 24.19.0.
 - 120 unit tests passed across 23 files, including real Sharp image decoding, metadata removal, malformed-image rejection and a mocked failed storage write.

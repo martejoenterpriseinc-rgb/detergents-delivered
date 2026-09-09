@@ -1,5 +1,7 @@
 # Existing requirement matrix — startup repair increment
 
+Latest September 9 continuation: see [LAUNCH-DATE-ACCEPTANCE.md](LAUNCH-DATE-ACCEPTANCE.md) for CI47/48 acceptance, source publication and staging migration/deployment evidence. Earlier blocked/not-run statements below describe the recorded state before this continuation. Provider checkout and production remain gated.
+
 This is an increment to the saved gap-closing audit, not a rebuild or a new full audit. The complete original specification and approved-design audit remain preserved in the Sites/saved-backend checkpoints. RENDER_REPAIR.md documents the divergent histories and their exact revisions.
 
 | Requirement | Current result | Evidence / remaining gate |
@@ -55,8 +57,8 @@ Extends PR #13 without replacing its tested account/support work. See LOYALTY_DE
 
 ## Delivery command center increment (2026-09-09)
 
-See [DELIVERY-COMMAND-CENTER.md](DELIVERY-COMMAND-CENTER.md) for the incremental requirement matrix, exact KPI definitions, new delivery permissions and remaining launch blockers. This is a gap-closing change on the retained application. Hosted deployment and durable proof storage remain gated; invitation email and live checkout are not connected. Test evidence is recorded there after CI completion.
+See [DELIVERY-COMMAND-CENTER.md](DELIVERY-COMMAND-CENTER.md) for the incremental requirement matrix, exact KPI definitions, new delivery permissions and remaining launch blockers. This is a gap-closing change on the retained application. Staging deployment and CI47 native/browser acceptance are recorded in LAUNCH-DATE-ACCEPTANCE.md. Durable proof storage, invitation email and live checkout remain unconnected.
 
 ## Launch, offers and vehicle-capacity increment
 
-See [LAUNCH-OFFERS.md](LAUNCH-OFFERS.md) for the next incremental matrix: retained Shop online/add-inventory pages, database-owned ZIP gates, support KPI, launch window/cadence locks, read-only demand planning, mixed vehicle capacity, dated purchase promotions and production database isolation. Implemented locally only. Payment, tax, reservations, account/address approval workflows, durable storage and native/browser acceptance remain gates. No new provider or production completion is claimed.
+See [LAUNCH-OFFERS.md](LAUNCH-OFFERS.md) for the next incremental matrix: retained Shop online/add-inventory pages, database-owned ZIP gates, support KPI, launch window/cadence locks, read-only demand planning, mixed vehicle capacity, dated purchase promotions and production database isolation. Native and browser acceptance passed in CI47 and the retained screens are deployed to staging. Hosted launch-date save/refresh and a read-only database audit/date assertion passed. Payment, tax, reservations, account/address approval workflows and durable storage remain gates. No new provider or production completion is claimed.
