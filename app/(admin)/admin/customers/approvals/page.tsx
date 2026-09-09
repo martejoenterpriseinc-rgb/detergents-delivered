@@ -40,8 +40,10 @@ export default async function Page({
     skip: (page - 1) * 50,
     take: 50,
   });
-  const href = (target: number) =>
-    `/admin/customers/approvals?${new URLSearchParams({ q, page: String(target) })}`;
+  const href = (target: number) => ({
+    pathname: "/admin/customers/approvals",
+    query: { q, page: String(target) },
+  });
   return (
     <div className="max-w-3xl space-y-6">
       <h1 className="text-3xl font-semibold">Delivery address approvals</h1>
