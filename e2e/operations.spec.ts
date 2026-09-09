@@ -43,9 +43,18 @@ test("delivery command center, customer directory and private completion", async
       width: innerWidth, rootWidth: document.documentElement.clientWidth,
       scrollWidth: document.documentElement.scrollWidth,
       scale: visualViewport?.scale,
+      overflow: Array.from(document.querySelectorAll("body *")).filter((el) => {
+        const r = el.getBoundingClientRect();
+        return r.width > 0 && (r.right > document.documentElement.clientWidth + 1 || r.left < -1);
+      }).map((el) => {
+        const r = el.getBoundingClientRect(), s = getComputedStyle(el);
+        return { tag: el.tagName, cls: el.getAttribute("class"), left: r.left, right: r.right,
+          width: r.width, position: s.position, overflow: s.overflow,
+          parent: el.parentElement?.getAttribute("class") };
+      }).slice(0, 35),
     }));
     await info.attach("customer-map-viewport.json", { body: JSON.stringify(layout), contentType: "application/json" });
-    expect(layout).toMatchObject({ width: page.viewportSize()!.width, rootWidth: page.viewportSize()!.width, scrollWidth: page.viewportSize()!.width, scale: 1 });
+    expect(layout, JSON.stringify(layout)).toMatchObject({ width: page.viewportSize()!.width, rootWidth: page.viewportSize()!.width, scrollWidth: page.viewportSize()!.width, scale: 1 });
     await page.screenshot({
       path: info.outputPath("02-customers-map-directory.png"),
       // Capture the actual mobile viewport used for interaction assertions.
