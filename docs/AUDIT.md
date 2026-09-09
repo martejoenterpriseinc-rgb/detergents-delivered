@@ -25,13 +25,15 @@ The historical startup evidence above is superseded operationally by PR #12's ho
 
 | Requirement | This increment | Evidence / remaining gate |
 | --- | --- | --- |
-| Edit customer info and created dates | Database-backed name/phone, read-only original dates; identity/roles preserved | account native and browser tests; staging deployment pending |
-| Change password | Current-password verification, throttle, session revocation, atomic audit | native password tests and separate-session browser proof pending CI |
+| Edit customer info and created dates | Database-backed name/phone, read-only original dates; identity/roles preserved | Native + desktop/mobile persistence tests passed at 7c6d29f; staging deployment pending |
+| Change password | Current-password verification, throttle, session revocation, atomic audit | Native password and separate-session desktop/mobile proof passed at 7c6d29f |
 | Notification on/off | Saved email/SMS preferences, default off | persistence tests; actual providers/verification remain disconnected |
-| Contact us / order problem | Account-owned tickets tied to an owned order or general account question | ownership/idempotency/rollback/native and browser tests pending CI |
-| Staff support dashboard / clickable KPI | Active total plus status drilldowns, lookup/filter/sort/pagination/CSV | staff/foreign-user denial, filtered export and browser assertions pending CI |
+| Contact us / order problem | Account-owned tickets tied to an owned order or general account question | Ownership/idempotency/rollback/native and desktop/mobile tests passed at 7c6d29f |
+| Staff support dashboard / clickable KPI | Active total plus status drilldowns, lookup/filter/sort/pagination/CSV | Staff/foreign-user denial, filtered export and browser assertions passed at 7c6d29f |
 | Delivery status | Real owned order/route read model; labeled planned arrival | customer browser fixtures; driver/private-photo provider workflow remains unaccepted |
 | Loyalty Club display | Honest prelaunch display | no rewards engine or invented membership |
 | Full commerce / production | NO LAUNCH | existing payment, inventory, scheduling, provider, recovery and acceptance gaps retained |
 
 Migration, security review, test scope and staging approval requirements: ACCOUNT_SUPPORT.md.
+
+Validated account/support implementation: [CI 34296706230](https://github.com/martejoenterpriseinc-rgb/detergents-delivered/actions/runs/34296706230) at `7c6d29f351e683f65ae3d1bda8edc7c27b7bcafb`: 109 unit/HTTP, 23 native PG integrations, 4 browser cases and all build/migration gates pass. Exact [artifact](https://github.com/martejoenterpriseinc-rgb/detergents-delivered/actions/runs/34296706230/artifacts/10083442163) and security/recovery review are documented in ACCOUNT_SUPPORT.md. Hosted verification and production remain gated.
