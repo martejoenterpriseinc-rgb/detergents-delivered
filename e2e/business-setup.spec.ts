@@ -113,6 +113,14 @@ test("business wizard saves choices, recovers failed saves and protects private 
     await expect(page.getByLabel("Notes / authority response")).toHaveValue(
       "Synthetic saved notes after retry.",
     );
+    // Navigate immediately, before the 900 ms autosave timer can fire.
+    await page.getByLabel("Notes / authority response").fill("Synthetic sidebar save.");
+    await page.getByRole("link", { name: "Dashboard", exact: true }).click();
+    await expect(page).toHaveURL(/\/admin$/);
+    await page.goto("/admin/settings/business/setup");
+    await expect(page.getByLabel("Notes / authority response")).toHaveValue(
+      "Synthetic sidebar save.",
+    );
     const second = await page.context().newPage();
     await second.goto("/admin/settings/business/setup");
     await page
@@ -155,15 +163,13 @@ test("business wizard saves choices, recovers failed saves and protects private 
     await page
       .getByLabel("Document title", { exact: true })
       .fill("Synthetic quarantined business document");
-    await page
-      .getByLabel("Choose a document")
-      .setInputFiles({
-        name: "synthetic-evidence.pdf",
-        mimeType: "application/pdf",
-        buffer: Buffer.from(
-          "%PDF-1.4\n1 0 obj << /Type /Catalog >> endobj\ntrailer << /Root 1 0 R >>\n%%EOF",
-        ),
-      });
+    await page.getByLabel("Choose a document").setInputFiles({
+      name: "synthetic-evidence.pdf",
+      mimeType: "application/pdf",
+      buffer: Buffer.from(
+        "%PDF-1.4\n1 0 obj << /Type /Catalog >> endobj\ntrailer << /Root 1 0 R >>\n%%EOF",
+      ),
+    });
     await page.getByRole("button", { name: "Save document", exact: true }).click();
     await expect(
       page.getByText("Saved encrypted. Quarantined until security scanning completes.", {

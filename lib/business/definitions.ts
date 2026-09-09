@@ -654,7 +654,7 @@ export function taskDeadlines(
   if (definition.key === "dba" && task.filedDate && !definition.unknown) {
     if (!task.publicationDates[0])
       items.push({ label: "First publication", date: addDays(task.filedDate, 15) });
-    if (!task.proofReceived)
+    if (!task.proofReceived || !task.proofReceivedDate)
       items.push({
         label: "Clerk receives publication proof",
         date: addDays(task.filedDate, 50),

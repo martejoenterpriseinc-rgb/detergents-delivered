@@ -51,6 +51,7 @@ export function SetupWizard({
   const [supplier, setSupplier] = useState("");
   const [accessEmail, setAccessEmail] = useState("");
   const versionRef = useRef(state.version);
+  const workspaceRef = useRef(initial);
   const flushRef = useRef<() => Promise<boolean>>(() => Promise.resolve(true));
   const registerFlush = useCallback((fn: () => Promise<boolean>) => {
     flushRef.current = fn;
@@ -71,6 +72,7 @@ export function SetupWizard({
       body: JSON.stringify({ version: versionRef.current, command: c }),
     });
     versionRef.current = next.version;
+    workspaceRef.current = next;
     setState(next);
     return next;
   }
@@ -79,6 +81,13 @@ export function SetupWizard({
     setBusy(true);
     setError("");
     try {
+      // A pending profile save may have just completed during flush. Review the
+      // saved draft, not a profile captured by the button before that save.
+      if (
+        (c.action === "transition-draft" || c.action === "transition-reviewed") &&
+        workspaceRef.current.data.transition
+      )
+        c = { ...c, profile: workspaceRef.current.data.transition.draftProfile };
       const next = await command(c);
       if (next.data.transition) setTransitionProfile(next.data.transition.draftProfile);
       after?.();

@@ -1,5 +1,14 @@
 "use client";
-import { useCallback, createContext, useContext, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import { useRouter } from "next/navigation";
+import type { Route } from "next";
 import type { Source } from "@/lib/business/definitions";
 export const SaveNavigation = createContext<
   (flush: () => Promise<boolean>) => () => void
@@ -43,6 +52,7 @@ export function SourceLinks({ links }: { links: Source[] }) {
 }
 // Serialized autosave. Inputs remain disabled only during the request; failed edits stay visible.
 export function useSavedForm<T>(initial: T, save: (value: T) => Promise<void>) {
+  const router = useRouter();
   const [value, setValue] = useState(initial);
   const [feedback, setFeedback] = useState("Saved");
   const [busy, setBusy] = useState(false);
@@ -89,6 +99,35 @@ export function useSavedForm<T>(initial: T, save: (value: T) => Promise<void>) {
     const timer = setTimeout(() => void flush(), 900);
     return () => clearTimeout(timer);
   }, [value, dirty, error, flush]);
+  useEffect(() => {
+    // The app sidebar lives outside this form. Save before its client navigation
+    // can unmount the wizard; a failed save leaves the current edits visible.
+    const navigate = (e: MouseEvent) => {
+      if (e.button || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      if (JSON.stringify(current.current) === saved.current) return;
+      const link = e.target instanceof Element ? e.target.closest("a[href]") : null;
+      if (
+        !(link instanceof HTMLAnchorElement) ||
+        link.download ||
+        (link.target && link.target !== "_self")
+      )
+        return;
+      const url = new URL(link.href, window.location.href);
+      if (
+        url.origin !== window.location.origin ||
+        (url.pathname === window.location.pathname &&
+          url.search === window.location.search)
+      )
+        return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      void flush().then((ok) => {
+        if (ok) router.push(`${url.pathname}${url.search}${url.hash}` as Route);
+      });
+    };
+    document.addEventListener("click", navigate, true);
+    return () => document.removeEventListener("click", navigate, true);
+  }, [flush, router]);
   useEffect(() => {
     const prevent = (e: BeforeUnloadEvent) => {
       if (JSON.stringify(current.current) !== saved.current) {
