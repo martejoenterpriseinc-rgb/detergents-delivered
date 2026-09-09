@@ -38,6 +38,7 @@ export function SetupWizard({
   const [screen, setScreen] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const actingRef = useRef(false);
   const [profileReady, setProfileReady] = useState(false);
   const [reviewed, setReviewed] = useState(false);
   const [showChange, setShowChange] = useState(false);
@@ -77,10 +78,12 @@ export function SetupWizard({
     return next;
   }
   async function act(c: z.infer<typeof actionSchema>, after?: () => void) {
-    if (!(await flushRef.current())) return;
+    if (actingRef.current) return;
+    actingRef.current = true;
     setBusy(true);
     setError("");
     try {
+      if (!(await flushRef.current())) return;
       // A pending profile save may have just completed during flush. Review the
       // saved draft, not a profile captured by the button before that save.
       if (
@@ -94,6 +97,7 @@ export function SetupWizard({
     } catch (e) {
       setError(e instanceof Error ? e.message : "Save could not be confirmed.");
     } finally {
+      actingRef.current = false;
       setBusy(false);
     }
   }

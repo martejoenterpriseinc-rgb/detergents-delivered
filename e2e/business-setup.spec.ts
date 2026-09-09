@@ -68,14 +68,43 @@ test("business wizard saves choices, recovers failed saves and protects private 
     await page
       .getByRole("tabpanel")
       .screenshot({ path: info.outputPath("single-member-llc-preview.png") });
-    await page
-      .getByLabel("Actual legal owner or approved LLC legal name")
-      .fill("Synthetic Owner LLC");
-    await page.getByRole("button", { name: "Continue to structure choice" }).click();
-    await page.getByRole("button", { name: "Choose LLC", exact: true }).click();
+    let releaseProfile!: () => void;
+    let profileStarted!: () => void;
+    const profileHeld = new Promise<void>((resolve) => {
+      releaseProfile = resolve;
+    });
+    const profileRequested = new Promise<void>((resolve) => {
+      profileStarted = resolve;
+    });
+    await page.route("**/api/admin/business", async (route) => {
+      if (
+        route.request().method() === "POST" &&
+        route.request().postDataJSON()?.command?.action === "profile"
+      ) {
+        profileStarted();
+        await profileHeld;
+      }
+      await route.continue();
+    });
+    try {
+      await page
+        .getByLabel("Actual legal owner or approved LLC legal name")
+        .fill("Synthetic Owner LLC");
+      // Hold the actual autosave so the race is deterministic on every device.
+      await profileRequested;
+      // Deliberately choose while the real profile write is still pending.
+      // The choice must wait for that save rather than silently discard the click.
+      await page.getByRole("button", { name: "Choose LLC", exact: true }).click();
+      await expect(
+        page.getByRole("button", { name: "Choose LLC", exact: true }),
+      ).toBeDisabled();
+    } finally {
+      releaseProfile();
+    }
     await expect(
       page.getByRole("heading", { name: "Form the Illinois LLC", exact: true }),
     ).toBeVisible();
+    await page.unroute("**/api/admin/business");
     await expect(
       page.getByRole("navigation", { name: "Business setup checklist" }),
     ).not.toContainText("assumed business name");
