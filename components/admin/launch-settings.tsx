@@ -19,6 +19,7 @@ const days = [
 export function LaunchSettings({ initial }: { initial: Workspace }) {
   const router = useRouter();
   const [config, setConfig] = useState(initial.config);
+  const [savedConfig, setSavedConfig] = useState(initial.config);
   const [month, setMonth] = useState(initial.config.launchDate.slice(0, 7));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -87,7 +88,10 @@ export function LaunchSettings({ initial }: { initial: Workspace }) {
         onSubmit={async (e) => {
           e.preventDefault();
           const result = await save("/api/admin/launch", config);
-          if (result) setConfig(result as LaunchConfig);
+          if (result) {
+            setConfig(result as LaunchConfig);
+            setSavedConfig(result as LaunchConfig);
+          }
         }}
       >
         <h2 className="text-xl font-semibold">Launch & first delivery window</h2>
@@ -118,6 +122,11 @@ export function LaunchSettings({ initial }: { initial: Workspace }) {
               </Field>
             ))}
           </div>
+          <p className="text-sm" data-testid="saved-launch-date">
+            Saved launch date: {savedConfig.version ? savedConfig.launchDate : "Not set"}
+            {JSON.stringify(config) !== JSON.stringify(savedConfig) &&
+              " · Unsaved launch changes"}
+          </p>
           <p className="rounded-xl bg-amber-50 p-4 text-sm text-amber-950">
             Ordering is not enabled by this setting. Until checkout is connected, no
             launch payments or delivery reservations are accepted. When ordering opens,

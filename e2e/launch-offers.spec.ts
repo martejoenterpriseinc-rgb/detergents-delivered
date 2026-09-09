@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 import { test, expect, type Page } from "@playwright/test";
 import { operationsFixture, operationsPassword } from "../tests/operations-fixture";
+import { LAUNCH_KEY, launchSchema } from "../lib/domain/launch";
 test("shop, support KPI, configurable launch and promotions persist with customer isolation", async ({
   page,
   browser,
@@ -49,15 +50,41 @@ test("shop, support KPI, configurable launch and promotions persist with custome
     await expect(
       page.getByRole("heading", { name: "Launch, delivery areas & vehicle capacity" }),
     ).toBeVisible();
-    await page.getByLabel("Launch date", { exact: true }).fill("2026-10-15");
-    await page.getByLabel("Include orders through", { exact: true }).fill("2026-10-14");
+    const launchDate = page.getByLabel("Launch date", { exact: true });
+    const initialDate = await launchDate.inputValue();
+    const changedDate = initialDate === "2026-10-19" ? "2026-10-20" : "2026-10-19";
+    const beforeLaunch = await db.setting.findUnique({ where: { key: LAUNCH_KEY } });
+    const beforeVersion = beforeLaunch ? launchSchema.parse(beforeLaunch.valueJson).version : 0;
+    await launchDate.fill(changedDate);
+    await page.getByLabel("Include orders through", { exact: true }).fill("2026-10-18");
     await page.getByLabel("First delivery by", { exact: true }).fill("2026-10-31");
+    await expect(page.getByTestId("saved-launch-date")).toContainText("Unsaved launch changes");
     await page.getByRole("button", { name: "Save launch & cadence" }).click();
     await expect(page.getByRole("status")).toContainText("Settings saved");
+    const savedLaunch = await db.setting.findUniqueOrThrow({ where: { key: LAUNCH_KEY } });
+    expect(launchSchema.parse(savedLaunch.valueJson)).toMatchObject({
+      launchDate: changedDate, version: beforeVersion + 1,
+    });
     await page.reload();
-    await expect(page.getByLabel("Launch date", { exact: true })).toHaveValue(
-      "2026-10-15",
+    await expect(launchDate).toHaveValue(changedDate);
+    await expect(page.getByTestId("saved-launch-date")).toHaveText(
+      `Saved launch date: ${changedDate}`,
     );
+    // Explicitly mocked network failure: the real database must remain unchanged.
+    await page.route("**/api/admin/launch", async (route) => {
+      await route.fulfill({ status: 503, contentType: "application/json",
+        body: JSON.stringify({ error: "Synthetic save failure. Please retry." }) });
+    });
+    await launchDate.fill("2026-10-21");
+    await page.getByRole("button", { name: "Save launch & cadence" }).click();
+    await expect(page.getByRole("alert")).toContainText("Synthetic save failure");
+    await expect(page.getByRole("status")).toHaveCount(0);
+    await expect(page.getByTestId("saved-launch-date")).toContainText(changedDate);
+    const afterFailure = await db.setting.findUniqueOrThrow({ where: { key: LAUNCH_KEY } });
+    expect(afterFailure.valueJson).toEqual(savedLaunch.valueJson);
+    await page.unroute("**/api/admin/launch");
+    await page.reload();
+    await expect(launchDate).toHaveValue(changedDate);
     await page.screenshot({
       path: info.outputPath("launch-calendar-capacity.png"),
       fullPage: true,
@@ -110,6 +137,9 @@ test("shop, support KPI, configurable launch and promotions persist with custome
           inventoryBalance: null,
           promotion: await db.promotion.findUnique({ where: { code } }),
           customerAdminRequest: denied.status(),
+          launch: { initialDate, changedDate, saved: savedLaunch.valueJson,
+            persistedAfterRefresh: true, failedSave: "MOCKED HTTP 503",
+            databaseUnchangedAfterFailedSave: true },
           providerCalls: "NONE",
           checkout: "CLOSED",
           note: "No real payment, tax or email sandbox integration tested.",

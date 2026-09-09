@@ -208,6 +208,7 @@ it("serializes launch saves, locks cadence/ZIP edits and protects booked vehicle
   const data = {
     ...defaultLaunch,
     version: current.version,
+    launchDate: current.launchDate === "2026-10-19" ? "2026-10-20" : "2026-10-19",
     enabled: true,
     cadences: [
       {
@@ -225,6 +226,12 @@ it("serializes launch saves, locks cadence/ZIP edits and protects booked vehicle
   ]);
   expect(raced.filter((r) => r.status === "fulfilled")).toHaveLength(1);
   const latest = await launchConfig();
+  expect(latest).toMatchObject({ launchDate: data.launchDate, version: current.version + 1 });
+  await expect(saveLaunch(f.customers[0].id, { ...latest, launchDate: "2026-10-21" }))
+    .rejects.toMatchObject({ status: 403 });
+  await expect(saveLaunch(f.admin.id, { ...latest, launchDate: "2026-11-01" }))
+    .rejects.toThrow();
+  expect(await launchConfig()).toEqual(latest);
   await expect(
     saveLaunch(f.admin.id, {
       ...latest,

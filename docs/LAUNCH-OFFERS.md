@@ -53,7 +53,11 @@ Automatic booking still needs one authoritative transaction boundary: recheck cu
 - Local optimized Next production build passed; final lint and TypeScript results recorded in TESTING.md after the final checks.
 - Prepared: four native PostgreSQL integration cases in `lib/services/launch-offers.integration.test.ts`, covering duplicate creation, failed image writes, permissions, sale/promotion/reward arithmetic, no financial mutation, shared-ZIP ownership, cadence/ZIP locks and capacity protections.
 - Prepared: `e2e/launch-offers.spec.ts` runs under the existing desktop/mobile projects with separate admin/customer sessions, refresh checks, database assertions, support KPI navigation and screenshots. No new browser screenshots were captured this turn.
-- Native/browser execution remains blocked by the saved non-root PostgreSQL namespace restriction. No database or browser policy bypass was attempted. Existing GitHub CI can run these once source publication is authorized.
-- Automatic approval review previously rejected pushing to the existing **public** GitHub repository because explicit public-source disclosure approval was missing. This request adds features; it does not supply that approval. No push, PR, migration or deployment was attempted for this increment.
+- Native/browser execution remains blocked by the saved non-root PostgreSQL namespace restriction. No database or browser policy bypass was attempted. The owner has now approved source publication so existing GitHub CI can run these tests.
+- Automatic approval review previously rejected pushing to the existing **public** GitHub repository because explicit public-source disclosure approval was missing. The owner subsequently approved publication and requested explicit launch-date persistence. A normal git push then failed because command-line GitHub credentials are unavailable; the authorized connector publication path is being assessed. No hosted migration or deployment has occurred.
 
 **Launch verdict: NO LAUNCH.** A provider key alone does not close the documented checkout, reservation, verification, storage, worker, receipt/refund and acceptance gaps.
+
+## Launch-date follow-up
+
+The form displays the last confirmed saved launch date and flags unsaved changes. The browser test now saves a date different from the initial value, checks the database revision and date, refreshes, then injects a clearly labeled HTTP 503 failure and verifies no false success or database change. The PostgreSQL case also rejects unauthorized and invalid-date writes without changing the saved value. These new database/browser assertions are prepared pending CI, not claimed as passed.
