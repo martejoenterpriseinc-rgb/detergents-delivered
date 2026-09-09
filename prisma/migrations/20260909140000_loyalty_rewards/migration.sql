@@ -1,3 +1,5 @@
+BEGIN;
+
 -- CreateEnum
 CREATE TYPE "ReferralState" AS ENUM ('PENDING', 'REWARDED', 'REVERSED');
 
@@ -155,3 +157,5 @@ END;
 $$;
 CREATE TRIGGER dd_reward_entry_immutable BEFORE UPDATE OR DELETE ON "RewardEntry"
 FOR EACH ROW EXECUTE FUNCTION dd_preserve_reward_entry();
+
+COMMIT;
