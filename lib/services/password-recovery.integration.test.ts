@@ -27,9 +27,27 @@ beforeEach(() => {
   vi.stubEnv("EMAIL_FROM", "Detergents Delivered <sender@example.test>");
   vi.stubEnv("DD_EMAIL_ALLOWED_RECIPIENTS", email);
 });
-afterEach(() => {
-  vi.unstubAllEnvs();
-  vi.unstubAllGlobals();
+afterEach(async () => {
+  try {
+    const users = await prisma.user.findMany({
+      where: { email: { in: [email, `admin-${email}`, `changed-${email}`] } },
+      select: { id: true },
+    });
+    const ids = users.map((user) => user.id);
+    // Only this test's synthetic records in the loopback-only guarded CI DB.
+    // Leaving an ADMIN here correctly blocks later first-admin bootstrap tests.
+    await prisma.$transaction(async (tx) => {
+      await tx.auditLog.deleteMany({ where: { actorUserId: { in: ids } } });
+      await tx.passwordRecovery.deleteMany({ where: { userId: { in: ids } } });
+      await tx.session.deleteMany({ where: { userId: { in: ids } } });
+      await tx.customer.deleteMany({ where: { userId: { in: ids } } });
+      await tx.userRole.deleteMany({ where: { userId: { in: ids } } });
+      await tx.user.deleteMany({ where: { id: { in: ids } } });
+    });
+  } finally {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  }
 });
 const registration = () => ({
   name: "Recovery Customer",
