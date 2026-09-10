@@ -367,18 +367,21 @@ test("builder publishes photos and sections with faithful device previews and pr
     await page.getByLabel("Selected area").selectOption("how-it-works");
     await page.getByLabel("Heading", { exact: true }).fill("How it works");
     await page.getByLabel("Eyebrow", { exact: true }).fill("HOW IT WORKS");
-    await page
-      .getByLabel("Steps (one title | description per line)", { exact: true })
-      .fill(stepTitles.join("\n"));
+    // Match the accessible textbox name. React's server-rendered textarea value
+    // is a child text node, so exact label-text matching also sees the saved copy.
+    const stepsInput = page.getByRole("textbox", {
+      name: "Steps (one title | description per line)",
+      exact: true,
+    });
+    await expect(stepsInput).toBeVisible();
+    await stepsInput.fill(stepTitles.join("\n"));
     await page.getByRole("button", { name: "Save draft", exact: true }).click();
     await expect(
       page.getByRole("status").filter({ hasText: "Draft saved" }),
     ).toBeVisible();
     await page.reload();
     await page.getByLabel("Selected area").selectOption("how-it-works");
-    await expect(
-      page.getByLabel("Steps (one title | description per line)", { exact: true }),
-    ).toHaveValue(stepTitles.join("\n"));
+    await expect(stepsInput).toHaveValue(stepTitles.join("\n"));
     await page.getByRole("button", { name: new RegExp(`^${device}$`, "i") }).click();
     await expect
       .poll(() => iframe.locator("body").evaluate(() => window.innerWidth))
