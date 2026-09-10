@@ -1516,7 +1516,7 @@ body {
 .sf-spacing-roomy {
   padding-block: 92px;
 }
-.sf-products {
+.sf-product-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 22px;
@@ -1529,13 +1529,13 @@ body {
   border-radius: 20px;
   color: var(--sf-muted);
 }
-.sf-steps {
+.sf-step-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 32px;
   margin-top: 36px;
 }
-.sf-steps article > span {
+.sf-step-grid article > span {
   display: inline-grid;
   place-items: center;
   height: 42px;
@@ -1547,12 +1547,12 @@ body {
   font-size: 13px;
   font-weight: 700;
 }
-.sf-steps h3 {
+.sf-step-grid h3 {
   font-size: 19px;
   font-weight: 650;
   margin-top: 18px;
 }
-.sf-steps article > p {
+.sf-step-grid article > p {
   color: var(--sf-muted);
   line-height: 1.7;
   margin-top: 8px;
@@ -1896,7 +1896,7 @@ body {
   .sf-hero-grid {
     gap: 28px;
   }
-  .sf-products {
+  .sf-product-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .wb-layout {
@@ -1992,11 +1992,11 @@ body {
     padding: 11px 13px;
     font-size: 12px;
   }
-  .sf-steps {
+  .sf-step-grid {
     grid-template-columns: 1fr;
     gap: 25px;
   }
-  .sf-products {
+  .sf-product-grid {
     grid-template-columns: 1fr;
     gap: 16px;
   }

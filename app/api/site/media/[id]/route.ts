@@ -1,4 +1,5 @@
-import { prisma } from "@/lib/prisma";
+import { readSiteImage } from "@/lib/services/site-media";
+import { accountFailure } from "@/lib/account-api";
 import { publishedMediaExists } from "@/lib/services/site-content";
 import { auth } from "@/auth";
 import { canManageWebsite } from "@/lib/domain/site-content";
@@ -21,17 +22,16 @@ export async function GET(
         headers: { "Cache-Control": "private, no-store" },
       });
   }
-  const media = await prisma.siteMedia.findUnique({
-    where: { id },
-    select: { bytes: true, mimeType: true },
-  });
-  if (!media) return new Response(null, { status: 404 });
-  return new Response(new Uint8Array(media.bytes), {
-    headers: {
-      "Content-Type": media.mimeType,
-      "X-Content-Type-Options": "nosniff",
-      "Cache-Control": "private, no-store",
-      "Content-Security-Policy": "default-src 'none'; sandbox",
-    },
-  });
+  try {
+    return new Response(new Uint8Array(await readSiteImage(id)), {
+      headers: {
+        "Content-Type": "image/webp",
+        "X-Content-Type-Options": "nosniff",
+        "Cache-Control": "private, no-store",
+        "Content-Security-Policy": "default-src 'none'; sandbox",
+      },
+    });
+  } catch (error) {
+    return accountFailure(error);
+  }
 }

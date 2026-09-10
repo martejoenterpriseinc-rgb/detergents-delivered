@@ -45,7 +45,9 @@ export function WebsiteBuilder({
   const frame = useRef<HTMLIFrameElement>(null),
     frameHost = useRef<HTMLDivElement>(null);
   const attempt = useRef<{ fingerprint: string; requestKey: string } | null>(null);
-  const dirty = JSON.stringify(content) !== savedSnapshot;
+  const [pendingUploads, setPendingUploads] = useState<Record<string, File>>({});
+  const hasPendingUploads = Object.keys(pendingUploads).length > 0;
+  const dirty = JSON.stringify(content) !== savedSnapshot || hasPendingUploads;
   const section = content.sections.find((s) => s.sectionId === selection);
   const sendPreview = useCallback(
     () =>
@@ -140,6 +142,11 @@ export function WebsiteBuilder({
     setMessage("");
   }
   async function save(mode: "draft" | "publish") {
+    if (hasPendingUploads) {
+      setError(true);
+      setMessage("Retry or discard each unfinished photo upload before saving.");
+      return;
+    }
     setBusy(true);
     setMessage("");
     setError(false);
@@ -196,6 +203,7 @@ export function WebsiteBuilder({
       setVersion(result.page.version);
       setSavedSnapshot(JSON.stringify(document));
       setDraftSaved(Boolean(result.draft));
+      setPendingUploads({});
       attempt.current = null;
       setMessage("Saved version loaded.");
     } catch (e) {
@@ -260,13 +268,13 @@ export function WebsiteBuilder({
       setBusy(false);
     }
   }
-  async function upload(file: File) {
+  async function upload(file: File, target = selection) {
     if (file.size > 4 * 1024 * 1024) {
       setError(true);
       setMessage("Choose a photo under 4 MB.");
       return;
     }
-    const target = selection;
+    setPendingUploads((current) => ({ ...current, [target]: file }));
     setBusy(true);
     setError(false);
     setMessage("Uploading photo…");
@@ -289,6 +297,11 @@ export function WebsiteBuilder({
               ),
             },
       );
+      setPendingUploads((current) => {
+        const next = { ...current };
+        if (next[target] === file) delete next[target];
+        return next;
+      });
       setMessage("Photo uploaded. Add its description, then Save & apply.");
     } catch (e) {
       setError(true);
@@ -353,13 +366,17 @@ export function WebsiteBuilder({
           <span>Version {version}</span>
         </div>
         <div className="wb-actions">
-          <button type="button" disabled={busy} onClick={() => void save("draft")}>
+          <button
+            type="button"
+            disabled={busy || hasPendingUploads}
+            onClick={() => void save("draft")}
+          >
             Save draft
           </button>
           <button
             type="button"
             className="wb-primary"
-            disabled={busy}
+            disabled={busy || hasPendingUploads}
             onClick={() => void save("publish")}
           >
             {busy ? "Working…" : "Save & apply"}
@@ -373,6 +390,47 @@ export function WebsiteBuilder({
         <p role={error ? "alert" : "status"} className={error ? "wb-error" : "wb-status"}>
           {message}
         </p>
+      )}
+      {hasPendingUploads && (
+        <div className="wb-status" aria-label="Unfinished photo uploads">
+          <p>Finish these uploads before saving. Your previous photos are kept.</p>
+          {Object.entries(pendingUploads).map(([target, file]) => (
+            <div key={target} className="wb-actions">
+              <span className="min-w-0 break-all">
+                {target === "header" || target === "footer"
+                  ? "Business logo"
+                  : content.sections.find((s) => s.sectionId === target)?.title ||
+                    "Section photo"}
+                : {file.name}
+              </span>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void upload(file, target)}
+              >
+                Retry upload
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  setPendingUploads((current) => {
+                    const next = { ...current };
+                    delete next[target];
+                    return next;
+                  });
+                  setError(false);
+                  setMessage("Upload discarded. Your previous photo is kept.");
+                }}
+              >
+                Discard upload
+              </button>
+            </div>
+          ))}
+          <p className="wb-hint">
+            Selected files are kept in this tab until uploaded or discarded.
+          </p>
+        </div>
       )}
       <div className="wb-layout">
         <aside className="wb-editor">

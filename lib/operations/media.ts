@@ -3,6 +3,7 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { AccountError } from "@/lib/domain/account";
 import { integrationEnvironment } from "@/lib/integration-environment";
+import { siteMediaStatus } from "@/lib/services/site-media";
 import {
   decryptDocument,
   documentReadiness,
@@ -107,8 +108,8 @@ export async function readOperationalMedia(key: string, kind: Kind) {
 }
 export async function operationalMediaStatus() {
   const environment = integrationEnvironment();
-  return Promise.all(
-    (["CATALOG", "PROOF"] as const).map(async (kind) => {
+  return Promise.all([
+    ...(["CATALOG", "PROOF"] as const).map(async (kind) => {
       const used = environment
         ? await prisma.operationalMedia.aggregate({
             where: { environment, kind },
@@ -127,5 +128,6 @@ export async function operationalMediaStatus() {
         capacityWarning: bytes >= limit * 0.8,
       };
     }),
-  );
+    siteMediaStatus(),
+  ]);
 }

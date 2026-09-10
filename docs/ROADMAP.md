@@ -16,8 +16,8 @@ The older phase boxes below are not a current launch verdict. Source and accepta
 | Customer account, support, access recovery                      | `ACCOUNT_SUPPORT.md`, `CUSTOMER-ACCESS.md`                  | Google and email provider acceptance; production owner onboarding                    |
 | Delivery capacity, driver operations, attempts and proof access | `DELIVERY-COMMAND-CENTER.md`, `LAUNCH-DATE-ACCEPTANCE.md`   | Real route/provider/notification acceptance                                          |
 | Loyalty, referral and promotion administration                  | `LOYALTY_DELIVERY.md`, `LAUNCH-OFFERS.md`                   | Refund reversals and full provider-backed lifecycle                                  |
-| Shared storefront/Website Builder and current API row editor    | `STOREFRONT-BUILDER.md`, `API-ROW-EDITOR-RELEASE.md`        | Durable marketing photo editing and remaining contract acceptance                    |
-| Durable operational photos and scheduled recovery               | `PRODUCTION-OPERATIONS.md`                                  | Exact CI/deployment evidence recorded there; hosted photo/redeploy and restore drill |
+| Shared storefront/Website Builder and current API row editor    | `STOREFRONT-BUILDER.md`, `API-ROW-EDITOR-RELEASE.md`        | Durable marketing uploads are implemented; actual hosted photo/redeploy acceptance remains |
+| Durable operational photos and scheduled recovery               | `PRODUCTION-OPERATIONS.md`                                  | Exact CI/deployment and staging restore evidence recorded there; hosted photo/redeploy and production key recovery remain |
 | Subscriptions, expenses, mileage, CPA, QBO and agent gateway    | Contract and phase definitions below                        | Substantial implementation remains                                                   |
 
 ## Phase 1 — Foundation

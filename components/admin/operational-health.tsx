@@ -75,7 +75,11 @@ export async function OperationalHealth() {
           >
             <div>
               <h3 className="text-sm font-semibold">
-                {item.kind === "CATALOG" ? "Product photos" : "Private delivery proofs"}
+                {item.kind === "WEBSITE"
+                  ? "Website photos & logos"
+                  : item.kind === "CATALOG"
+                    ? "Product photos"
+                    : "Private delivery proofs"}
               </h3>
               <p className="mt-1 text-xs text-slate-500">
                 {item.count} photos · {(item.bytes / 1048576).toFixed(1)} of{" "}
@@ -84,7 +88,9 @@ export async function OperationalHealth() {
               <p className="mt-1 text-xs text-slate-500">
                 {item.kind === "PROOF"
                   ? "Encrypted and available only to authorized people."
-                  : "Public only while the linked product is published."}
+                  : item.kind === "WEBSITE"
+                    ? "Public only while shown on the published website. Saved drafts and earlier versions are retained."
+                    : "Public only while the linked product is published."}
               </p>
             </div>
             <span

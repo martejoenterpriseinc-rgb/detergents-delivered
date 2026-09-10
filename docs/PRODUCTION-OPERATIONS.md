@@ -12,7 +12,7 @@ The initial bounded database storage budget is 250 MB catalog / 500 MB proofs, c
 
 Database backups include the image bytes. Keep the encryption keyring securely recoverable outside the database and retain old key IDs through rotations. Losing a retained key makes its private proofs and documents unreadable. A restore drill must verify both records and key recovery before launch.
 
-Website Builder marketing image uploads remain a separate unfinished requirement. A native Postgres durability test proves a second database client can read the saved bytes; browser tests cover refresh, authorization and duplicate retries. These tests do not replace a real hosted image/redeploy acceptance.
+Website Builder marketing image uploads already use a separate durable `SiteMedia` table, with private drafts and publication checks as documented in `STOREFRONT-BUILDER.md`. The earlier checklist incorrectly described their implementation as unfinished. Real hosted image/redeploy acceptance remains outstanding for both marketing and operational photos. Native Postgres and browser tests cover database persistence, refresh, authorization and duplicate retries; they do not replace that external acceptance.
 
 ## Worker behavior
 

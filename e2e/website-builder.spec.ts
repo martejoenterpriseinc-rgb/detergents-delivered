@@ -101,7 +101,7 @@ test("builder publishes photos and sections with faithful device previews and pr
       page.getByRole("status").filter({ hasText: "Draft saved" }),
     ).toBeVisible();
     const saved = await (await page.request.get("/api/admin/site/pages/home")).json();
-    const imageId = saved.draft.sections.find(
+    let imageId = saved.draft.sections.find(
       (s: { sectionId: string }) => s.sectionId === "hero",
     ).imageId;
     expect((await publicPage.request.get(`/api/site/media/${imageId}`)).status()).toBe(
@@ -114,6 +114,103 @@ test("builder publishes photos and sections with faithful device previews and pr
     await expect(page.getByLabel("Heading", { exact: true })).toHaveValue(title);
     await page.getByRole("button", { name: new RegExp(`^${device}$`, "i") }).click();
     await expect(iframe.getByRole("heading", { name: title })).toBeVisible();
+    // Failed replacement retains the prior draft photo and the file for a retry.
+    const replacement = await sharp({
+      create: {
+        width: 81,
+        height: 61,
+        channels: 3,
+        background: {
+          r: parseInt(marker.slice(0, 2), 16),
+          g: parseInt(marker.slice(2, 4), 16),
+          b: parseInt(marker.slice(4, 6), 16),
+        },
+      },
+    })
+      .png()
+      .toBuffer();
+    const beforePhotos = await db.siteMedia.count();
+    await page.route("**/api/admin/site/media", (route) =>
+      route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "Injected upload failure" }),
+      }),
+    );
+    await page.getByLabel("Upload photo", { exact: true }).setInputFiles({
+      name: "replacement-photo.png",
+      mimeType: "image/png",
+      buffer: replacement,
+    });
+    await expect(editorAlert).toHaveText("Injected upload failure");
+    await expect(page.getByAltText("Current selected photo")).toHaveAttribute(
+      "src",
+      `/api/site/media/${imageId}`,
+    );
+    await expect(
+      page.getByRole("button", { name: "Save & apply", exact: true }),
+    ).toBeDisabled();
+    await expect(
+      page.getByRole("button", { name: "Save draft", exact: true }),
+    ).toBeDisabled();
+    expect(await db.siteMedia.count()).toBe(beforePhotos);
+    // Changing areas and preview sizes must not redirect the saved file to another area.
+    await page.getByLabel("Selected area").selectOption("footer");
+    await page.getByRole("button", { name: /^mobile$/i }).click();
+    await page.unroute("**/api/admin/site/media");
+    await page.route("**/api/admin/site/media", async (route) => {
+      const accepted = await route.fetch();
+      expect(accepted.status()).toBe(201);
+      await route.abort("failed");
+    });
+    await page.getByRole("button", { name: "Retry upload", exact: true }).click();
+    await expect(editorAlert).toBeVisible();
+    expect(await db.siteMedia.count()).toBe(beforePhotos + 1);
+    await page.unroute("**/api/admin/site/media");
+    await page.getByRole("button", { name: "Retry upload", exact: true }).click();
+    await expect(
+      page.getByRole("status").filter({ hasText: "Photo uploaded" }),
+    ).toBeVisible();
+    expect(await db.siteMedia.count()).toBe(beforePhotos + 1);
+    await page.getByLabel("Selected area").selectOption("hero");
+    const uploadedSrc = await page
+      .getByAltText("Current selected photo")
+      .getAttribute("src");
+    expect(uploadedSrc).not.toBe(`/api/site/media/${imageId}`);
+    imageId = uploadedSrc!.split("/").at(-1)!;
+    expect(
+      await db.auditLog.count({
+        where: { entityId: imageId, action: "site.media.uploaded" },
+      }),
+    ).toBe(1);
+    expect((await publicPage.request.get(`/api/site/media/${imageId}`)).status()).toBe(
+      404,
+    );
+    await page.getByRole("button", { name: "Save draft", exact: true }).click();
+    await expect(
+      page.getByRole("status").filter({ hasText: "Draft saved" }),
+    ).toBeVisible();
+    await page.reload();
+    await page.getByLabel("Selected area").selectOption("hero");
+    await expect(page.getByAltText("Current selected photo")).toHaveAttribute(
+      "src",
+      uploadedSrc!,
+    );
+    await page.getByLabel("Upload photo", { exact: true }).setInputFiles({
+      name: "invalid-photo.png",
+      mimeType: "image/png",
+      buffer: Buffer.from("not an image"),
+    });
+    await expect(editorAlert).toContainText("Choose a valid JPEG");
+    await expect(page.getByAltText("Current selected photo")).toHaveAttribute(
+      "src",
+      uploadedSrc!,
+    );
+    await page.getByRole("button", { name: "Discard upload", exact: true }).click();
+    await expect(
+      page.getByRole("button", { name: "Save & apply", exact: true }),
+    ).toBeEnabled();
+    await page.getByRole("button", { name: new RegExp(`^${device}$`, "i") }).click();
     // Section selection comes from the page itself, including shared site chrome.
     await iframe.locator("footer").click();
     await expect(page.getByLabel("Selected area")).toHaveValue("footer");
@@ -180,6 +277,8 @@ test("builder publishes photos and sections with faithful device previews and pr
       ".sf-header",
       ".sf-hero h1",
       ".sf-hero .sf-section-photo",
+      ".sf-step-grid",
+      ".sf-product-grid",
       ".sf-footer",
     ]) {
       const local = await iframe.locator(selector).evaluate((node) => {
@@ -193,6 +292,32 @@ test("builder publishes photos and sections with faithful device previews and pr
       expect(local.width).toBeCloseTo(live.width, 0);
       expect(local.height).toBeCloseTo(live.height, 0);
     }
+    // Section type classes must never apply the inner grid to the whole section.
+    // That nested grid previously squeezed desktop steps into one third of the page.
+    for (const selector of [".sf-step-grid", ".sf-product-grid"]) {
+      const size = await publicPage.locator(selector).boundingBox();
+      expect(size!.width).toBeGreaterThanOrEqual(Math.min(width, 1200) - 70);
+    }
+    const stepBoxes = await publicPage
+      .locator(".sf-step-grid article")
+      .evaluateAll((steps) =>
+        steps.map((step) => {
+          const rect = step.getBoundingClientRect();
+          return { x: rect.x, y: rect.y, width: rect.width };
+        }),
+      );
+    expect(stepBoxes).toHaveLength(3);
+    if (width <= 520) {
+      expect(stepBoxes.every((step) => step.x === stepBoxes[0].x)).toBe(true);
+      expect(stepBoxes[1].y).toBeGreaterThan(stepBoxes[0].y);
+      expect(stepBoxes[0].width).toBeGreaterThan(300);
+    } else {
+      expect(stepBoxes.every((step) => step.y === stepBoxes[0].y)).toBe(true);
+      expect(stepBoxes[0].width).toBeGreaterThan(200);
+    }
+    await publicPage.locator("section.sf-steps").screenshot({
+      path: testInfo.outputPath("how-it-works.png"),
+    });
     const expectedPosition = width <= 520 ? "50% 80%" : "20% 50%";
     await expect(publicPage.locator(".sf-hero .sf-section-photo")).toHaveCSS(
       "object-position",
@@ -269,6 +394,8 @@ test("builder publishes photos and sections with faithful device previews and pr
         crossOriginWrite: 403,
         customerBuilderRead: 403,
         failedSaveRetained: true,
+        failedUploadRetained: true,
+        uploadRetryAfterLostResponse: true,
         previewGeometryMatches: true,
       }),
       contentType: "application/json",
