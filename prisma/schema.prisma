@@ -64,6 +64,8 @@ model User {
   deliveryActions DeliveryAction[]
   customerInvites CustomerInvite[]
   passwordRecoveries PasswordRecovery[]
+  refundRequests     RefundRequest[]       @relation("RefundRequestActor")
+  stockReturns       StockReturn[]         @relation("StockReturnActor")
 
   @@index([deletedAt])
 }
@@ -688,6 +690,8 @@ model Order {
   rewardEntries RewardEntry[]
   qualifyingReferral Referral? @relation("ReferralQualifyingOrder")
   checkoutAttempt CheckoutAttempt?
+  refundRequests RefundRequest[]
+  stockReturns StockReturn[]
 
   @@index([customerId])
   @@index([status])
@@ -710,6 +714,8 @@ model OrderItem {
   discountCents    Int            @default(0)
   taxCents         Int            @default(0)
   lineTotalCents   Int
+  refundLines      RefundRequestLine[]
+  stockReturnLines StockReturnLine[]
 
   @@index([orderId])
   @@index([productVariantId])
@@ -730,6 +736,7 @@ model Payment {
 
   events  PaymentEvent[]
   refunds Refund[]
+  refundRequests RefundRequest[]
 
   @@index([orderId])
   @@index([status])
@@ -760,9 +767,121 @@ model Refund {
   currency    String   @default("USD")
   reason      String?
   externalId  String?  @unique
+  requestId   String?  @unique
+  request     RefundRequest? @relation(fields: [requestId], references: [id], onDelete: Restrict)
   createdAt   DateTime @default(now())
 
   @@index([orderId])
+}
+
+enum RefundRequestStatus {
+  PREPARED
+  SUBMITTING
+  UNKNOWN
+  PENDING
+  REQUIRES_ACTION
+  SUCCEEDED
+  FAILED
+  CANCELED
+}
+
+/// Durable provider operation. UNKNOWN remains reserved until reconciliation proves an outcome.
+model RefundRequest {
+  id                String              @id @default(cuid())
+  orderId           String
+  order             Order               @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  paymentId         String
+  payment           Payment             @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  actorUserId       String
+  actor             User                @relation("RefundRequestActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+  requestKey        String              @unique
+  requestHash       String
+  amountCents       Int
+  currency          String
+  reason            String
+  providerAccountId String
+  livemode          Boolean
+  providerRefundId  String?             @unique
+  status            RefundRequestStatus @default(PREPARED)
+  lastError         String?
+  submittedAt       DateTime?
+  reconciledAt      DateTime?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  lines  RefundRequestLine[]
+  events RefundRequestEvent[]
+  refund Refund?
+
+  @@index([orderId, createdAt])
+  @@index([paymentId, status])
+  @@index([status, updatedAt])
+}
+
+model RefundRequestLine {
+  id              String        @id @default(cuid())
+  refundRequestId String
+  refundRequest   RefundRequest @relation(fields: [refundRequestId], references: [id], onDelete: Restrict)
+  orderItemId     String
+  orderItem       OrderItem     @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+  quantity        Int
+  netCents        Int
+  taxCents        Int
+  rewardCents     Int
+
+  @@unique([refundRequestId, orderItemId])
+  @@index([orderItemId])
+}
+
+/// Append-only minimal provider evidence; never store raw customer or payment-method payloads.
+model RefundRequestEvent {
+  id              String        @id @default(cuid())
+  refundRequestId String
+  refundRequest   RefundRequest @relation(fields: [refundRequestId], references: [id], onDelete: Restrict)
+  providerEventId String?       @unique
+  type            String
+  status          RefundRequestStatus
+  evidenceJson    Json?
+  verifiedAt      DateTime?
+  createdAt       DateTime      @default(now())
+
+  @@index([refundRequestId, createdAt])
+}
+
+enum StockReturnCondition {
+  SELLABLE
+  DAMAGED
+}
+
+/// Receiving merchandise is explicit and independent from returning payment funds.
+model StockReturn {
+  id          String   @id @default(cuid())
+  orderId     String
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  actorUserId String
+  actor       User     @relation("StockReturnActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+  requestKey  String   @unique
+  requestHash String
+  reason      String
+  receivedAt  DateTime
+  createdAt   DateTime @default(now())
+
+  lines StockReturnLine[]
+
+  @@index([orderId, createdAt])
+}
+
+model StockReturnLine {
+  id            String               @id @default(cuid())
+  stockReturnId String
+  stockReturn   StockReturn          @relation(fields: [stockReturnId], references: [id], onDelete: Restrict)
+  orderItemId   String
+  orderItem     OrderItem             @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+  quantity      Int
+  condition     StockReturnCondition
+
+  @@unique([stockReturnId, orderItemId])
+  @@index([orderItemId])
 }
 
 /// Destination-based tax snapshot at calculation time. Historical rows stay immutable.

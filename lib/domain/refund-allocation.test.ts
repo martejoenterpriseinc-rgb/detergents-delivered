@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { allocateRefundLine, assertRefundCapacity } from "./refund-allocation";
+import {
+  allocateRefundLine,
+  assertRefundCapacity,
+  refundRequestInput,
+  stockReturnInput,
+} from "./refund-allocation";
 
 describe("refund allocation conservation", () => {
   it("returns the exact saved net, tax and reward amounts across partial quantities", () => {
@@ -85,5 +90,35 @@ describe("refund allocation conservation", () => {
         requestedCents: 1000,
       }),
     ).toThrow();
+  });
+
+  it("accepts only bounded, unique line requests and explicit return condition", () => {
+    const line = { orderItemId: "item-1", quantity: 1 };
+    expect(
+      refundRequestInput.parse({
+        requestKey: "11111111-1111-4111-8111-111111111111",
+        orderId: "order-1",
+        paymentId: "payment-1",
+        reason: "Customer returned an unopened item",
+        lines: [line],
+      }),
+    ).toMatchObject({ lines: [line] });
+    expect(
+      refundRequestInput.safeParse({
+        requestKey: "11111111-1111-4111-8111-111111111111",
+        orderId: "order-1",
+        paymentId: "payment-1",
+        reason: "Customer returned an unopened item",
+        lines: [line, line],
+      }).success,
+    ).toBe(false);
+    expect(
+      stockReturnInput.safeParse({
+        requestKey: "11111111-1111-4111-8111-111111111111",
+        orderId: "order-1",
+        reason: "Customer returned an unopened item",
+        lines: [{ ...line, condition: "UNKNOWN" }],
+      }).success,
+    ).toBe(false);
   });
 });

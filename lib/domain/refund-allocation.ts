@@ -21,6 +21,45 @@ const allocationInput = z
   })
   .strict();
 
+const lineRequest = z
+  .object({
+    orderItemId: z.string().min(1).max(100),
+    quantity: z.number().int().min(1).max(100),
+  })
+  .strict();
+
+export const refundRequestInput = z
+  .object({
+    requestKey: z.string().uuid(),
+    orderId: z.string().min(1).max(100),
+    paymentId: z.string().min(1).max(100),
+    reason: z.string().trim().min(10).max(500),
+    lines: z.array(lineRequest).min(1).max(30),
+  })
+  .strict()
+  .refine(
+    (value) =>
+      new Set(value.lines.map((line) => line.orderItemId)).size === value.lines.length,
+    "Each purchased item may appear once.",
+  );
+
+export const stockReturnInput = z
+  .object({
+    requestKey: z.string().uuid(),
+    orderId: z.string().min(1).max(100),
+    reason: z.string().trim().min(10).max(500),
+    lines: z
+      .array(lineRequest.extend({ condition: z.enum(["SELLABLE", "DAMAGED"]) }))
+      .min(1)
+      .max(30),
+  })
+  .strict()
+  .refine(
+    (value) =>
+      new Set(value.lines.map((line) => line.orderItemId)).size === value.lines.length,
+    "Each returned item may appear once.",
+  );
+
 /** Slice a saved line cumulatively; successive partial returns conserve every cent. */
 export function allocateRefundLine(input: z.input<typeof allocationInput>) {
   const { quantities: q, netCents, taxCents, rewardCents } = allocationInput.parse(input);
