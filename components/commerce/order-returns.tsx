@@ -129,16 +129,19 @@ export function ReceiveOrderReturn({
                 required
               />
             </label>
-            <label className="text-sm">
-              Condition for {item.nameSnapshot}
+            <div className="text-sm">
+              <label htmlFor={`return-condition-${item.id}`}>
+                Condition for {item.nameSnapshot}
+              </label>
               <select
+                id={`return-condition-${item.id}`}
                 name={`condition-${item.id}`}
                 className="mt-1 block w-full rounded-lg border p-2"
               >
                 <option value="SELLABLE">Sellable</option>
                 <option value="DAMAGED">Damaged</option>
               </select>
-            </label>
+            </div>
           </div>
         ))}
         <label className="block">
