@@ -101,7 +101,9 @@ test("expenses and mileage persist, recover lost saves, export and restrict CPA 
     await page.screenshot({ path: info.outputPath("expenses.png"), fullPage: true });
     await page.goto("/admin/mileage");
     await page.getByRole("button", { name: "+ Trip", exact: true }).click();
-    await page.getByLabel("Vehicle", { exact: true }).selectOption(vehicle.id);
+    await page
+      .getByRole("combobox", { name: "Vehicle", exact: true })
+      .selectOption(vehicle.id);
     await page.getByLabel("Starting odometer", { exact: true }).fill("1000");
     await page.getByLabel("Ending odometer", { exact: true }).fill("1012");
     await page
