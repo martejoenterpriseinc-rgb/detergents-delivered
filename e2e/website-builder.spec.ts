@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { test, expect } from "@playwright/test";
+import { test, expect, type Locator } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import sharp from "sharp";
@@ -318,6 +318,14 @@ test("builder publishes photos and sections with faithful device previews and pr
     await publicPage.locator("section.sf-steps").screenshot({
       path: testInfo.outputPath("how-it-works.png"),
     });
+    // Keep coverage for the default steps that include supporting descriptions.
+    for (const surface of [iframe, publicPage]) {
+      const descriptions = surface.locator(".sf-step-grid article p");
+      await expect(descriptions).toHaveCount(3);
+      expect((await descriptions.allTextContents()).every((text) => text.trim())).toBe(
+        true,
+      );
+    }
     const expectedPosition = width <= 520 ? "50% 80%" : "20% 50%";
     await expect(publicPage.locator(".sf-hero .sf-section-photo")).toHaveCSS(
       "object-position",
@@ -352,6 +360,106 @@ test("builder publishes photos and sections with faithful device previews and pr
     await page.screenshot({
       path: testInfo.outputPath("website-builder.png"),
       fullPage: true,
+    });
+    // Match the owner's saved title-only copy. A single-column grid alone can
+    // still consume the whole phone screen if numbers sit above oversized rows.
+    const stepTitles = ["Check your ZIP", "Fill the cart", "We bring it by"];
+    await page.getByLabel("Selected area").selectOption("how-it-works");
+    await page.getByLabel("Heading", { exact: true }).fill("How it works");
+    await page.getByLabel("Eyebrow", { exact: true }).fill("HOW IT WORKS");
+    await page
+      .getByLabel("Steps (one title | description per line)", { exact: true })
+      .fill(stepTitles.join("\n"));
+    await page.getByRole("button", { name: "Save draft", exact: true }).click();
+    await expect(
+      page.getByRole("status").filter({ hasText: "Draft saved" }),
+    ).toBeVisible();
+    await page.reload();
+    await page.getByLabel("Selected area").selectOption("how-it-works");
+    await expect(
+      page.getByLabel("Steps (one title | description per line)", { exact: true }),
+    ).toHaveValue(stepTitles.join("\n"));
+    await page.getByRole("button", { name: new RegExp(`^${device}$`, "i") }).click();
+    await expect
+      .poll(() => iframe.locator("body").evaluate(() => window.innerWidth))
+      .toBe(width);
+    await expect(iframe.locator(".sf-step-grid h3")).toHaveText(stepTitles);
+    // Saving this draft must not change the published, paragraph-bearing copy.
+    await publicPage.reload();
+    await expect(publicPage.locator(".sf-step-grid article p")).toHaveCount(3);
+    await page.getByRole("button", { name: "Save & apply", exact: true }).click();
+    await expect(
+      page.getByRole("status").filter({ hasText: "Saved and applied" }),
+    ).toBeVisible();
+    await publicPage.reload();
+    const assertCompactSteps = async (section: Locator) => {
+      await expect(section.getByRole("heading", { level: 3 })).toHaveText(stepTitles);
+      await expect(section.locator(".sf-copy").getByText(/^how it works$/i)).toHaveCount(
+        1,
+      );
+      await expect(section.locator(".sf-step-grid article p")).toHaveCount(0);
+      const layout = await section.evaluate((node) => {
+        const rect = node.getBoundingClientRect();
+        return {
+          width: rect.width,
+          height: rect.height,
+          overflow: node.scrollWidth > node.clientWidth,
+          steps: Array.from(node.querySelectorAll(".sf-step-grid article")).map(
+            (article) => {
+              const row = article.getBoundingClientRect();
+              const number = article.querySelector("span")!.getBoundingClientRect();
+              const title = article.querySelector("h3")!;
+              const heading = title.getBoundingClientRect();
+              return {
+                x: row.x,
+                y: row.y,
+                height: row.height,
+                numberRight: number.right,
+                numberCenter: number.y + number.height / 2,
+                titleX: heading.x,
+                titleCenter: heading.y + heading.height / 2,
+                titleHeight: heading.height,
+                titleLineHeight: parseFloat(getComputedStyle(title).lineHeight),
+                titleFits:
+                  title.scrollWidth <= title.clientWidth &&
+                  title.scrollHeight <= title.clientHeight,
+              };
+            },
+          ),
+        };
+      });
+      expect(layout.overflow).toBe(false);
+      expect(layout.steps).toHaveLength(3);
+      for (const step of layout.steps) {
+        expect(step.titleFits).toBe(true);
+        // These short phrases must fit without breaking words or clipping text.
+        expect(step.titleHeight).toBeLessThanOrEqual(step.titleLineHeight + 1);
+      }
+      if (width <= 520) {
+        expect(layout.height).toBeLessThanOrEqual(340);
+        for (const [index, step] of layout.steps.entries()) {
+          expect(step.x).toBeCloseTo(layout.steps[0].x, 0);
+          expect(step.height).toBeLessThanOrEqual(64);
+          expect(step.titleX).toBeGreaterThan(step.numberRight);
+          expect(Math.abs(step.titleCenter - step.numberCenter)).toBeLessThanOrEqual(2);
+          if (index) expect(step.y).toBeGreaterThan(layout.steps[index - 1].y);
+        }
+      } else {
+        for (const [index, step] of layout.steps.entries()) {
+          expect(step.y).toBeCloseTo(layout.steps[0].y, 0);
+          if (index) expect(step.x).toBeGreaterThan(layout.steps[index - 1].x);
+        }
+      }
+      return { width: layout.width, height: layout.height };
+    };
+    const previewSteps = await assertCompactSteps(iframe.locator("section.sf-steps"));
+    const publishedSteps = await assertCompactSteps(
+      publicPage.locator("section.sf-steps"),
+    );
+    expect(previewSteps.width).toBeCloseTo(publishedSteps.width, 0);
+    expect(previewSteps.height).toBeCloseTo(publishedSteps.height, 0);
+    await publicPage.locator("section.sf-steps").screenshot({
+      path: testInfo.outputPath("how-it-works-title-only.png"),
     });
     // Authorization is checked independently of whether a user can find the UI.
     const customerRole = await db.role.upsert({
@@ -397,6 +505,8 @@ test("builder publishes photos and sections with faithful device previews and pr
         failedUploadRetained: true,
         uploadRetryAfterLostResponse: true,
         previewGeometryMatches: true,
+        titleOnlyStepsCompact: true,
+        duplicateStepHeadingRemoved: true,
       }),
       contentType: "application/json",
     });

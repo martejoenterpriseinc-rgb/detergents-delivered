@@ -80,7 +80,12 @@ export function StorefrontHome({
                 className={`sf-container ${isHero && s.imageId ? "sf-hero-grid" : ""}`}
               >
                 <div className="sf-copy">
-                  {s.badgeText && <p className="sf-eyebrow">{s.badgeText}</p>}
+                  {s.badgeText &&
+                    (s.type !== "steps" ||
+                      s.badgeText.trim().toLowerCase() !==
+                        s.title.trim().toLowerCase()) && (
+                      <p className="sf-eyebrow">{s.badgeText}</p>
+                    )}
                   {s.title && (isHero ? <h1>{s.title}</h1> : <h2>{s.title}</h2>)}
                   {s.body && s.type !== "steps" && <p className="sf-body">{s.body}</p>}
                   {isHero && (
@@ -110,11 +115,14 @@ export function StorefrontHome({
                       .filter(Boolean)
                       .map((step, i) => {
                         const [title, ...body] = step.split("|");
+                        const description = body.join("|").trim();
                         return (
                           <article key={i}>
                             <span>{String(i + 1).padStart(2, "0")}</span>
-                            <h3>{title.trim()}</h3>
-                            <p>{body.join("|").trim()}</p>
+                            <div className="sf-step-copy">
+                              <h3>{title.trim()}</h3>
+                              {description && <p>{description}</p>}
+                            </div>
                           </article>
                         );
                       })}
