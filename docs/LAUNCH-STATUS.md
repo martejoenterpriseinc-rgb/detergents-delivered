@@ -8,7 +8,7 @@ Finance and the mobile record layout are deployed to both DD web services at `20
 
 ## Active build
 
-The Orders workspace replaces its placeholder with search, filters, pages and historical detail. PR 27, revision `ab1cb65ff371bc8af06552da659b81e1019fd0d6`, is undergoing CI and device review. It must not be described as deployed until exact-revision release verification is recorded.
+The Orders workspace replaces its placeholder with search, filters, pages and historical detail. PR 27, revision `e13a48dba5aae3a80b6e99dac26c5de07c03287e`, passed CI run 34467118370: 234 unit, 99 native database and 37 browser tests (370 total), lint, typecheck, migration replay and build. List/detail screenshots were reviewed at desktop, tablet and mobile widths. It is deployed to both DD web services: sandbox deploy `dep-dah8ljn40ujc73e3gg2g` and production deploy `dep-dah8lpp42hec73f98ic0`. Both report readiness 200, anonymous Orders/Finance access 401 and checkout disabled. The authenticated sandbox Orders page works. Record counts are unchanged; the post-release error log query was empty. This is the current web revision, superseding the finance-only revision above.
 
 Refund preparation is on `feature/go-live-refunds`: cumulative monetary allocation and capacity validation have unit coverage; the durable provider lifecycle, physical returns and reward integration remain to implement. These helpers do not expose a refund action.
 
