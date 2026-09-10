@@ -1,12 +1,18 @@
 # Refund and return implementation
 
-Status: persistence foundation under CI in PR 28. No refund or return HTTP/UI action is exposed, and no provider refund can be submitted by this implementation.
+Status: persistence foundation deployed at `70b1eda`; staff return receipts and unused-draft cancellation passed CI 99 at `5c732012922908c6b85c844f35050217a9953f59` (389 tests). Sandbox deployment is in progress. Payment refund submission is not exposed.
 
 The foundation adds exact cumulative cash reservations, serialized request-key replay, verified captured-payment binding, append-only request events, and separate immutable physical returns with original consumed cost allocation snapshots. Sellable returns restore the corresponding original cost layers; damaged returns consume their allocation position without restoring sellable inventory. Native tests exercise competing refund requests, duplicate returns, quantity limits, authorization, private DTO fields and immutable evidence.
 
-Reward-funded orders are explicitly blocked at preparation until reward restoration and compensation are implemented. Provider submission/reconciliation, canceling unused prepared requests, tax reversal evidence, reward/referral adjustments and the staff interface remain required before enabling refunds. Additive migration deployment alone does not complete those capabilities.
+Staff can receive inspected goods from the order detail page, with a condition per item, remaining quantities, receipt history and an explicit confirmation. Lost-response retries retain the same payload and request key. CPA access is read-only. Unsubmitted refund drafts can be canceled with an audited reason; submitted, uncertain and provider-bound requests cannot be canceled locally. Request status and allocated lines are visible without provider identifiers or private evidence.
 
-For this release, `node --import tsx scripts/deploy-refund-foundation.ts` checks the existing database identity and complete migration history, permits only the two named additive refund migrations, applies them, and verifies history again. It refuses empty/untracked databases, checksum drift, unfinished migrations and unrelated pending changes. Restore the normal read-only pre-deploy command after this release.
+The next adapter reads the original Stripe account, PaymentIntent, captured charge and all refunds through a bounded paginated list. It rejects wrong account/mode/currency/amount bindings, incomplete or duplicate history, unknown states and external/mismatched refunds. It selects minimal internal evidence and omits email, bank instructions and unrelated metadata. Nine mocked-provider tests cover these boundaries. This read-only adapter is not yet wired to a staff action, settlement ledger, webhook or worker, and does not establish real provider acceptance.
+
+Refund allocation subtracts the actual surviving reserved net, tax and reward amounts before dividing the remaining quantities. This conserves all saved cents when an earlier partial draft is canceled while a later draft remains reserved. Quantity alone is insufficient to locate rounding remainders after cancellation.
+
+Reward-funded orders are explicitly blocked at preparation until reward restoration and compensation are implemented. Provider submission/reconciliation, tax reversal evidence, reward/referral adjustments and the payment refund staff controls remain required before enabling refunds. Physical receipts do not move money or imply a payment refund.
+
+The foundation release used `node --import tsx scripts/deploy-refund-foundation.ts` to check existing database identity and complete migration history, permit only the two named additive migrations, apply them and verify history again. Both web services now use the strictly read-only `npm run db:preflight` pre-deploy command. The staff controls add no migrations.
 
 ## Existing evidence
 
