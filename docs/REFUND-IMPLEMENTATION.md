@@ -6,6 +6,8 @@ The foundation adds exact cumulative cash reservations, serialized request-key r
 
 Reward-funded orders are explicitly blocked at preparation until reward restoration and compensation are implemented. Provider submission/reconciliation, canceling unused prepared requests, tax reversal evidence, reward/referral adjustments and the staff interface remain required before enabling refunds. Additive migration deployment alone does not complete those capabilities.
 
+For this release, `node --import tsx scripts/deploy-refund-foundation.ts` checks the existing database identity and complete migration history, permits only the two named additive refund migrations, applies them, and verifies history again. It refuses empty/untracked databases, checksum drift, unfinished migrations and unrelated pending changes. Restore the normal read-only pre-deploy command after this release.
+
 ## Existing evidence
 
 Checkout writes immutable item totals/tax/discounts, a pinned Stripe account and mode, consumed FIFO allocations, verified payment events and reward redemption entries. The existing Refund table only describes a recorded refund. It has no pending/failed lifecycle or item allocations, so it cannot safely represent a refund request before the provider outcome is known.
