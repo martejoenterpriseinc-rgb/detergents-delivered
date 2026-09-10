@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { AccountError } from "@/lib/domain/account";
 import { hasPermission, permissionsForRoles } from "@/lib/domain/authz";
 import {
-  allocateRefundLine,
+  allocateRemainingRefundLine,
   assertRefundCapacity,
   refundRequestInput,
   stockReturnInput,
@@ -159,16 +159,19 @@ export async function prepareRefund(userId: string, raw: unknown) {
       const lines = input.lines.map((line) => {
         const itemIndex = order.items.findIndex((item) => item.id === line.orderItemId);
         const item = order.items[itemIndex];
-        const alreadyRefunded = active
+        const reservedLines = active
           .flatMap((request) => request.lines)
-          .filter((saved) => saved.orderItemId === item.id)
-          .reduce((sum, saved) => sum + saved.quantity, 0);
+          .filter((saved) => saved.orderItemId === item.id);
+        const alreadyRefunded = reservedLines.reduce(
+          (sum, saved) => sum + saved.quantity,
+          0,
+        );
         if (alreadyRefunded + line.quantity > item.quantity)
           throw new AccountError(
             "Refund quantity exceeds the remaining purchased quantity.",
             409,
           );
-        const allocated = allocateRefundLine({
+        const allocated = allocateRemainingRefundLine({
           quantities: {
             purchased: item.quantity,
             alreadyRefunded,
@@ -177,6 +180,14 @@ export async function prepareRefund(userId: string, raw: unknown) {
           netCents: item.lineTotalCents - item.taxCents,
           taxCents: item.taxCents,
           rewardCents: 0,
+          allocated: reservedLines.reduce(
+            (sum, saved) => ({
+              netCents: sum.netCents + saved.netCents,
+              taxCents: sum.taxCents + saved.taxCents,
+              rewardCents: sum.rewardCents + saved.rewardCents,
+            }),
+            { netCents: 0, taxCents: 0, rewardCents: 0 },
+          ),
         });
         amountCents += allocated.cashCents;
         return {

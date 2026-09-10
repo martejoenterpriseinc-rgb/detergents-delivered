@@ -158,6 +158,84 @@ afterAll(async () => {
 });
 
 describe("refund reservations and physical returns (isolated PostgreSQL)", () => {
+  it("replaces a canceled partial draft without losing or exceeding saved net and tax cents", async () => {
+    const id = randomUUID();
+    const sale = await prisma.order.create({
+      data: {
+        number: `rounding-${id}`,
+        customerId: customer,
+        status: "DELIVERED",
+        subtotalCents: 1000,
+        taxCents: 83,
+        totalCents: 1083,
+        items: {
+          create: {
+            productVariantId: variant,
+            nameSnapshot: "Saved price",
+            skuSnapshot: id,
+            quantity: 3,
+            unitPriceCents: 334,
+            taxCents: 83,
+            lineTotalCents: 1083,
+          },
+        },
+        checkoutAttempt: {
+          create: {
+            id,
+            customerId: customer,
+            state: "PAID",
+            requestKey: id,
+            requestHash: id,
+            snapshot: {},
+            expiresAt: new Date(),
+            stripeAccountId: "acct_synthetic",
+            livemode: false,
+          },
+        },
+        payments: {
+          create: {
+            provider: "STRIPE",
+            status: "CAPTURED",
+            amountCents: 1083,
+            externalId: `pi_${id}`,
+            events: {
+              create: {
+                type: "checkout.session.completed",
+                externalId: `checkout:${id}:paid`,
+                verifiedAt: new Date(),
+              },
+            },
+          },
+        },
+      },
+      include: { items: true, payments: true },
+    });
+    const prepare = (quantity: number) =>
+      prepareRefund(admin, {
+        requestKey: randomUUID(),
+        orderId: sale.id,
+        paymentId: sale.payments[0].id,
+        reason: "Review partial refund for saved merchandise",
+        lines: [{ orderItemId: sale.items[0].id, quantity }],
+      });
+    const first = await prepare(1);
+    const second = await prepare(2);
+    await cancelPreparedRefund(admin, {
+      orderId: sale.id,
+      requestId: first.id,
+      reason: "Correct the first draft before submission",
+    });
+    const replacement = await prepare(1);
+    expect(second.amountCents + replacement.amountCents).toBe(1083);
+    const lines = await prisma.refundRequestLine.findMany({
+      where: {
+        refundRequestId: { in: [second.id, replacement.id] },
+      },
+    });
+    expect(lines.reduce((sum, line) => sum + line.netCents, 0)).toBe(1000);
+    expect(lines.reduce((sum, line) => sum + line.taxCents, 0)).toBe(83);
+    await expect(prepare(1)).rejects.toMatchObject({ status: 409 });
+  });
   it("cancels unused drafts once, releases capacity and rolls back a failed audit", async () => {
     const draft = await prepareRefund(admin, {
       requestKey: randomUUID(),

@@ -1,12 +1,60 @@
 import { describe, expect, it } from "vitest";
 import {
   allocateRefundLine,
+  allocateRemainingRefundLine,
   assertRefundCapacity,
   refundRequestInput,
   stockReturnInput,
 } from "./refund-allocation";
 
 describe("refund allocation conservation", () => {
+  it("conserves saved cents after canceling arbitrary earlier partial reservations", () => {
+    for (let purchased = 2; purchased <= 100; purchased++) {
+      const saved = { netCents: 1001, taxCents: 83, rewardCents: 107 };
+      const held = Array.from({ length: purchased }, (_, alreadyRefunded) =>
+        allocateRefundLine({
+          ...saved,
+          quantities: { purchased, alreadyRefunded, requested: 1 },
+        }),
+      ).filter((_, index) => index % 2);
+      const allocated = held.reduce(
+        (sum, part) => ({
+          netCents: sum.netCents + part.netCents,
+          taxCents: sum.taxCents + part.taxCents,
+          rewardCents: sum.rewardCents + part.rewardCents,
+        }),
+        { netCents: 0, taxCents: 0, rewardCents: 0 },
+      );
+      const remainder = allocateRemainingRefundLine({
+        ...saved,
+        allocated,
+        quantities: {
+          purchased,
+          alreadyRefunded: held.length,
+          requested: purchased - held.length,
+        },
+      });
+      for (const key of ["netCents", "taxCents", "rewardCents"] as const)
+        expect(allocated[key] + remainder[key]).toBe(saved[key]);
+    }
+  });
+  it("rejects inconsistent saved allocations", () => {
+    const input = {
+      netCents: 100,
+      taxCents: 8,
+      rewardCents: 0,
+      quantities: { purchased: 3, alreadyRefunded: 1, requested: 1 },
+      allocated: { netCents: 101, taxCents: 0, rewardCents: 0 },
+    };
+    expect(() => allocateRemainingRefundLine(input)).toThrow();
+    expect(() =>
+      allocateRemainingRefundLine({
+        ...input,
+        quantities: { ...input.quantities, alreadyRefunded: 0 },
+        allocated: { netCents: 1, taxCents: 0, rewardCents: 0 },
+      }),
+    ).toThrow();
+  });
   it("returns the exact saved net, tax and reward amounts across partial quantities", () => {
     for (let purchased = 1; purchased <= 100; purchased++) {
       const sums = { netCents: 0, taxCents: 0, cashCents: 0, rewardCents: 0 };

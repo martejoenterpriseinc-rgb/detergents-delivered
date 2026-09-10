@@ -86,6 +86,36 @@ export function allocateRefundLine(input: z.input<typeof allocationInput>) {
   };
 }
 
+/** Allocate the remaining saved cents after arbitrary draft cancellations/failures. */
+export function allocateRemainingRefundLine(
+  input: z.input<typeof allocationInput> & {
+    allocated: { netCents: number; taxCents: number; rewardCents: number };
+  },
+) {
+  const { allocated, ...raw } = input;
+  const saved = allocationInput.parse(raw);
+  const held = z
+    .object({ netCents: cents, taxCents: cents, rewardCents: cents })
+    .strict()
+    .parse(allocated);
+  for (const key of ["netCents", "taxCents", "rewardCents"] as const) {
+    if (held[key] > saved[key] || (!saved.quantities.alreadyRefunded && held[key]))
+      throw new Error("Saved refund allocations require reconciliation.");
+  }
+  // Quantity alone cannot locate the rounding remainder once an earlier request
+  // is released. Subtract actual surviving allocations before dividing again.
+  return allocateRefundLine({
+    quantities: {
+      purchased: saved.quantities.purchased - saved.quantities.alreadyRefunded,
+      alreadyRefunded: 0,
+      requested: saved.quantities.requested,
+    },
+    netCents: saved.netCents - held.netCents,
+    taxCents: saved.taxCents - held.taxCents,
+    rewardCents: saved.rewardCents - held.rewardCents,
+  });
+}
+
 /** Unknown provider outcomes remain reserved until authoritative reconciliation. */
 export const refundReservationStates = [
   "PREPARED",

@@ -52,6 +52,7 @@ test("staff receive goods, recover a lost response and cancel only unused refund
         quantityOriginal: 3,
         quantityRemaining: 0,
         landedUnitCostCents: 400,
+        receivedAt: new Date("2026-01-01T00:00:00Z"),
       },
     });
     const order = await db.order.create({
