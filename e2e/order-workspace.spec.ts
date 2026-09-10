@@ -23,7 +23,7 @@ test("staff can find historical orders while CPA access stays read only", async 
       });
       const user = await db.user.create({
         data: {
-          email: `${code}-${marker}@example.test`,
+          email: `${code.toLowerCase()}-${marker}@example.test`,
           passwordHash: await bcrypt.hash(password, 4),
           userRoles: { create: { roleId: role.id } },
         },
@@ -84,7 +84,7 @@ test("staff can find historical orders while CPA access stays read only", async 
       await page.goto("/sign-in");
       await page
         .getByLabel("Email", { exact: true })
-        .fill(`${code}-${marker}@example.test`);
+        .fill(`${code.toLowerCase()}-${marker}@example.test`);
       await page.getByLabel("Password", { exact: true }).fill(password);
       await page.getByRole("button", { name: "Sign in", exact: true }).click();
       await expect(page).toHaveURL(/\/admin$/);

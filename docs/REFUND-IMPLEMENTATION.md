@@ -24,6 +24,8 @@ Provider status is authoritative. Pending, requires_action, failed and canceled 
 
 Allocate from saved purchase amounts, never current prices or tax rates. Cumulative integer allocation must return every saved cent exactly once across successive partial quantities. Promotion discounts are not cash owed to the customer. Restore only redeemed reward credit attributable to successfully refunded merchandise; append reversals if the provider later reverses the refund. Keep referral eligibility and award reversals source-linked, idempotent and auditable. Negative reward balances must continue to block spending.
 
+The current referral reviewer treats any Refund row as disqualifying and makes reversal terminal. Before adding provider refund failures/compensations, update that consumer to use verified net refund evidence; merely inserting failed or pending requests into Refund would incorrectly reverse awards. Preserve its existing wallet lock ordering and append-only ledger protections.
+
 Do not infer historical tax jurisdictions or taxable bases from today's product/customer settings. Verify Stripe Tax reversal behavior for the actual Checkout integration, and store its evidence separately from the original tax snapshot.
 
 ## Acceptance before enabling
