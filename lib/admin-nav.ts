@@ -14,7 +14,7 @@ const stock: RoleCode[] = ["ADMIN", "INVENTORY", "SUPER_ADMIN"];
 const stockReaders: RoleCode[] = [...stock, "CPA"];
 export const ADMIN_NAV: AdminNavItem[] = [
   { href: "/admin", label: "Dashboard", phase: 1 },
-  { href: "/admin/orders", label: "Orders", phase: 3 },
+  { href: "/admin/orders", label: "Orders", phase: 3, roles: [...admins, "CPA"] },
   { href: "/admin/deliveries", label: "Deliveries", phase: 4, roles: admins },
   { href: "/admin/customers", label: "Customers", phase: 3, roles: admins },
   { href: "/admin/inventory", label: "Inventory", phase: 2 },
