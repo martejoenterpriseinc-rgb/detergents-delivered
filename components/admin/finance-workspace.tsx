@@ -344,9 +344,9 @@ export function FinanceWorkspace({ data }: { data: Data }) {
         {data.rows.map((row) => (
           <article
             key={row.id}
-            className="flex flex-wrap items-start justify-between gap-4 rounded-xl border bg-white p-4"
+            className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-4 rounded-xl border bg-white p-4 sm:grid-cols-[minmax(0,1fr)_auto_auto]"
           >
-            <div className="min-w-0 flex-1 break-words">
+            <div className="col-span-2 min-w-0 break-words sm:col-span-1">
               <p className="text-sm text-teal-800">
                 {row.date} · {row.label}
               </p>
@@ -364,14 +364,14 @@ export function FinanceWorkspace({ data }: { data: Data }) {
                   : "Existing record"}
               </p>
             </div>
-            <strong>
+            <strong className="min-w-0 break-words">
               {row.currency === "USD" ? "$" : ""}
               {row.amount || "Not recorded"}
               {row.currency !== "USD" ? ` ${row.currency}` : ""}
             </strong>
             {row.editable && (
               <button
-                className="ops-button"
+                className="ops-button justify-self-end"
                 disabled={busy || editing !== undefined}
                 onClick={() => open(row)}
               >
