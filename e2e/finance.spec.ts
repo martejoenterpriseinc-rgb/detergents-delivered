@@ -60,7 +60,9 @@ test("expenses and mileage persist, recover lost saves, export and restrict CPA 
       }),
     );
     await page.getByRole("button", { name: "Save record", exact: true }).click();
-    await expect(page.getByRole("alert")).toContainText("Injected finance save failure");
+    await expect(
+      page.getByRole("alert", { name: "Save error", exact: true }),
+    ).toContainText("Injected finance save failure");
     await expect(page.getByLabel("Amount (USD)", { exact: true })).toHaveValue("12.34");
     await page.unroute("**/api/admin/finance");
     await page.route("**/api/admin/finance", async (route) => {
@@ -69,7 +71,9 @@ test("expenses and mileage persist, recover lost saves, export and restrict CPA 
       await route.abort("failed");
     });
     await page.getByRole("button", { name: "Save record", exact: true }).click();
-    await expect(page.getByRole("alert")).toBeVisible();
+    await expect(
+      page.getByRole("alert", { name: "Save error", exact: true }),
+    ).toBeVisible();
     const saved = await db.expense.findMany({ where: { category: { name: category } } });
     expect(saved).toHaveLength(1);
     expenseIds.push(saved[0].id);

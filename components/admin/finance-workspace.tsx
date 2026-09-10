@@ -162,6 +162,7 @@ export function FinanceWorkspace({ data }: { data: Data }) {
       {error && (
         <p
           role="alert"
+          aria-label="Save error"
           className="rounded-lg border border-red-300 bg-red-50 p-3 text-red-900"
         >
           {error}
