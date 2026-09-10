@@ -4,15 +4,17 @@ Public launch is not complete. Checkout remains disabled in sandbox and isolated
 
 ## Verified release
 
-Both DD web services run `70b1edafab922aa99a3f13cf9b774eef34654540`, including Finance, Orders and the refund/return persistence foundation. CI 96, run 34480937520, passed lint, typecheck, schema validation, migration replay, build, 241 unit tests, 101 native PostgreSQL tests and 37 browser tests (379 total).
+Revision `c23118f26c52c7f313453c1e546f9df4536a05f3` passed CI 101, run 34490225118: lint, typecheck, schema validation, migration replay, build, 255 unit tests, 108 native PostgreSQL tests and 40 browser tests (403 total). It includes the staff return controls, read-only Stripe refund inspection and explicit first production owner command.
 
-Sandbox deploy `dep-dahas26k1f9s73ebaeog` and production deploy `dep-dahatuqjnfac73928kmg` were verified live. Both returned readiness 200, anonymous Orders/Finance 401 and checkout disabled. Existing records were preserved. Both now use the strictly read-only `npm run db:preflight` pre-deploy command; auto-deploy remains off.
+Sandbox deploy `dep-dahc5oe7bikc73fanbq0` and production deploy `dep-dahc7n6q1p3s73ebhco0` were verified live at that revision at 14:49:54 UTC and 14:54:12 UTC respectively. Both returned readiness 200 and anonymous Orders/Finance and order mutation responses of 401. Checkout remained disabled and record counts were preserved: sandbox has two users; production has zero users; both have zero products, orders, refund requests, refunds and stock returns. Error-level logs were clear through 14:54:33 UTC. These checks establish this release’s health, not provider or public-launch acceptance. Both services use the strictly read-only `npm run db:preflight` pre-deploy command; auto-deploy remains off.
 
-## Active build
+## Completed build increments
 
-PR 28 adds staff physical-return receipts, condition per item, status/history, lost-response retry protection and audited cancellation of never-submitted refund drafts. CPA access remains read-only. Revision `5c732012922908c6b85c844f35050217a9953f59` passed CI 99, run 34487556692: 246 unit, 103 native PostgreSQL and 40 browser tests (389 total), plus lint, typecheck, schema/migration validation and build. Desktop, tablet and mobile screenshots were reviewed. Sandbox deploy `dep-dahbqh1594qs7381v7sg` is in progress; production remains at the verified foundation above until its rollout is confirmed. It also fixes partial-refund rounding after an earlier draft is canceled. Provider refund submission remains unavailable.
+PR 28 adds staff physical-return receipts, condition per item, status/history, lost-response retry protection and audited cancellation of never-submitted refund drafts. CPA access remains read-only. Staff controls at `5c732012922908c6b85c844f35050217a9953f59` passed CI 99 (389 tests) and were deployed and verified on both services. Desktop, tablet and mobile screenshots were reviewed. The change also fixes partial-refund rounding after an earlier draft is canceled. Provider refund submission remains unavailable.
 
-The next read-only Stripe adapter verifies original payment binding and detects external or duplicate refunds. Its nine mocked-provider tests pass locally. It is not yet connected to the settlement ledger, staff actions, webhooks or workers; the payment refund workflow remains unfinished.
+The read-only Stripe adapter verifies original payment binding and detects external or duplicate refunds. Its nine mocked-provider tests passed in CI 100 (398 total tests) and CI 101. It is not yet connected to the settlement ledger, staff actions, webhooks or workers; the payment refund workflow remains unfinished.
+
+PR 29 adds an explicit hosting-operator command for the first production owner. It defaults to read-only review, requires an existing verified account and exact authorization, checks retained production identity, and atomically grants the role with an audit and session revocation. Five native tests cover replay, concurrency, identity checks, previous staff, revoked authority and audit rollback. No owner grant has been executed on either hosted service. See PRODUCTION-OWNER.md for the operator workflow.
 
 ## Observed production setup blockers
 
