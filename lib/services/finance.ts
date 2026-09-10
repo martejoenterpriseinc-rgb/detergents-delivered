@@ -36,7 +36,7 @@ export async function saveFinance(userId: string, input: unknown) {
   const entityType = data.kind === "expense" ? "Expense" : "MileageTrip";
   return prisma.$transaction(async (tx) => {
     await financeAccess(tx, userId, true);
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${requestId}, 0))`;
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${requestId}, 0))`;
     const previousRequest = await tx.auditLog.findUnique({ where: { id: requestId } });
     if (previousRequest) {
       const previous = previousRequest.afterJson as { input?: unknown; version?: number };
@@ -49,7 +49,7 @@ export async function saveFinance(userId: string, input: unknown) {
     }
     const id = data.id ?? requestId;
     // One record lock serializes edits; a vehicle lock also protects odometer overlap.
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${entityType + ":" + id}, 0))`;
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${entityType + ":" + id}, 0))`;
     const before =
       data.kind === "expense"
         ? await tx.expense.findUnique({ where: { id } })

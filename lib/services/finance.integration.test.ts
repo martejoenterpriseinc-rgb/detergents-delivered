@@ -197,7 +197,9 @@ describe("native finance persistence", () => {
     );
     const before = await prisma.expense.count();
     try {
-      await expect(saveFinance(admin, data)).rejects.toThrow();
+      await expect(saveFinance(admin, data)).rejects.toThrow(
+        "synthetic finance audit failure",
+      );
       expect(await prisma.expense.count()).toBe(before);
     } finally {
       await prisma.$executeRawUnsafe(`DROP TRIGGER dd_finance_test_fail ON "AuditLog"`);
