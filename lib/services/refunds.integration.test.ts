@@ -6,7 +6,8 @@ vi.mock("@/lib/commerce/runtime", () => ({
   readCommerce: vi.fn(async () => ({ accountId: "acct_synthetic", live: false })),
 }));
 
-import { prepareRefund, recordStockReturn } from "./refunds";
+import { prepareRefund, recordStockReturn, cancelPreparedRefund } from "./refunds";
+import { getOrder } from "./order-workspace";
 
 const marker = randomUUID();
 const checkoutId = randomUUID();
@@ -157,6 +158,76 @@ afterAll(async () => {
 });
 
 describe("refund reservations and physical returns (isolated PostgreSQL)", () => {
+  it("cancels unused drafts once, releases capacity and rolls back a failed audit", async () => {
+    const draft = await prepareRefund(admin, {
+      requestKey: randomUUID(),
+      orderId: order,
+      paymentId: payment,
+      reason: "Initial refund draft awaiting review",
+      lines: [{ orderItemId: item, quantity: 3 }],
+    });
+    const input = {
+      orderId: order,
+      requestId: draft.id,
+      reason: "Customer decided to keep the purchased goods",
+    };
+    await expect(cancelPreparedRefund(cpa, input)).rejects.toMatchObject({ status: 403 });
+    await expect(
+      cancelPreparedRefund(admin, { ...input, orderId: "wrong-order" }),
+    ).rejects.toMatchObject({ status: 404 });
+    await prisma.$executeRawUnsafe(
+      "ALTER TABLE \"AuditLog\" ADD CONSTRAINT dd_refund_cancel_audit CHECK (action <> 'refund.draft.canceled') NOT VALID",
+    );
+    try {
+      await expect(cancelPreparedRefund(admin, input)).rejects.toThrow();
+      expect(
+        (await prisma.refundRequest.findUniqueOrThrow({ where: { id: draft.id } }))
+          .status,
+      ).toBe("PREPARED");
+      expect(
+        await prisma.refundRequestEvent.count({ where: { refundRequestId: draft.id } }),
+      ).toBe(1);
+    } finally {
+      await prisma.$executeRawUnsafe(
+        'ALTER TABLE "AuditLog" DROP CONSTRAINT dd_refund_cancel_audit',
+      );
+    }
+    for (const status of [
+      "SUBMITTING",
+      "UNKNOWN",
+      "PENDING",
+      "REQUIRES_ACTION",
+      "SUCCEEDED",
+      "FAILED",
+    ] as const) {
+      await prisma.refundRequest.update({ where: { id: draft.id }, data: { status } });
+      await expect(cancelPreparedRefund(admin, input)).rejects.toMatchObject({
+        status: 409,
+      });
+    }
+    await prisma.refundRequest.update({
+      where: { id: draft.id },
+      data: { status: "PREPARED", submittedAt: new Date() },
+    });
+    await expect(cancelPreparedRefund(admin, input)).rejects.toMatchObject({
+      status: 409,
+    });
+    await prisma.refundRequest.update({
+      where: { id: draft.id },
+      data: { submittedAt: null },
+    });
+    const results = await Promise.all([
+      cancelPreparedRefund(admin, input),
+      cancelPreparedRefund(admin, input),
+    ]);
+    expect(results.map((result) => result.status)).toEqual(["CANCELED", "CANCELED"]);
+    expect(
+      await prisma.refundRequestEvent.count({
+        where: { refundRequestId: draft.id, type: "refund.draft.canceled" },
+      }),
+    ).toBe(1);
+    expect(await prisma.refund.count({ where: { orderId: order } })).toBe(0);
+  });
   it("prepares exact cumulative refunds, replays a key and rejects CPA writes", async () => {
     const requestKey = randomUUID();
     const input = {
@@ -301,5 +372,13 @@ describe("refund reservations and physical returns (isolated PostgreSQL)", () =>
         data: { quantity: 2 },
       }),
     ).rejects.toThrow();
+    const detail = await getOrder(cpa, order);
+    expect(detail.canReceiveReturn).toBe(false);
+    expect(detail.items[0].returnedQuantity).toBe(3);
+    expect(detail.stockReturns).toHaveLength(3);
+    expect(detail.refundRequests.every((request) => !request.canCancel)).toBe(true);
+    expect(JSON.stringify(detail)).not.toContain("providerRefundId");
+    expect(JSON.stringify(detail)).not.toContain("requestHash");
+    expect(JSON.stringify(detail)).not.toContain("costLayerId");
   });
 });

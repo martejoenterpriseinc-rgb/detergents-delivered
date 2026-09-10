@@ -60,6 +60,14 @@ export const stockReturnInput = z
     "Each returned item may appear once.",
   );
 
+export const cancelRefundInput = z
+  .object({
+    orderId: z.string().min(1).max(100),
+    requestId: z.string().min(1).max(100),
+    reason: z.string().trim().min(10).max(500),
+  })
+  .strict();
+
 /** Slice a saved line cumulatively; successive partial returns conserve every cent. */
 export function allocateRefundLine(input: z.input<typeof allocationInput>) {
   const { quantities: q, netCents, taxCents, rewardCents } = allocationInput.parse(input);

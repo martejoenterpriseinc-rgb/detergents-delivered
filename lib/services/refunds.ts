@@ -8,6 +8,7 @@ import {
   assertRefundCapacity,
   refundRequestInput,
   stockReturnInput,
+  cancelRefundInput,
 } from "@/lib/domain/refund-allocation";
 import { canonicalJson } from "@/lib/commerce/domain";
 import { readCommerce } from "@/lib/commerce/runtime";
@@ -241,6 +242,51 @@ export async function prepareRefund(userId: string, raw: unknown) {
     },
     { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted },
   );
+}
+
+/** Release only a draft that has never reached the provider submission boundary. */
+export async function cancelPreparedRefund(userId: string, raw: unknown) {
+  const input = cancelRefundInput.parse(raw);
+  return prisma.$transaction(async (tx) => {
+    await refundAccess(tx, userId);
+    await tx.$queryRaw`SELECT id FROM "Order" WHERE id = ${input.orderId} FOR UPDATE`;
+    const request = await tx.refundRequest.findUnique({ where: { id: input.requestId } });
+    if (!request || request.orderId !== input.orderId)
+      throw new AccountError("Refund request not found.", 404);
+    if (
+      request.submittedAt ||
+      request.providerRefundId ||
+      !["PREPARED", "CANCELED"].includes(request.status)
+    )
+      throw new AccountError(
+        "A submitted refund requires provider reconciliation and cannot be canceled here.",
+        409,
+      );
+    if (request.status === "CANCELED") return publicRefundRequest(request);
+    const saved = await tx.refundRequest.update({
+      where: { id: request.id },
+      data: { status: "CANCELED", lastError: null },
+    });
+    await tx.refundRequestEvent.create({
+      data: {
+        refundRequestId: request.id,
+        type: "refund.draft.canceled",
+        status: "CANCELED",
+        evidenceJson: { actorUserId: userId, reason: input.reason },
+      },
+    });
+    await tx.auditLog.create({
+      data: {
+        actorUserId: userId,
+        action: "refund.draft.canceled",
+        entityType: "RefundRequest",
+        entityId: request.id,
+        beforeJson: { status: "PREPARED" },
+        afterJson: { status: "CANCELED", reason: input.reason },
+      },
+    });
+    return publicRefundRequest(saved);
+  });
 }
 
 /** Record goods physically received. This never initiates or implies a payment refund. */
