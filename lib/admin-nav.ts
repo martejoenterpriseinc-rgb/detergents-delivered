@@ -55,8 +55,8 @@ export const WORKSPACE_ACTIONS: Record<string, AdminNavItem[]> = {
     action("/admin/reports", "Reports"),
     action("/admin/cpa", "CPA center"),
     action("/admin/import-export", "Import / export"),
-    action("/admin/expenses", "Expenses"),
-    action("/admin/mileage", "Mileage"),
+    action("/admin/expenses", "Expenses", [...admins, "CPA"]),
+    action("/admin/mileage", "Mileage", [...admins, "CPA"]),
     action("/admin/taxes", "Taxes"),
   ],
   "/admin/settings": [
