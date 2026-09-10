@@ -5,6 +5,21 @@ import { getOrder } from "@/lib/services/order-workspace";
 import { AccountError } from "@/lib/domain/account";
 import { orderMoney, orderStatusLabels } from "@/lib/domain/order-workspace";
 import { ReconcileButton } from "@/components/commerce/admin-actions";
+import {
+  ReceiveOrderReturn,
+  CancelRefundDraft,
+} from "@/components/commerce/order-returns";
+
+const refundLabels: Record<string, string> = {
+  PREPARED: "Draft — not submitted",
+  SUBMITTING: "Submitting",
+  UNKNOWN: "Needs reconciliation",
+  PENDING: "Pending with payment provider",
+  REQUIRES_ACTION: "Action required",
+  SUCCEEDED: "Succeeded",
+  FAILED: "Failed",
+  CANCELED: "Canceled",
+};
 
 const dateTime = (value: string) =>
   new Date(value).toLocaleString("en-US", { timeZone: "America/Chicago" }) + " Chicago";
@@ -143,6 +158,70 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
             </ul>
           </article>
         ))}
+      </section>
+      <section className="space-y-3">
+        <h2 className="text-xl font-semibold">Refund requests</h2>
+        {!order.refundRequests.length && <p>No refund requests recorded.</p>}
+        {order.refundRequests.map((request) => (
+          <article key={request.id} className="space-y-3 rounded-xl border bg-white p-4">
+            <div className="flex flex-wrap justify-between gap-3">
+              <strong>{orderMoney(request.amountCents, request.currency)}</strong>
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-sm">
+                {refundLabels[request.status] ?? request.status}
+              </span>
+            </div>
+            <p className="break-words">{request.reason}</p>
+            <ul className="space-y-1 text-sm">
+              {request.lines.map((line) => (
+                <li key={line.orderItemId}>
+                  {line.quantity} ×{" "}
+                  {order.items.find((item) => item.id === line.orderItemId)
+                    ?.nameSnapshot ?? "Purchased item"}
+                </li>
+              ))}
+            </ul>
+            <p className="text-sm text-teal-800">Updated {dateTime(request.updatedAt)}</p>
+            {request.canCancel && (
+              <CancelRefundDraft orderId={order.id} requestId={request.id} />
+            )}
+          </article>
+        ))}
+        {order.refundRequests.length === 100 && (
+          <p className="text-sm">Showing the latest 100 refund requests.</p>
+        )}
+      </section>
+      <section className="space-y-3">
+        <h2 className="text-xl font-semibold">Returned goods</h2>
+        {order.canReceiveReturn && (
+          <ReceiveOrderReturn orderId={order.id} items={order.items} />
+        )}
+        {!order.stockReturns.length && <p>No goods received back.</p>}
+        {order.stockReturns.map((record) => (
+          <article key={record.id} className="space-y-2 rounded-xl border bg-white p-4">
+            <strong>Received {dateTime(record.receivedAt)}</strong>
+            <p className="break-words">{record.reason}</p>
+            <ul className="space-y-2">
+              {record.lines.map((line) => (
+                <li
+                  key={line.orderItemId}
+                  className="flex flex-wrap justify-between gap-2"
+                >
+                  <span className="min-w-0 break-words">
+                    {line.quantity} ×{" "}
+                    {order.items.find((item) => item.id === line.orderItemId)
+                      ?.nameSnapshot ?? "Purchased item"}
+                  </span>
+                  <span>
+                    {line.condition === "SELLABLE" ? "Sellable stock" : "Damaged stock"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </article>
+        ))}
+        {order.stockReturns.length === 100 && (
+          <p className="text-sm">Showing the latest 100 goods receipts.</p>
+        )}
       </section>
       <section className="space-y-3">
         <h2 className="text-xl font-semibold">Recorded refunds</h2>

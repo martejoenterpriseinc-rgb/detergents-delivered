@@ -70,6 +70,7 @@ jobs:
           npm run db:preflight
           npm run db:migrate
           npm run db:preflight
+          node --import tsx scripts/deploy-refund-foundation.ts
 
       - name: Lint
         run: npm run lint

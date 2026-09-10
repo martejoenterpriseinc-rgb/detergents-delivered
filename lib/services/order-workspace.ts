@@ -166,6 +166,39 @@ export async function getOrder(userId: string, input: unknown) {
             },
             orderBy: { createdAt: "asc" },
           },
+          refundRequests: {
+            select: {
+              id: true,
+              amountCents: true,
+              currency: true,
+              reason: true,
+              status: true,
+              createdAt: true,
+              updatedAt: true,
+              submittedAt: true,
+              providerRefundId: true,
+              lines: {
+                select: {
+                  orderItemId: true,
+                  quantity: true,
+                  netCents: true,
+                  taxCents: true,
+                },
+              },
+            },
+            orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+            take: 100,
+          },
+          stockReturns: {
+            select: {
+              id: true,
+              reason: true,
+              receivedAt: true,
+              lines: { select: { orderItemId: true, quantity: true, condition: true } },
+            },
+            orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+            take: 100,
+          },
           taxCalculation: {
             select: {
               provider: true,
@@ -213,6 +246,14 @@ export async function getOrder(userId: string, input: unknown) {
       const costs = r.checkoutAttempt?.costs ?? [];
       const itemQuantity = r.items.reduce((sum, item) => sum + item.quantity, 0);
       const allocatedQuantity = costs.reduce((sum, cost) => sum + cost.quantity, 0);
+      const returned = await tx.stockReturnLine.groupBy({
+        by: ["orderItemId"],
+        where: { stockReturn: { orderId: id } },
+        _sum: { quantity: true },
+      });
+      const returnedByItem = new Map(
+        returned.map((line) => [line.orderItemId, line._sum.quantity ?? 0]),
+      );
       return {
         id: r.id,
         number: r.number,
@@ -227,7 +268,18 @@ export async function getOrder(userId: string, input: unknown) {
         email: r.customer.user.email,
         address: r.address,
         notes: r.notes,
-        items: r.items,
+        items: r.items.map((item) => ({
+          ...item,
+          returnedQuantity: returnedByItem.get(item.id) ?? 0,
+        })),
+        canReceiveReturn:
+          canManage &&
+          r.checkoutAttempt?.state === "PAID" &&
+          ["PAID", "FULFILLING", "OUT_FOR_DELIVERY", "DELIVERED", "REFUNDED"].includes(
+            r.status,
+          ) &&
+          itemQuantity === allocatedQuantity &&
+          costs.length > 0,
         amounts: {
           subtotalCents: r.subtotalCents,
           discountCents: r.discountCents,
@@ -254,6 +306,25 @@ export async function getOrder(userId: string, input: unknown) {
           })),
         })),
         refunds: r.refunds.map((f) => ({ ...f, createdAt: f.createdAt.toISOString() })),
+        refundRequests: r.refundRequests.map((request) => ({
+          id: request.id,
+          amountCents: request.amountCents,
+          currency: request.currency,
+          reason: request.reason,
+          status: request.status,
+          createdAt: request.createdAt.toISOString(),
+          updatedAt: request.updatedAt.toISOString(),
+          canCancel:
+            canManage &&
+            request.status === "PREPARED" &&
+            !request.submittedAt &&
+            !request.providerRefundId,
+          lines: request.lines,
+        })),
+        stockReturns: r.stockReturns.map((record) => ({
+          ...record,
+          receivedAt: record.receivedAt.toISOString(),
+        })),
         tax: r.taxCalculation
           ? { ...r.taxCalculation, createdAt: r.taxCalculation.createdAt.toISOString() }
           : null,

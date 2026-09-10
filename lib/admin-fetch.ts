@@ -1,3 +1,12 @@
+export class AdminRequestError extends Error {
+  constructor(
+    message: string,
+    public status: number,
+  ) {
+    super(message);
+  }
+}
+
 export async function adminFetch<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
     ...init,
@@ -8,7 +17,10 @@ export async function adminFetch<T>(url: string, init?: RequestInit): Promise<T>
   });
   const data = (await response.json().catch(() => ({}))) as T & { error?: string };
   if (!response.ok) {
-    throw new Error(data.error || `Request failed (${response.status})`);
+    throw new AdminRequestError(
+      data.error || `Request failed (${response.status})`,
+      response.status,
+    );
   }
   return data;
 }

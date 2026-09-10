@@ -352,7 +352,7 @@ export async function quoteCartRewards(userId: string, input: unknown) {
         merchandiseCents,
         previewOnly: true as const,
         message:
-          "Preview only. Tax, payment and booking are not connected; no rewards have been used or reserved.",
+          "Preview only. Final prices, tax and delivery availability are confirmed at checkout. No rewards have been used or reserved.",
       };
     },
     { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
