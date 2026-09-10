@@ -144,7 +144,7 @@ export async function reviewReferral(userId: string, referralId: string) {
       );
     if ((await capturedPayment(tx, order.id)) !== order.totalCents)
       throw new AccountError(
-        "Verified payment evidence is required. Payment integration is not connected yet.",
+        "Verified payment evidence is required before this referral can be rewarded.",
         409,
       );
     if (

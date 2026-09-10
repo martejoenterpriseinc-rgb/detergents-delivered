@@ -22,8 +22,8 @@ export default async function ReferralsPage() {
           those rewards.
         </p>
         <p className="rounded-2xl bg-amber-50 p-4 text-sm">
-          Purchasing and verified payment processing are not connected yet. No reward is
-          earned just by creating, sharing or opening a link.
+          No reward is earned just by creating, sharing or opening a link. A qualifying
+          first purchase must be verified before credits are awarded.
         </p>
         <Link
           href="/account/loyalty"

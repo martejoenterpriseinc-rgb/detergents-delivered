@@ -110,9 +110,8 @@ export function ProgramSettings({
         erase earned credits. Claimed reward amounts and minimums remain unchanged.
       </p>
       <p className="rounded-2xl bg-amber-50 p-3 text-sm text-amber-900">
-        Payment verification and automatic reward processing are not connected. The review
-        action requires trusted payment records and never substitutes for collecting
-        payment.
+        Review each eligible referral to process its reward. The review action requires
+        verified payment records and never substitutes for collecting payment.
       </p>
       {error && (
         <p role="alert" className="text-rose-800">
