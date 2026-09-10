@@ -9,6 +9,7 @@ vi.mock("@/lib/commerce/runtime", () => ({
 import { prepareRefund, recordStockReturn } from "./refunds";
 
 const marker = randomUUID();
+const checkoutId = randomUUID();
 const users: string[] = [];
 let admin: string,
   cpa: string,
@@ -53,13 +54,26 @@ beforeAll(async () => {
     await prisma.inventoryCostLayer.create({
       data: {
         productVariantId: variant,
-        quantityOriginal: 3,
+        quantityOriginal: 1,
         quantityRemaining: 0,
         landedUnitCostCents: 400,
         receivedAt: new Date("2026-01-01T00:00:00Z"),
       },
     })
   ).id;
+  const otherLayers = await Promise.all(
+    [500, 600].map((cost, index) =>
+      prisma.inventoryCostLayer.create({
+        data: {
+          productVariantId: variant,
+          quantityOriginal: 1,
+          quantityRemaining: 0,
+          landedUnitCostCents: cost,
+          receivedAt: new Date(`2026-01-0${index + 2}T00:00:00Z`),
+        },
+      }),
+    ),
+  );
   const savedOrder = await prisma.order.create({
     data: {
       number: `refund-${marker}`,
@@ -93,13 +107,19 @@ beforeAll(async () => {
         amountCents: 3240,
         externalId: `pi_${marker}`,
         events: {
-          create: { type: "checkout.session.completed", verifiedAt: new Date() },
+          create: {
+            type: "checkout.session.completed",
+            externalId: `checkout:${checkoutId}:paid`,
+            verifiedAt: new Date(),
+          },
         },
       },
     })
   ).id;
   await prisma.checkoutAttempt.create({
     data: {
+      id: checkoutId,
+      state: "PAID",
       customerId: customer,
       requestKey: randomUUID(),
       requestHash: marker,
@@ -109,12 +129,20 @@ beforeAll(async () => {
       livemode: false,
       orderId: order,
       costs: {
-        create: {
-          costLayerId: layer,
-          quantity: 3,
-          unitCostCents: 400,
-          state: "CONSUMED",
-        },
+        create: [
+          {
+            costLayerId: layer,
+            quantity: 1,
+            unitCostCents: 400,
+            state: "CONSUMED",
+          },
+          ...otherLayers.map((cost) => ({
+            costLayerId: cost.id,
+            quantity: 1,
+            unitCostCents: cost.landedUnitCostCents,
+            state: "CONSUMED" as const,
+          })),
+        ],
       },
     },
   });
@@ -138,8 +166,30 @@ describe("refund reservations and physical returns (isolated PostgreSQL)", () =>
       reason: "Customer requested a partial return",
       lines: [{ orderItemId: item, quantity: 1 }],
     };
-    const first = await prepareRefund(admin, input);
+    await prisma.payment.update({
+      where: { id: payment },
+      data: { status: "AUTHORIZED" },
+    });
+    await expect(prepareRefund(admin, input)).rejects.toMatchObject({ status: 409 });
+    await prisma.payment.update({ where: { id: payment }, data: { status: "CAPTURED" } });
+    const [first, replay] = await Promise.all([
+      prepareRefund(admin, input),
+      prepareRefund(admin, input),
+    ]);
+    expect(replay.id).toBe(first.id);
     expect(first).toMatchObject({ amountCents: 1080, status: "PREPARED" });
+    expect(Object.keys(first).sort()).toEqual(
+      [
+        "id",
+        "orderId",
+        "paymentId",
+        "amountCents",
+        "currency",
+        "reason",
+        "status",
+        "createdAt",
+      ].sort(),
+    );
     expect((await prepareRefund(admin, input)).id).toBe(first.id);
     await expect(
       prepareRefund(admin, { ...input, reason: "A different refund request reason" }),
@@ -147,18 +197,33 @@ describe("refund reservations and physical returns (isolated PostgreSQL)", () =>
     await expect(
       prepareRefund(cpa, { ...input, requestKey: randomUUID() }),
     ).rejects.toMatchObject({ status: 403 });
-    const second = await prepareRefund(admin, {
-      ...input,
-      requestKey: randomUUID(),
-      lines: [{ orderItemId: item, quantity: 2 }],
-    });
-    expect(second.amountCents).toBe(2160);
+    const competing = await Promise.allSettled(
+      [1, 2].map(() =>
+        prepareRefund(admin, {
+          ...input,
+          requestKey: randomUUID(),
+          lines: [{ orderItemId: item, quantity: 2 }],
+        }),
+      ),
+    );
+    expect(competing.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    const succeeded = competing.find((result) => result.status === "fulfilled");
+    if (succeeded?.status === "fulfilled") expect(succeeded.value.amountCents).toBe(2160);
+    const rejected = competing.find((result) => result.status === "rejected");
+    if (rejected?.status === "rejected")
+      expect(rejected.reason).toMatchObject({ status: 409 });
     await expect(
       prepareRefund(admin, { ...input, requestKey: randomUUID() }),
     ).rejects.toMatchObject({ status: 409 });
     expect(
       await prisma.refundRequestEvent.count({ where: { refundRequestId: first.id } }),
     ).toBe(1);
+    await expect(
+      prisma.refundRequestEvent.updateMany({
+        where: { refundRequestId: first.id },
+        data: { type: "rewritten" },
+      }),
+    ).rejects.toThrow();
   });
 
   it("records sellable and damaged goods separately without creating refunds", async () => {
@@ -204,5 +269,37 @@ describe("refund reservations and physical returns (isolated PostgreSQL)", () =>
         lines: [{ orderItemId: item, quantity: 2, condition: "SELLABLE" }],
       }),
     ).rejects.toMatchObject({ status: 409 });
+    const finalInput = {
+      requestKey: randomUUID(),
+      orderId: order,
+      reason: "Final unopened unit received after damaged unit",
+      lines: [{ orderItemId: item, quantity: 1, condition: "SELLABLE" }],
+    };
+    const [finalReturn, repeated] = await Promise.all([
+      recordStockReturn(admin, finalInput),
+      recordStockReturn(admin, finalInput),
+    ]);
+    expect(repeated.id).toBe(finalReturn.id);
+    const costs = await prisma.inventoryCostLayer.findMany({
+      where: { productVariantId: variant },
+      orderBy: { receivedAt: "asc" },
+    });
+    expect(costs.map((cost) => cost.quantityRemaining)).toEqual([1, 0, 1]);
+    const returnedLine = await prisma.stockReturnLine.findFirstOrThrow({
+      where: { stockReturnId: finalReturn.id },
+    });
+    expect(returnedLine.costEvidence).toEqual([
+      expect.objectContaining({
+        costLayerId: costs[2].id,
+        quantity: 1,
+        unitCostCents: 600,
+      }),
+    ]);
+    await expect(
+      prisma.stockReturnLine.update({
+        where: { id: returnedLine.id },
+        data: { quantity: 2 },
+      }),
+    ).rejects.toThrow();
   });
 });

@@ -9,7 +9,7 @@ import {
   refundRequestInput,
   stockReturnInput,
 } from "@/lib/domain/refund-allocation";
-import { allocateCents, canonicalJson } from "@/lib/commerce/domain";
+import { canonicalJson } from "@/lib/commerce/domain";
 import { readCommerce } from "@/lib/commerce/runtime";
 import { accountIdentity } from "@/lib/services/customer-account";
 import { persistInventoryTransaction } from "@/lib/services/inventory-ledger";
@@ -43,10 +43,18 @@ function publicRefundRequest(request: {
   currency: string;
   reason: string;
   status: string;
-  lastError: string | null;
   createdAt: Date;
 }) {
-  return { ...request, createdAt: request.createdAt.toISOString() };
+  return {
+    id: request.id,
+    orderId: request.orderId,
+    paymentId: request.paymentId,
+    amountCents: request.amountCents,
+    currency: request.currency,
+    reason: request.reason,
+    status: request.status,
+    createdAt: request.createdAt.toISOString(),
+  };
 }
 
 /**
@@ -57,10 +65,12 @@ export async function prepareRefund(userId: string, raw: unknown) {
   const input = refundRequestInput.parse(raw);
   input.lines.sort((a, b) => a.orderItemId.localeCompare(b.orderItemId));
   const requestHash = fingerprint(input);
+  await refundAccess(prisma, userId);
   const commerce = await readCommerce(true);
   return prisma.$transaction(
     async (tx) => {
       await refundAccess(tx, userId);
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${"refund:" + input.requestKey}, 0))`;
       const prior = await tx.refundRequest.findUnique({
         where: { requestKey: input.requestKey },
       });
@@ -79,7 +89,9 @@ export async function prepareRefund(userId: string, raw: unknown) {
           items: true,
           payments: { include: { events: true, refunds: true } },
           rewardReservation: true,
-          checkoutAttempt: { select: { stripeAccountId: true, livemode: true } },
+          checkoutAttempt: {
+            select: { id: true, state: true, stripeAccountId: true, livemode: true },
+          },
           refundRequests: { include: { lines: true } },
           refunds: true,
         },
@@ -93,6 +105,7 @@ export async function prepareRefund(userId: string, raw: unknown) {
         throw new AccountError("Only a verified paid order can be refunded.", 409);
       if (
         !order.checkoutAttempt ||
+        order.checkoutAttempt.state !== "PAID" ||
         order.checkoutAttempt.stripeAccountId !== commerce.accountId ||
         order.checkoutAttempt.livemode !== commerce.live
       )
@@ -108,10 +121,18 @@ export async function prepareRefund(userId: string, raw: unknown) {
       if (
         !payment ||
         payment.provider !== "STRIPE" ||
-        payment.status === "FAILED" ||
+        !["CAPTURED", "PARTIALLY_REFUNDED"].includes(payment.status) ||
+        payment.amountCents !== order.totalCents ||
         payment.currency !== order.currency ||
         !payment.externalId?.startsWith("pi_") ||
-        !payment.events.some((event) => event.verifiedAt)
+        !payment.events.some(
+          (event) =>
+            event.verifiedAt &&
+            ["checkout.session.completed", "checkout.session.reconciled"].includes(
+              event.type,
+            ) &&
+            event.externalId === `checkout:${order.checkoutAttempt!.id}:paid`,
+        )
       )
         throw new AccountError("Verified Stripe payment evidence is required.", 409);
 
@@ -128,11 +149,11 @@ export async function prepareRefund(userId: string, raw: unknown) {
           request.status as (typeof reservedRefundStates)[number],
         ),
       );
-      const grossWeights = order.items.map((item) => item.unitPriceCents * item.quantity);
-      const rewardByItem = allocateCents(
-        order.rewardReservation?.amountCents ?? 0,
-        grossWeights,
-      );
+      if (order.rewardReservation?.amountCents)
+        throw new AccountError(
+          "Reward-funded orders require reward refund reconciliation before preparation.",
+          409,
+        );
       let amountCents = 0;
       const lines = input.lines.map((line) => {
         const itemIndex = order.items.findIndex((item) => item.id === line.orderItemId);
@@ -141,6 +162,11 @@ export async function prepareRefund(userId: string, raw: unknown) {
           .flatMap((request) => request.lines)
           .filter((saved) => saved.orderItemId === item.id)
           .reduce((sum, saved) => sum + saved.quantity, 0);
+        if (alreadyRefunded + line.quantity > item.quantity)
+          throw new AccountError(
+            "Refund quantity exceeds the remaining purchased quantity.",
+            409,
+          );
         const allocated = allocateRefundLine({
           quantities: {
             purchased: item.quantity,
@@ -149,7 +175,7 @@ export async function prepareRefund(userId: string, raw: unknown) {
           },
           netCents: item.lineTotalCents - item.taxCents,
           taxCents: item.taxCents,
-          rewardCents: rewardByItem[itemIndex],
+          rewardCents: 0,
         });
         amountCents += allocated.cashCents;
         return {
@@ -213,7 +239,7 @@ export async function prepareRefund(userId: string, raw: unknown) {
       });
       return publicRefundRequest(request);
     },
-    { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted },
   );
 }
 
@@ -224,6 +250,7 @@ export async function recordStockReturn(userId: string, raw: unknown) {
   const requestHash = fingerprint(input);
   return prisma.$transaction(async (tx) => {
     await refundAccess(tx, userId);
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${"stock-return:" + input.requestKey}, 0))`;
     const prior = await tx.stockReturn.findUnique({
       where: { requestKey: input.requestKey },
     });
@@ -254,6 +281,12 @@ export async function recordStockReturn(userId: string, raw: unknown) {
     });
     if (!order) throw new AccountError("Order not found.", 404);
     if (
+      order.checkoutAttempt?.state !== "PAID" ||
+      new Set(order.items.map((item) => item.productVariantId)).size !==
+        order.items.length
+    )
+      throw new AccountError("Original completed checkout evidence is required.", 409);
+    if (
       !["PAID", "FULFILLING", "OUT_FOR_DELIVERY", "DELIVERED", "REFUNDED"].includes(
         order.status,
       )
@@ -269,7 +302,36 @@ export async function recordStockReturn(userId: string, raw: unknown) {
         .reduce((sum, saved) => sum + saved.quantity, 0);
       if (returned + line.quantity > item.quantity)
         throw new AccountError("Return quantity exceeds the purchased quantity.", 409);
-      return { ...line, item };
+      const costs = order
+        .checkoutAttempt!.costs.filter(
+          (cost) => cost.costLayer.productVariantId === item.productVariantId,
+        )
+        .sort(
+          (a, b) =>
+            a.costLayer.receivedAt.getTime() - b.costLayer.receivedAt.getTime() ||
+            a.costLayerId.localeCompare(b.costLayerId),
+        );
+      if (costs.reduce((sum, cost) => sum + cost.quantity, 0) !== item.quantity)
+        throw new AccountError("Original FIFO cost evidence is incomplete.", 409);
+      let skip = returned;
+      let remaining = line.quantity;
+      const costEvidence = costs.flatMap((cost) => {
+        const available = Math.max(0, cost.quantity - skip);
+        skip = Math.max(0, skip - cost.quantity);
+        const quantity = Math.min(remaining, available);
+        remaining -= quantity;
+        return quantity
+          ? [
+              {
+                allocationId: cost.id,
+                costLayerId: cost.costLayerId,
+                quantity,
+                unitCostCents: cost.unitCostCents,
+              },
+            ]
+          : [];
+      });
+      return { ...line, item, costEvidence };
     });
     const saved = await tx.stockReturn.create({
       data: {
@@ -284,11 +346,14 @@ export async function recordStockReturn(userId: string, raw: unknown) {
             orderItemId: line.orderItemId,
             quantity: line.quantity,
             condition: line.condition,
+            costEvidence: line.costEvidence,
           })),
         },
       },
     });
-    for (const line of lines) {
+    for (const line of [...lines].sort((a, b) =>
+      a.item.productVariantId.localeCompare(b.item.productVariantId),
+    )) {
       await persistInventoryTransaction(tx, {
         productVariantId: line.item.productVariantId,
         type: line.condition === "SELLABLE" ? "RETURN" : "DAMAGE",
@@ -300,38 +365,12 @@ export async function recordStockReturn(userId: string, raw: unknown) {
         createdByUserId: userId,
       });
       if (line.condition === "SELLABLE") {
-        let remaining = line.quantity;
-        let skip = order.stockReturns
-          .flatMap((stockReturn) => stockReturn.lines)
-          .filter(
-            (priorLine) =>
-              priorLine.orderItemId === line.item.id &&
-              priorLine.condition === "SELLABLE",
-          )
-          .reduce((sum, priorLine) => sum + priorLine.quantity, 0);
-        const costs = (order.checkoutAttempt?.costs ?? [])
-          .filter(
-            (cost) => cost.costLayer.productVariantId === line.item.productVariantId,
-          )
-          .sort(
-            (a, b) =>
-              a.costLayer.receivedAt.getTime() - b.costLayer.receivedAt.getTime() ||
-              a.costLayerId.localeCompare(b.costLayerId),
-          );
-        for (const cost of costs) {
-          const available = Math.max(0, cost.quantity - skip);
-          skip = Math.max(0, skip - cost.quantity);
-          const take = Math.min(remaining, available);
-          if (take)
-            await tx.inventoryCostLayer.update({
-              where: { id: cost.costLayerId },
-              data: { quantityRemaining: { increment: take } },
-            });
-          remaining -= take;
-          if (!remaining) break;
+        for (const cost of line.costEvidence) {
+          await tx.inventoryCostLayer.update({
+            where: { id: cost.costLayerId },
+            data: { quantityRemaining: { increment: cost.quantity } },
+          });
         }
-        if (remaining)
-          throw new AccountError("Original FIFO cost evidence is incomplete.", 409);
       }
     }
     await tx.auditLog.create({

@@ -879,6 +879,8 @@ model StockReturnLine {
   orderItem     OrderItem             @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
   quantity      Int
   condition     StockReturnCondition
+  /// Original consumed allocation IDs, quantities and unit costs for received goods.
+  costEvidence  Json
 
   @@unique([stockReturnId, orderItemId])
   @@index([orderItemId])

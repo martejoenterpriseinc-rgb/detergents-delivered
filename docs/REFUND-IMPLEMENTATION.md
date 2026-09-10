@@ -1,6 +1,10 @@
 # Refund and return implementation
 
-Status: design checkpoint; refund initiation is not implemented or enabled by this document.
+Status: persistence foundation under CI in PR 28. No refund or return HTTP/UI action is exposed, and no provider refund can be submitted by this implementation.
+
+The foundation adds exact cumulative cash reservations, serialized request-key replay, verified captured-payment binding, append-only request events, and separate immutable physical returns with original consumed cost allocation snapshots. Sellable returns restore the corresponding original cost layers; damaged returns consume their allocation position without restoring sellable inventory. Native tests exercise competing refund requests, duplicate returns, quantity limits, authorization, private DTO fields and immutable evidence.
+
+Reward-funded orders are explicitly blocked at preparation until reward restoration and compensation are implemented. Provider submission/reconciliation, canceling unused prepared requests, tax reversal evidence, reward/referral adjustments and the staff interface remain required before enabling refunds. Additive migration deployment alone does not complete those capabilities.
 
 ## Existing evidence
 
