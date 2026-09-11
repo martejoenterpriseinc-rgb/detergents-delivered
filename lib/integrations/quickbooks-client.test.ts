@@ -1,5 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import {
+  readQuickbooksReceiptCompany,
   readQuickbooksSalesEntity,
   readQuickbooksSalesEntities,
   createQuickbooksCostJournal,
@@ -19,6 +20,48 @@ const config = {
   redirectUri: "https://dd.example.test/api/admin/quickbooks/callback",
   fingerprint: "synthetic",
 };
+it("reads receipt company facts without exposing unrelated company information or assuming missing currency", async () => {
+  let missing = false;
+  const call = vi
+    .fn()
+    .mockImplementation(async (url: string) =>
+      Response.json(
+        url.endsWith("preferences")
+          ? {
+              Preferences: {
+                CurrencyPrefs: missing ? {} : { HomeCurrency: { value: "USD" } },
+                TaxPrefs: { UsingSalesTax: true },
+                EmailMessagesPrefs: { hidden: "private" },
+              },
+            }
+          : {
+              CompanyInfo: {
+                Country: "US",
+                CompanyName: "Private name",
+                Email: { Address: "private@example.test" },
+              },
+            },
+      ),
+    );
+  vi.stubGlobal("fetch", call);
+  expect(await readQuickbooksReceiptCompany(config, "synthetic-access")).toEqual({
+    country: "US",
+    homeCurrency: "USD",
+    usingSalesTax: true,
+    partnerTaxEnabled: null,
+  });
+  expect(call.mock.calls.map((c) => c[0]).sort()).toEqual([
+    "https://sandbox-quickbooks.api.intuit.com/v3/company/123/companyinfo/123",
+    "https://sandbox-quickbooks.api.intuit.com/v3/company/123/preferences",
+  ]);
+  expect(
+    call.mock.calls.every((c) => c[1].method === "GET" && c[1].redirect === "error"),
+  ).toBe(true);
+  missing = true;
+  await expect(
+    readQuickbooksReceiptCompany(config, "synthetic-access"),
+  ).rejects.toThrow();
+});
 afterEach(() => vi.unstubAllGlobals());
 it("builds a fixed Intuit authorization URL with exact callback, state and accounting scope", () => {
   const url = new URL(quickbooksAuthorizationUrl(config, "synthetic-state"));

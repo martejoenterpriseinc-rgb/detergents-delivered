@@ -483,12 +483,10 @@ test("cost accounting preserves failed choices and distinguishes original sale f
       .getByRole("button", { name: "Review accounting evidence", exact: true })
       .click();
     await expect(
-      page
-        .getByRole("alert")
-        .filter({
-          hasText:
-            "Tax evidence is not matched. This entry is not ready for receipt export.",
-        }),
+      page.getByRole("alert").filter({
+        hasText:
+          "Tax evidence is not matched. This entry is not ready for receipt export.",
+      }),
     ).toBeVisible();
     await expect(page.getByText("$7.56", { exact: true })).toBeVisible();
     expect(
@@ -499,6 +497,111 @@ test("cost accounting preserves failed choices and distinguishes original sale f
     await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
     await page.screenshot({
       path: info.outputPath("sales-refund-source-review.png"),
+      fullPage: true,
+    });
+    let receiptKey = "",
+      receiptSaves = 0;
+    await page.route("**/api/admin/quickbooks/receipt-settings", async (route) => {
+      if (route.request().method() === "GET")
+        return route.fulfill({
+          json: { realm: "123456789", canWrite: true, mapping: null },
+        });
+      const body = route.request().postDataJSON();
+      receiptSaves++;
+      if (receiptSaves === 1) {
+        receiptKey = body.requestKey;
+        return route.fulfill({
+          status: 503,
+          json: { error: "Synthetic receipt settings interruption" },
+        });
+      }
+      expect(body.requestKey).toBe(receiptKey);
+      expect(body.depositAccountId).toBe("receipt-bank");
+      return route.fulfill({
+        json: {
+          version: 1,
+          realm: "123456789",
+          mode: "sandbox",
+          depositAccount: {
+            id: "receipt-bank",
+            name: "Synthetic receipt clearing",
+            type: "Bank",
+            currency: "USD",
+          },
+          company: {
+            country: "US",
+            homeCurrency: "USD",
+            usingSalesTax: true,
+            partnerTaxEnabled: null,
+          },
+          verifiedAt: "2026-02-01T18:00:00Z",
+        },
+      });
+    });
+    await page.route("**/api/admin/quickbooks/accounts?*", (route) =>
+      route.fulfill({
+        json: {
+          realm: "123456789",
+          nextStart: null,
+          accounts: [
+            {
+              Id: "receipt-bank",
+              Name: "Synthetic receipt clearing",
+              AccountType: "Bank",
+              Active: true,
+              CurrencyRef: { value: "USD" },
+            },
+            {
+              Id: "not-clearing",
+              Name: "Synthetic expense",
+              AccountType: "Expense",
+              Active: true,
+              CurrencyRef: { value: "USD" },
+            },
+          ],
+        },
+      }),
+    );
+    await page
+      .getByRole("button", { name: "Load receipt accounts", exact: true })
+      .click();
+    await page
+      .getByLabel("Receipt clearing account", { exact: true })
+      .selectOption("receipt-bank");
+    await expect(
+      page
+        .getByLabel("Receipt clearing account", { exact: true })
+        .getByRole("option", { name: "Synthetic expense" }),
+    ).toHaveCount(0);
+    await page
+      .getByLabel("I reviewed this company's clearing account for payment receipts.")
+      .check();
+    await page
+      .getByRole("button", { name: "Save receipt settings", exact: true })
+      .click();
+    await expect(
+      page.getByText("Synthetic receipt settings interruption", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByLabel("Receipt clearing account", { exact: true }),
+    ).toHaveValue("receipt-bank");
+    await page
+      .getByRole("button", { name: "Save receipt settings", exact: true })
+      .click();
+    await expect(
+      page.getByText("Saved receipt clearing account: Synthetic receipt clearing.", {
+        exact: true,
+      }),
+    ).toBeVisible();
+    expect(receiptSaves).toBe(2);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
+    await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
+    await page.screenshot({
+      path: info.outputPath("receipt-clearing-settings.png"),
       fullPage: true,
     });
   } finally {
