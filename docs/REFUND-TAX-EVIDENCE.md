@@ -16,3 +16,16 @@ Sources checked 2026-09-11:
 - https://docs.stripe.com/reports/report-types/tax
 - https://docs.stripe.com/tax/reports
 - https://docs.stripe.com/file-upload
+
+## Failed-refund investigation — September 11, 2026
+
+Stripe's custom PaymentIntents Tax guide documents reversing a partial tax reversal with a full reversal of that reversal. Its example produces positive amounts tied to the original refund tax transaction. The same guide directs Checkout integrations to use native tax integration instead. This application uses Checkout automatic tax, so the custom example alone does not establish the permitted correction or report shape here.
+
+Before adding compensation evidence, exercise the intended Checkout integration in an isolated provider environment and retain the original sale, settled refund, later failed/canceled refund event, failure balance transaction, refund tax reversal, and any provider-generated correction. Confirm the correction's account/mode, parent transaction, currency, signed line/tax totals and unique identity. If native Checkout does not supply a verifiable correction, obtain provider guidance before introducing a tax-writing adapter. Returned cash alone must never mark compensation tax as matched.
+
+The current implementation retains the signed application compensation and flags any already-posted QuickBooks refund for correction review. It does not create another sale, void a provider receipt, or manually reverse Checkout tax based on this research.
+
+Primary references:
+- [Custom Tax API: undo a partial refund](https://docs.stripe.com/tax/payment-intent/custom#undo-a-partial-refund)
+- [Tax reversal API](https://docs.stripe.com/api/tax/transactions/create_reversal)
+- [Failed refunds](https://docs.stripe.com/refunds#handle-failed-refunds)
