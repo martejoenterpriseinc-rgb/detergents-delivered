@@ -290,6 +290,14 @@ export async function getOrder(userId: string, input: unknown) {
           ...item,
           returnedQuantity: returnedByItem.get(item.id) ?? 0,
         })),
+        cashRefundItems: r.items
+          .filter((i) => i.lineTotalCents > 0)
+          .map((i) => ({
+            id: i.id,
+            name: i.nameSnapshot,
+            remaining: i.quantity - (refundedQuantities.get(i.id) ?? 0),
+          }))
+          .filter((i) => i.remaining > 0),
         rewardRefundItems:
           r.rewardReservation?.state === "USED" && r.rewardReservation.amountCents > 0
             ? r.items
@@ -356,6 +364,16 @@ export async function getOrder(userId: string, input: unknown) {
           createdAt: request.createdAt.toISOString(),
           updatedAt: request.updatedAt.toISOString(),
           rewardCents: request.lines.reduce((n, l) => n + l.rewardCents, 0),
+          netCents: request.lines.reduce((n, l) => n + l.netCents, 0),
+          taxCents: request.lines.reduce((n, l) => n + l.taxCents, 0),
+          canSubmitCash:
+            canManage &&
+            request.amountCents > 0 &&
+            request.status === "PREPARED" &&
+            !request.submittedAt &&
+            !request.providerRefundId,
+          canReconcileCash:
+            canManage && request.amountCents > 0 && Boolean(request.submittedAt),
           canRestoreCredit:
             canManage &&
             request.amountCents === 0 &&
