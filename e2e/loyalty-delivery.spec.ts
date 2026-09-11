@@ -38,7 +38,7 @@ test("owner entry, matched live tiles, referrals and safe checkout rewards previ
       const u = await db.user.create({
         data: {
           email: `${prefix.toLowerCase()}-${marker}@example.test`,
-          emailVerified: new Date(),
+          emailVerified: owner ? null : new Date(),
           passwordHash: await bcrypt.hash(password, 4),
           userRoles: {
             create: (owner ? [customerRole.id, adminRole.id] : [customerRole.id]).map(
@@ -70,6 +70,9 @@ test("owner entry, matched live tiles, referrals and safe checkout rewards previ
     await login(ownerPage, owner.email);
     await expect(ownerPage).toHaveURL(/\/admin$/);
     await ownerPage.getByRole("link", { name: "View as customer", exact: true }).click();
+    await expect(
+      ownerPage.getByRole("region", { name: "Email verification" }),
+    ).toHaveCount(0);
     await expect(ownerPage).toHaveURL(/\/account$/);
     await expect(ownerPage.getByText(owner.email, { exact: true })).toBeVisible();
     await ownerPage.getByRole("link", { name: "Admin / Owner", exact: true }).click();

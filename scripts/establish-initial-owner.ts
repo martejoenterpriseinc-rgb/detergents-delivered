@@ -13,6 +13,7 @@ async function main() {
       email: { type: "string" },
       "user-id": { type: "string" },
       "approval-reference": { type: "string" },
+      "hosting-owner-approval": { type: "string" },
       apply: { type: "boolean", default: false },
     },
     strict: true,
@@ -25,6 +26,7 @@ async function main() {
     email: values.email,
     userId: values["user-id"],
     approvalReference: values["approval-reference"],
+    hostingOwnerApproval: values["hosting-owner-approval"],
     apply: values.apply,
   });
   const db = new PrismaClient({ log: [] });
@@ -33,7 +35,7 @@ async function main() {
     console.log(JSON.stringify(result));
     if (result.status === "READY_FOR_EXPLICIT_GRANT")
       console.log(
-        "Read-only review passed. Grant only after explicit authorization for this exact verified account, using --apply.",
+        "Read-only review passed. Grant only after explicit authorization for this exact account, using --apply.",
       );
     else
       console.log(
@@ -45,7 +47,7 @@ async function main() {
 }
 main().catch(() => {
   console.error(
-    "Initial owner setup was not confirmed. Check production identity, exact verified account, prior staff access and explicit approval reference. No credentials are printed.",
+    "Initial owner setup was not confirmed. Check production identity, exact account, ownership approval, prior staff access and approval reference. No credentials are printed.",
   );
   process.exitCode = 1;
 });

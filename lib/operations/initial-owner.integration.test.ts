@@ -70,6 +70,91 @@ afterAll(async () => {
 const input = (apply = true) => ({ userId, email, approvalReference, apply });
 
 describe("explicit first production owner (isolated PostgreSQL schema)", () => {
+  it("accepts explicit hosting ownership without changing inbox verification or customer credentials", async () => {
+    const passwordHash = "synthetic-preserved-password-hash";
+    await db.user.update({
+      where: { id: userId },
+      data: {
+        emailVerified: null,
+        passwordHash,
+        customer: { create: {} },
+      },
+    });
+    const before = await db.user.findUniqueOrThrow({
+      where: { id: userId },
+      include: { customer: true },
+    });
+    const approval = {
+      ...input(),
+      hostingOwnerApproval:
+        "Synthetic authenticated hosting owner explicitly approved this exact account",
+    };
+    await expect(establishInitialOwner(db, input())).rejects.toThrow();
+    expect(await establishInitialOwner(db, { ...approval, apply: false })).toMatchObject({
+      status: "READY_FOR_EXPLICIT_GRANT",
+    });
+    expect(
+      await db.user.findUniqueOrThrow({
+        where: { id: userId },
+        include: { customer: true },
+      }),
+    ).toEqual(before);
+    const results = await Promise.all([
+      establishInitialOwner(db, approval),
+      establishInitialOwner(db, approval),
+    ]);
+    expect(results.map((r) => r.status).sort()).toEqual([
+      "ALREADY_ESTABLISHED",
+      "ESTABLISHED",
+    ]);
+    expect(
+      await db.user.findUniqueOrThrow({
+        where: { id: userId },
+        include: { customer: true },
+      }),
+    ).toMatchObject({
+      emailVerified: null,
+      passwordHash,
+      customer: before.customer,
+      sessionVersion: 1,
+    });
+    expect(await db.userRole.count({ where: { userId } })).toBe(2);
+    expect(await db.auditLog.count()).toBe(1);
+    expect((await db.auditLog.findFirstOrThrow()).afterJson).toMatchObject({
+      ownershipBasis: "authenticated-hosting-owner",
+      emailVerificationChanged: false,
+      hostingOwnerApproval: approval.hostingOwnerApproval,
+    });
+  });
+  it("hosting approval still requires exact active identity and completed credentials", async () => {
+    await db.user.update({ where: { id: userId }, data: { emailVerified: null } });
+    const approval = {
+      ...input(),
+      hostingOwnerApproval: "Synthetic authenticated hosting owner approval",
+    };
+    await expect(
+      establishInitialOwner(db, { ...approval, email: "other@example.test" }),
+    ).rejects.toThrow();
+    await expect(
+      establishInitialOwner(db, { ...approval, hostingOwnerApproval: "" }),
+    ).rejects.toThrow();
+    for (const patch of [
+      { deletedAt: new Date() },
+      { mustChangeCredentials: true },
+      { emailVerified: new Date("2099-01-01") },
+    ]) {
+      await db.user.update({ where: { id: userId }, data: patch });
+      await expect(establishInitialOwner(db, approval)).rejects.toThrow();
+      await db.user.update({
+        where: { id: userId },
+        data: { deletedAt: null, mustChangeCredentials: false, emailVerified: null },
+      });
+    }
+    await db.account.deleteMany({ where: { userId } });
+    await expect(establishInitialOwner(db, approval)).rejects.toThrow();
+    expect(await db.auditLog.count()).toBe(0);
+    expect(await db.userRole.count({ where: { role: { code: "SUPER_ADMIN" } } })).toBe(0);
+  });
   it("reviews without writes, grants once, preserves identity and revokes old sessions", async () => {
     const before = await db.user.findUniqueOrThrow({ where: { id: userId } });
     expect(await establishInitialOwner(db, input(false))).toMatchObject({
@@ -150,28 +235,39 @@ describe("explicit first production owner (isolated PostgreSQL schema)", () => {
     );
     expect(await db.setting.findUnique({ where: { key: INITIAL_OWNER_KEY } })).toBeNull();
   });
-  it("rolls back the role, session revocation and setup marker if audit storage fails", async () => {
-    await db.$executeRawUnsafe(
-      `ALTER TABLE "${schema}"."AuditLog" ADD CONSTRAINT owner_audit_test CHECK (action <> 'production.initial-owner.established') NOT VALID`,
-    );
-    try {
-      await expect(establishInitialOwner(db, input())).rejects.toThrow();
-      expect(await db.userRole.count({ where: { role: { code: "SUPER_ADMIN" } } })).toBe(
-        0,
-      );
-      expect(
-        await db.setting.findUnique({ where: { key: INITIAL_OWNER_KEY } }),
-      ).toBeNull();
-      expect(await db.session.count()).toBe(1);
-      expect(
-        (await db.user.findUniqueOrThrow({ where: { id: userId } })).sessionVersion,
-      ).toBe(0);
-    } finally {
+  it.each([false, true])(
+    "rolls back the role, sessions and marker if audit fails (hosting approval: %s)",
+    async (hosting) => {
+      if (hosting)
+        await db.user.update({ where: { id: userId }, data: { emailVerified: null } });
+      const grant = {
+        ...input(),
+        ...(hosting
+          ? { hostingOwnerApproval: "Synthetic authenticated hosting owner approval" }
+          : {}),
+      };
       await db.$executeRawUnsafe(
-        `ALTER TABLE "${schema}"."AuditLog" DROP CONSTRAINT owner_audit_test`,
+        `ALTER TABLE "${schema}"."AuditLog" ADD CONSTRAINT owner_audit_test CHECK (action <> 'production.initial-owner.established') NOT VALID`,
       );
-    }
-  });
+      try {
+        await expect(establishInitialOwner(db, grant)).rejects.toThrow();
+        expect(
+          await db.userRole.count({ where: { role: { code: "SUPER_ADMIN" } } }),
+        ).toBe(0);
+        expect(
+          await db.setting.findUnique({ where: { key: INITIAL_OWNER_KEY } }),
+        ).toBeNull();
+        expect(await db.session.count()).toBe(1);
+        expect(
+          (await db.user.findUniqueOrThrow({ where: { id: userId } })).sessionVersion,
+        ).toBe(0);
+      } finally {
+        await db.$executeRawUnsafe(
+          `ALTER TABLE "${schema}"."AuditLog" DROP CONSTRAINT owner_audit_test`,
+        );
+      }
+    },
+  );
   it("serializes competing grants and never re-grants explicitly revoked owner authority", async () => {
     const second = await db.user.create({
       data: {

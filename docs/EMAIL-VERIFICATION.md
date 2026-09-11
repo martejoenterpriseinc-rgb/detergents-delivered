@@ -1,5 +1,7 @@
 # Customer email verification
 
+September 11 owner-access correction: inbox verification is separate from site ownership. The authenticated hosting owner can explicitly authorize the first-owner grant to an existing account with completed credentials, preserving its unverified email, password and customer profile. See PRODUCTION-OWNER.md. Owner account views omit the verification prompt; customer verification and recovery remain available to ordinary customers. This supersedes the earlier statement below that email-provider/inbox verification must precede every owner grant.
+
 ## Setup location and launch timing
 
 Owner direction on September 11: continue development with provider connections deferred to launch preparation. Email setup lives in Settings → API connections → SendGrid email, also shared by Integrations. Each existing field has Edit, Save/Update and its own status, with independent sandbox and production values. The expandable launch guide covers sender verification, a Mail Send key, sandbox recipient restrictions, real verification/recovery delivery checks and the separate owner grant. It links to official SendGrid instructions. This guide does not send email, mark delivery verified or grant a role. Connecting and proving providers remains required before enabling checkout; it does not block further development.
