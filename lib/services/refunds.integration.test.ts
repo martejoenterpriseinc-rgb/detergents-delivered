@@ -20,6 +20,7 @@ import {
   claimRefundSubmission,
   recordRefundSubmissionResult,
   submitPreparedRefund,
+  recoverRefundSubmission,
 } from "./refunds";
 import { getOrder } from "./order-workspace";
 
@@ -417,6 +418,221 @@ describe("durable refund submission claim (isolated PostgreSQL, no provider writ
     };
     return { ...f, observation, outcome: { ...f.input, observation } };
   }
+  function recoveryObservation(f: Awaited<ReturnType<typeof claimedFixture>>) {
+    return {
+      paymentIntentId: f.sale.payments[0].externalId!,
+      chargeId: "ch_synthetic",
+      accountId: "acct_synthetic",
+      live: false,
+      capturedCents: 3240,
+      currency: "USD",
+      disputed: false,
+      refunds: [f.observation],
+    };
+  }
+  it("recovers an old lost receipt without another create or financial settlement", async () => {
+    const f = await claimedFixture();
+    await prisma.refundRequest.update({
+      where: { id: f.draft.id },
+      data: {
+        submittedAt: new Date("2026-01-01T00:00:00Z"),
+      },
+    });
+    const before = await prisma.payment.findUniqueOrThrow({
+      where: { id: f.sale.payments[0].id },
+    });
+    const stock = await prisma.inventoryBalance.findUnique({
+      where: { productVariantId: variant },
+    });
+    refundReviewMocks.submit.mockReset();
+    refundReviewMocks.inspect.mockResolvedValue(recoveryObservation(f));
+    const result = await recoverRefundSubmission(admin, f.input);
+    await recoverRefundSubmission(admin, f.input);
+    expect(result.status).toBe("UNKNOWN");
+    expect(JSON.stringify(result)).not.toContain(f.observation.id);
+    expect(refundReviewMocks.submit).not.toHaveBeenCalled();
+    expect(
+      await prisma.refundRequestEvent.count({
+        where: {
+          refundRequestId: f.draft.id,
+          type: "refund.submission.observed",
+        },
+      }),
+    ).toBe(1);
+    expect(await prisma.refund.count({ where: { orderId: f.sale.id } })).toBe(0);
+    expect(await prisma.payment.findUniqueOrThrow({ where: { id: before.id } })).toEqual(
+      before,
+    );
+    expect(
+      await prisma.inventoryBalance.findUnique({ where: { productVariantId: variant } }),
+    ).toEqual(stock);
+  });
+  it("keeps missing history reserved and never retries creation", async () => {
+    const f = await claimedFixture();
+    refundReviewMocks.submit.mockReset();
+    refundReviewMocks.inspect.mockResolvedValue({
+      ...recoveryObservation(f),
+      refunds: [],
+    });
+    await recoverRefundSubmission(admin, f.input);
+    await recoverRefundSubmission(admin, f.input);
+    expect(
+      await prisma.refundRequest.findUniqueOrThrow({ where: { id: f.draft.id } }),
+    ).toMatchObject({
+      status: "UNKNOWN",
+      providerRefundId: null,
+    });
+    expect(
+      await prisma.refundRequestEvent.count({
+        where: {
+          refundRequestId: f.draft.id,
+          type: "refund.submission.unconfirmed",
+        },
+      }),
+    ).toBe(1);
+    expect(refundReviewMocks.submit).not.toHaveBeenCalled();
+    await expect(claimRefundSubmission(admin, f.input)).rejects.toMatchObject({
+      status: 409,
+    });
+  });
+  it("sanitizes failed lookups and preserves the original claim", async () => {
+    const f = await claimedFixture();
+    refundReviewMocks.inspect.mockRejectedValueOnce(
+      new Error("private@example.test raw provider payload"),
+    );
+    await expect(recoverRefundSubmission(admin, f.input)).rejects.toThrow(
+      "Refund lookup could not be verified.",
+    );
+    expect(
+      await prisma.refundRequest.findUniqueOrThrow({ where: { id: f.draft.id } }),
+    ).toMatchObject({
+      status: "SUBMITTING",
+      providerRefundId: null,
+    });
+  });
+  it("rejects external refunds and a disappearing known receipt", async () => {
+    const f = await claimedFixture();
+    refundReviewMocks.inspect.mockResolvedValue({
+      ...recoveryObservation(f),
+      refunds: [{ ...f.observation, requestId: "external" }],
+    });
+    await expect(recoverRefundSubmission(admin, f.input)).rejects.toMatchObject({
+      status: 409,
+    });
+    await recordRefundSubmissionResult(admin, f.outcome);
+    refundReviewMocks.inspect.mockResolvedValue({
+      ...recoveryObservation(f),
+      refunds: [],
+    });
+    await expect(recoverRefundSubmission(admin, f.input)).rejects.toMatchObject({
+      status: 409,
+    });
+    expect(
+      await prisma.refundRequest.findUniqueOrThrow({ where: { id: f.draft.id } }),
+    ).toMatchObject({
+      status: "UNKNOWN",
+      providerRefundId: f.observation.id,
+    });
+  });
+  it("rechecks permissions before lookup and after provider I/O", async () => {
+    const f = await claimedFixture();
+    refundReviewMocks.inspect.mockReset();
+    for (const actor of [cpa, users[2]])
+      await expect(recoverRefundSubmission(actor, f.input)).rejects.toMatchObject({
+        status: 403,
+      });
+    expect(refundReviewMocks.inspect).not.toHaveBeenCalled();
+    refundReviewMocks.inspect.mockImplementationOnce(async () => {
+      await prisma.user.update({ where: { id: admin }, data: { deletedAt: new Date() } });
+      return recoveryObservation(f);
+    });
+    try {
+      await expect(recoverRefundSubmission(admin, f.input)).rejects.toThrow();
+      expect(
+        await prisma.refundRequest.findUniqueOrThrow({ where: { id: f.draft.id } }),
+      ).toMatchObject({
+        status: "SUBMITTING",
+        providerRefundId: null,
+      });
+    } finally {
+      await prisma.user.update({ where: { id: admin }, data: { deletedAt: null } });
+    }
+  });
+  it("rejects local payment changes during lookup without recording stale evidence", async () => {
+    const f = await claimedFixture();
+    refundReviewMocks.inspect.mockImplementationOnce(async () => {
+      await prisma.payment.update({
+        where: { id: f.sale.payments[0].id },
+        data: { externalId: "pi_changed" },
+      });
+      return recoveryObservation(f);
+    });
+    await expect(recoverRefundSubmission(admin, f.input)).rejects.toThrow(
+      "Payment records changed during recovery",
+    );
+    expect(
+      await prisma.refundRequest.findUniqueOrThrow({ where: { id: f.draft.id } }),
+    ).toMatchObject({
+      status: "SUBMITTING",
+      providerRefundId: null,
+    });
+  });
+  it("serializes concurrent recovery with one receipt and audit", async () => {
+    const f = await claimedFixture();
+    refundReviewMocks.inspect.mockResolvedValue(recoveryObservation(f));
+    const outcomes = await Promise.allSettled([
+      recoverRefundSubmission(admin, f.input),
+      recoverRefundSubmission(admin, f.input),
+    ]);
+    expect(outcomes.some((r) => r.status === "fulfilled")).toBe(true);
+    for (const result of outcomes)
+      if (result.status === "rejected") expect(result.reason.status).toBe(409);
+    await recoverRefundSubmission(admin, f.input);
+    expect(
+      await prisma.refundRequestEvent.count({
+        where: {
+          refundRequestId: f.draft.id,
+          type: "refund.submission.observed",
+        },
+      }),
+    ).toBe(1);
+    expect(
+      await prisma.auditLog.count({
+        where: {
+          entityId: f.draft.id,
+          action: "refund.submission.outcome-recorded",
+        },
+      }),
+    ).toBe(1);
+  });
+  it("rolls recovery back when the receipt audit fails", async () => {
+    const f = await claimedFixture();
+    refundReviewMocks.inspect.mockResolvedValue(recoveryObservation(f));
+    await prisma.$executeRawUnsafe(
+      "ALTER TABLE \"AuditLog\" ADD CONSTRAINT dd_recovery_audit CHECK (action <> 'refund.submission.outcome-recorded') NOT VALID",
+    );
+    try {
+      await expect(recoverRefundSubmission(admin, f.input)).rejects.toThrow();
+      expect(
+        await prisma.refundRequest.findUniqueOrThrow({ where: { id: f.draft.id } }),
+      ).toMatchObject({
+        status: "SUBMITTING",
+        providerRefundId: null,
+      });
+      expect(
+        await prisma.refundRequestEvent.count({
+          where: {
+            refundRequestId: f.draft.id,
+            type: "refund.submission.observed",
+          },
+        }),
+      ).toBe(0);
+    } finally {
+      await prisma.$executeRawUnsafe(
+        'ALTER TABLE "AuditLog" DROP CONSTRAINT dd_recovery_audit',
+      );
+    }
+  });
   it("orchestrates one provider attempt after the claim commits and records its receipt", async () => {
     const f = await fixture();
     refundReviewMocks.submit.mockReset();
