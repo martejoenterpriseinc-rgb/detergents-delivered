@@ -1,38 +1,26 @@
 import Link from "next/link";
+import { getCustomerAccount } from "@/lib/services/customer-account";
 import { requireAuth } from "@/lib/authz";
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { DemoBanner } from "@/components/storefront/demo-banner";
-
+import { readSubscriptions } from "@/lib/services/subscriptions";
+import { SubscriptionManager } from "@/components/account/subscriptions";
 export default async function AccountSubscriptionsPage() {
-  await requireAuth();
-
+  const session = await requireAuth();
+  const account = await getCustomerAccount(session.user.id);
+  if (!account.hasCustomer)
+    return (
+      <main className="mx-auto max-w-3xl space-y-4 px-4 py-10">
+        <h1 className="text-3xl font-semibold">Subscriptions</h1>
+        <p>Quarterly subscriptions are managed through a household account.</p>
+        <Link href="/account" className="underline">
+          Back to account
+        </Link>
+      </main>
+    );
+  const data = await readSubscriptions(session.user.id);
   return (
-    <div className="mx-auto w-full max-w-3xl px-4 py-12">
+    <main className="mx-auto w-full max-w-3xl space-y-6 px-4 py-10">
       <h1 className="text-3xl font-semibold text-teal-950">Subscriptions</h1>
-      <p className="mt-2 text-teal-800">Quarterly orders with payment at purchase.</p>
-      <DemoBanner className="mt-6">
-        Subscription management is a placeholder. No cadence is billed.
-      </DemoBanner>
-      <Card className="mt-6 space-y-3">
-        <p className="font-semibold text-teal-950">Quarterly · every three months</p>
-        <p className="text-sm text-teal-800">
-          Not available yet. Order now will require immediate payment and the next
-          eligible zone, week, and delivery day, subject to stock and capacity. No delayed
-          payment collection.
-        </p>
-        <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="outline" disabled>
-            Pause
-          </Button>
-          <Button type="button" variant="outline" disabled>
-            Skip next
-          </Button>
-          <Link href="/account">
-            <Button variant="secondary">Back to account</Button>
-          </Link>
-        </div>
-      </Card>
-    </div>
+      <SubscriptionManager data={data} />
+    </main>
   );
 }

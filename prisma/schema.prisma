@@ -916,7 +916,14 @@ model Subscription {
   addressId         String?
   address           Address?           @relation(fields: [addressId], references: [id])
   status            SubscriptionStatus @default(ACTIVE)
-  cadenceDays       Int                @default(28)
+  cadenceDays       Int?
+  cadenceMonths     Int?
+  anchorDate        DateTime?          @db.Date
+  cycleNumber       Int                @default(1)
+  version           Int                @default(0)
+  consentVersion    String?
+  consentedAt       DateTime?
+  events            SubscriptionEvent[]
   nextOrderAt       DateTime?
   originOrderId     String?            @unique
   originOrder       Order?             @relation("SubscriptionOrigin", fields: [originOrderId], references: [id])
@@ -1629,4 +1636,17 @@ model RefundAdjustment {
   taxEvidenceStatus String @default("UNVERIFIED")
   createdAt DateTime @default(now())
   @@unique([requestId, kind])
+}
+
+model SubscriptionEvent {
+  id String @id @default(cuid())
+  subscriptionId String
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Restrict)
+  requestKey String @unique
+  requestHash String
+  actorUserId String
+  action String
+  evidence Json
+  createdAt DateTime @default(now())
+  @@index([subscriptionId, createdAt])
 }

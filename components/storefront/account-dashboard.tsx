@@ -118,14 +118,14 @@ export function AccountDashboard({
       <Card className="space-y-2">
         <h2 className="text-xl font-semibold">Quarterly subscriptions</h2>
         <p className="text-sm text-teal-800">
-          Every three months, with payment at purchase. Subscription checkout and Order
-          now are not connected yet.
+          Manage quarterly schedules, pause, skip or cancel future quarters. Each purchase
+          requires review and payment.
         </p>
         <Link
           href="/account/subscriptions"
           className="inline-block text-sm font-semibold text-teal-800 underline"
         >
-          Subscription details
+          Manage subscriptions
         </Link>
       </Card>
     </div>
