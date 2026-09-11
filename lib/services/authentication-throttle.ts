@@ -6,6 +6,8 @@ const LIMITS = {
   register: [50, 3],
   recovery: [200, 3],
   reset: [300, 10],
+  verification: [200, 3],
+  verify: [300, 10],
 } as const;
 
 // Database-backed fixed windows work across application instances. The global

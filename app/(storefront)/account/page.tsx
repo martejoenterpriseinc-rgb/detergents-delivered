@@ -7,6 +7,8 @@ import Link from "next/link";
 import { getCustomerAccount, getCustomerOrders } from "@/lib/services/customer-account";
 import { ADMIN_SHELL_ROLES, hasRole } from "@/lib/domain/authz";
 import { Button } from "@/components/ui/button";
+import { EmailVerification } from "@/components/storefront/email-verification";
+import { emailVerificationAvailable } from "@/lib/services/email-verification";
 
 export default async function AccountPage() {
   const session = await requireAuth();
@@ -16,6 +18,8 @@ export default async function AccountPage() {
     getDeliveryWidget(session.user.id),
     getLoyalty(session.user.id),
   ]);
+  const verificationAvailable =
+    account.emailVerified || (await emailVerificationAvailable());
 
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-12">
@@ -29,7 +33,7 @@ export default async function AccountPage() {
         <div className="flex flex-wrap items-center gap-4">
           {hasRole(session.user.roles, ADMIN_SHELL_ROLES) && (
             <Link href="/admin" className="font-semibold text-teal-800 underline">
-              Back to admin
+              Admin / Owner
             </Link>
           )}
           <Link href="/account/addresses" className="font-semibold underline">
@@ -43,6 +47,10 @@ export default async function AccountPage() {
         </div>
       </div>
       <div className="mt-8">
+        <EmailVerification
+          verified={account.emailVerified}
+          available={verificationAvailable}
+        />
         <AccountDashboard
           account={account}
           orders={orders}

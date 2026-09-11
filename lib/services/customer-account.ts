@@ -39,6 +39,7 @@ export async function getCustomerAccount(userId: string) {
   const customer = user.customer && !user.customer.deletedAt ? user.customer : null;
   return {
     email: user.email,
+    emailVerified: Boolean(user.emailVerified),
     createdAt: user.createdAt.toISOString(),
     customerCreatedAt: customer?.createdAt.toISOString() ?? null,
     firstName: customer?.firstName ?? "",
