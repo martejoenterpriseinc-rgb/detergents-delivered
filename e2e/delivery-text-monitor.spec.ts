@@ -95,7 +95,10 @@ test("administrators can review protected delivery-text uncertainty without a re
       page.getByRole("heading", { name: order.number, exact: true }),
     ).toBeVisible();
     await expect(
-      page.getByText("Needs review: submission unconfirmed.", { exact: true }),
+      page
+        .getByRole("article")
+        .filter({ has: page.getByRole("heading", { name: order.number, exact: true }) })
+        .getByText("Needs review: submission unconfirmed.", { exact: true }),
     ).toBeVisible();
     await expect(page.getByRole("button", { name: /resend|send again/i })).toHaveCount(0);
     expect(
