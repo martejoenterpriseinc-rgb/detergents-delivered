@@ -1,5 +1,11 @@
 # Customer email verification
 
+## Setup location and launch timing
+
+Owner direction on September 11: continue development with provider connections deferred to launch preparation. Email setup lives in Settings → API connections → SendGrid email, also shared by Integrations. Each existing field has Edit, Save/Update and its own status, with independent sandbox and production values. The expandable launch guide covers sender verification, a Mail Send key, sandbox recipient restrictions, real verification/recovery delivery checks and the separate owner grant. It links to official SendGrid instructions. This guide does not send email, mark delivery verified or grant a role. Connecting and proving providers remains required before enabling checkout; it does not block further development.
+
+The first production owner still requires hosting-operator setup because an unprivileged customer cannot open API settings. This is not bypassed by the launch guide.
+
 The same existing account keeps its customer profile, password and roles. Email verification establishes inbox ownership only; it never grants owner/admin access, approves an address, or enables checkout. The separate initial-owner command still requires a verified account and explicit authorization.
 
 An authenticated customer requests a link from Account. The server selects the account email from the current session identity; the API accepts no recipient, user ID or roles. The SendGrid connection uses the existing environment-separated email vault and trusted origin. Non-production recipients must be explicitly allowlisted. Missing configuration displays an unavailable state and creates no token or provider request.

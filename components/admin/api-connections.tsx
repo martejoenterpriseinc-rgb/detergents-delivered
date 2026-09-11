@@ -505,6 +505,66 @@ export function ApiConnections({ initial }: { initial: ApiEditorData }) {
               ))}
             </tbody>
           </table>
+          {group.id === "email" && (
+            <details className={styles.emailSetup}>
+              <summary>Set up email for launch</summary>
+              <div>
+                <p>
+                  You can finish the build before connecting email. Complete these steps
+                  before accepting customer orders.
+                </p>
+                <ol>
+                  <li>
+                    Select Sandbox or Production above. Save a separate SendGrid key for
+                    each environment.
+                  </li>
+                  <li>
+                    Verify your sending identity in SendGrid, then edit and save the
+                    Verified sender row. Sender verification is completed in SendGrid.
+                  </li>
+                  <li>
+                    Create a key with Mail Send permission. Save it in the SendGrid API
+                    key row and save sendgrid in the Email provider row.
+                  </li>
+                  {data.active === "sandbox" && (
+                    <li>
+                      Save the approved inboxes in Sandbox test recipients. Sandbox sends
+                      real email only to these addresses.
+                    </li>
+                  )}
+                  <li>
+                    Before launch, confirm delivery through Account → Verify your email
+                    and Forgot password. Saving rows or refreshing status does not send a
+                    test email or prove delivery.
+                  </li>
+                </ol>
+                <div className={styles.setupLinks}>
+                  <a
+                    href="https://www.twilio.com/docs/sendgrid/ui/sending-email/sender-verification"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Sender setup guide <ArrowUpRight size={14} />
+                  </a>
+                  <a
+                    href="https://www.twilio.com/docs/sendgrid/ui/account-and-settings/api-keys"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    API key setup guide <ArrowUpRight size={14} />
+                  </a>
+                  <a href="/account">
+                    Open my account <ArrowUpRight size={14} />
+                  </a>
+                </div>
+                <p>
+                  Owner access uses the same customer login. After the intended owner
+                  verifies their email, the separate owner setup must be completed before
+                  Admin / Owner appears.
+                </p>
+              </div>
+            </details>
+          )}
           {group.id === "stripe" && (
             <CopyAddress
               label="Stripe webhook URL"

@@ -48,7 +48,7 @@ export const integrationCatalog = [
   {
     id: "email",
     name: "SendGrid email",
-    description: "Password recovery and approved test inboxes",
+    description: "Account email verification and password recovery",
     ready: true,
     fields: [
       {
