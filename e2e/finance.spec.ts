@@ -149,7 +149,9 @@ test("expenses and mileage persist, recover lost saves, export and restrict CPA 
     ).toBe(true);
     await page.screenshot({ path: info.outputPath("cpa-center.png"), fullPage: true });
     await page.goto("/admin/cpa?from=2026-02-30&to=2026-03-01");
-    await expect(page.getByRole("alert")).toContainText("Choose valid dates");
+    await expect(
+      page.getByRole("alert").filter({ hasText: "Choose valid dates" }),
+    ).toBeVisible();
     await page.goto("/admin/expenses");
     await expect(
       page.getByRole("button", { name: "+ Expense", exact: true }),
