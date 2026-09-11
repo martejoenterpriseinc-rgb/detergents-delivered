@@ -1,3 +1,5 @@
+import { runDeliveryTexts } from "@/lib/services/sms-delivery";
+import { smsConfig } from "@/lib/integrations/twilio-client";
 import { reconcileScheduledQuickbooksExpenses } from "@/lib/services/quickbooks-expenses";
 import {
   authorizedQuickbooks,
@@ -112,12 +114,13 @@ export async function emailRecoveryWork(
   };
 }
 export async function runOperationalCycle() {
-  const [payments, email, subscriptions, refunds, quickbooks] = await Promise.all([
+  const [payments, email, subscriptions, refunds, quickbooks, texts] = await Promise.all([
     runOperationalTask("payment-reconciliation"),
     runOperationalTask("recovery-email"),
     runOperationalTask("subscription-cycles"),
     runOperationalTask("refund-reconciliation"),
     runOperationalTask("quickbooks-reconciliation"),
+    runOperationalTask("delivery-sms"),
   ]);
   return {
     payments,
@@ -125,6 +128,7 @@ export async function runOperationalCycle() {
     subscriptions,
     refunds,
     quickbooks,
+    texts,
   };
 }
 export function runOperationalTask(name: JobName) {
@@ -138,7 +142,9 @@ export function runOperationalTask(name: JobName) {
           ? refundRecoveryWork
           : name === "quickbooks-reconciliation"
             ? quickbooksRecoveryWork
-            : subscriptionCycleWork,
+            : name === "delivery-sms"
+              ? deliveryTextWork
+              : subscriptionCycleWork,
   );
 }
 
@@ -184,5 +190,27 @@ export async function quickbooksRecoveryWork(
     ...result,
     state: result.attention ? "ATTENTION" : "HEALTHY",
     ...(result.attention ? { reason: "ACCOUNTING_REVIEW_REQUIRED" as const } : {}),
+  };
+}
+
+export async function deliveryTextWork(
+  ownsLease: () => Promise<boolean>,
+): Promise<JobResult> {
+  try {
+    await smsConfig();
+  } catch {
+    return blocked();
+  }
+  const result = await runDeliveryTexts(ownsLease);
+  return {
+    checked: result.checked,
+    completed: result.completed,
+    attention: result.attention,
+    state: result.attention ? "ATTENTION" : result.enabled ? "HEALTHY" : "BLOCKED",
+    ...(result.attention
+      ? { reason: "SMS_REVIEW_REQUIRED" as const }
+      : !result.enabled
+        ? { reason: "DELIVERY_DISABLED" as const }
+        : {}),
   };
 }

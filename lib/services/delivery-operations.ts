@@ -1,3 +1,4 @@
+import { enqueueDeliveryText } from "./sms-outbox";
 import { z } from "zod";
 import { createHash } from "node:crypto";
 import type { Prisma } from "@prisma/client";
@@ -155,6 +156,7 @@ export async function deliveryAction(actor: string, input: unknown) {
             where: { id: next.orderId! },
             data: { status: "OUT_FOR_DELIVERY" },
           });
+          await enqueueDeliveryText(tx, next.orderId!, "OUT_FOR_DELIVERY");
         } else {
           if (!next.startedAt || next.arrivedAt)
             throw new AccountError("Start this stop before recording arrival.", 409);
@@ -235,6 +237,7 @@ export async function completeWithPhoto(
         where: { id: stop.orderId! },
         data: { status: "DELIVERED" },
       });
+      await enqueueDeliveryText(tx, stop.orderId!, "DELIVERED");
       if (route.stops.every((s) => s.id === stop.id || s.completedAt))
         await tx.route.update({ where: { id: route.id }, data: { status: "COMPLETED" } });
       await tx.deliveryAction.create({

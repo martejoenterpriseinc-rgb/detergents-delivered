@@ -12,12 +12,14 @@ const labels: Record<string, string> = {
 };
 const reasons: Record<string, string> = {
   PROVIDER_SETUP_REQUIRED: "Complete the provider fields above.",
-  DELIVERY_DISABLED: "Scheduled email delivery is not activated.",
+  DELIVERY_DISABLED: "Scheduled delivery is not activated.",
   REFUND_REVIEW_REQUIRED:
     "Review protected refund requests in Orders; no new refund is submitted by this job.",
   ACCOUNTING_REVIEW_REQUIRED:
     "Review QuickBooks expense exports; this job never submits a new expense.",
   PAYMENT_REVIEW_REQUIRED: "Review protected pending payments in Payments.",
+  SMS_REVIEW_REQUIRED:
+    "Review delivery texts for unconfirmed submissions or delivery failures.",
   EMAIL_RETRY_REQUIRED: "Some recovery emails need retry or a fresh customer request.",
   SUBSCRIPTION_REVIEW_REQUIRED:
     "Some due subscriptions need review before their next quarter can be prepared.",
@@ -54,7 +56,9 @@ export async function OperationalHealth() {
                       ? "Refund reconciliation"
                       : job.name === "quickbooks-reconciliation"
                         ? "QuickBooks reconciliation"
-                        : "Quarterly subscription preparation"}
+                        : job.name === "delivery-sms"
+                          ? "Delivery text messages"
+                          : "Quarterly subscription preparation"}
               </h3>
               <p className="mt-1 text-xs text-slate-500">
                 {job.heartbeatAt

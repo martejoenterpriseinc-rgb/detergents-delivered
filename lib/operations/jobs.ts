@@ -7,6 +7,7 @@ export const jobNames = [
   "refund-reconciliation",
   "quickbooks-reconciliation",
   "recovery-email",
+  "delivery-sms",
   "subscription-cycles",
 ] as const;
 export type JobName = (typeof jobNames)[number];
@@ -21,6 +22,7 @@ export type JobResult = {
     | "REFUND_REVIEW_REQUIRED"
     | "ACCOUNTING_REVIEW_REQUIRED"
     | "EMAIL_RETRY_REQUIRED"
+    | "SMS_REVIEW_REQUIRED"
     | "DELIVERY_DISABLED"
     | "SUBSCRIPTION_REVIEW_REQUIRED";
 };

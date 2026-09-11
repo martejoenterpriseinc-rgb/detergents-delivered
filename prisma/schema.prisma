@@ -661,6 +661,7 @@ enum PaymentProvider {
 }
 
 model Order {
+  smsDeliveries SmsDelivery[]
   id              String      @id @default(cuid())
   number          String      @unique
   customerId      String
@@ -1745,6 +1746,7 @@ model CommerceGrant {
 }
 
 model SmsConsent {
+  deliveries SmsDelivery[]
   id String @id @default(cuid())
   customerId String
   customer Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
@@ -1769,4 +1771,38 @@ model SmsInboundEvent {
   eventHash String
   kind String
   createdAt DateTime @default(now())
+}
+
+model SmsDelivery {
+ events SmsDeliveryEvent[]
+ id String @id @default(uuid())
+ orderId String
+ order Order @relation(fields:[orderId],references:[id],onDelete:Restrict)
+ consentId String
+ consent SmsConsent @relation(fields:[consentId],references:[id],onDelete:Restrict)
+ environment String
+ accountSid String
+ sender String
+ phone String
+ kind String
+ status String @default("PENDING")
+ body String?
+ providerSid String? @unique
+ attempts Int @default(0)
+ nextAttemptAt DateTime @default(now())
+ submittedAt DateTime?
+ checkedAt DateTime?
+ issue String?
+ expiresAt DateTime
+ createdAt DateTime @default(now())
+ @@unique([orderId,kind])
+ @@index([environment,accountSid,status,nextAttemptAt])
+}
+model SmsDeliveryEvent {
+ id String @id
+ deliveryId String
+ delivery SmsDelivery @relation(fields:[deliveryId],references:[id],onDelete:Restrict)
+ providerSid String
+ status String
+ createdAt DateTime @default(now())
 }
