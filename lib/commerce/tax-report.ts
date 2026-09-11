@@ -1,3 +1,4 @@
+import { parseCsv } from "@/lib/domain/csv";
 import { createHash } from "node:crypto";
 import { AccountError } from "@/lib/domain/account";
 import { readCommerce } from "./runtime";
@@ -29,48 +30,7 @@ export const taxReportColumns = [
 
 // Bounded RFC 4180 reader. No uploaded values are evaluated or rendered as HTML.
 export function taxReportRows(csv: string) {
-  if (Buffer.byteLength(csv) > maxBytes || csv.includes("\0")) throw fail();
-  const rows: string[][] = [];
-  let row: string[] = [],
-    cell = "",
-    quoted = false,
-    closed = false;
-  const field = () => {
-    row.push(cell);
-    cell = "";
-    closed = false;
-    if (row.length > 200) throw fail();
-  };
-  const record = () => {
-    field();
-    if (row.some(Boolean)) rows.push(row);
-    row = [];
-    if (rows.length > 10_001) throw fail();
-  };
-  csv = csv.replace(/^\uFEFF/, "");
-  for (let i = 0; i < csv.length; i++) {
-    const c = csv[i];
-    if (quoted) {
-      if (c === '"' && csv[i + 1] === '"') {
-        cell += '"';
-        i++;
-      } else if (c === '"') {
-        quoted = false;
-        closed = true;
-      } else cell += c;
-    } else if (c === ",") field();
-    else if (c === "\n" || c === "\r") {
-      if (c === "\r" && csv[i + 1] === "\n") i++;
-      record();
-    } else if (c === '"' && !cell && !closed) quoted = true;
-    else {
-      if (closed || c === '"') throw fail();
-      cell += c;
-    }
-    if (cell.length > 10_000) throw fail();
-  }
-  if (quoted) throw fail();
-  if (cell || row.length || closed) record();
+  const rows = parseCsv(csv);
   const headers = rows.shift();
   if (
     !headers ||
