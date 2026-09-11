@@ -23,6 +23,7 @@ export const salesMappingSchema = z
     externalId: numeric,
     externalName: z.string(),
     incomeAccountId: numeric.nullable(),
+    taxCode: z.enum(["TAX", "NON"]).nullable().optional(),
     verifiedAt: z.string().datetime(),
   })
   .strict();
@@ -128,10 +129,12 @@ export async function saveSalesMapping(actor: string, raw: unknown) {
       kind: salesMappingKind,
       sourceId: z.string().min(1).max(100),
       externalId: numeric,
+      taxCode: z.enum(["TAX", "NON"]).optional(),
       version: z.number().int().nonnegative(),
       confirmed: z.literal(true),
     })
     .strict()
+    .refine((v) => v.kind === "item" || v.taxCode === undefined)
     .parse(raw);
   await financeAccess(prisma, actor, true);
   const config = await quickbooksConfig(),
@@ -238,6 +241,11 @@ export async function saveSalesMapping(actor: string, raw: unknown) {
       externalId: entity.id,
       externalName: entity.name,
       incomeAccountId,
+      taxCode:
+        input.kind === "item"
+          ? (input.taxCode ??
+            (before?.externalId === entity.id ? (before.taxCode ?? null) : null))
+          : null,
       verifiedAt: new Date().toISOString(),
     });
     await tx.setting.upsert({

@@ -10,6 +10,7 @@ export function QuickbooksSalesMapping() {
     [next, setNext] = useState<number | null>(null),
     [source, setSource] = useState(""),
     [external, setExternal] = useState(""),
+    [taxCode, setTaxCode] = useState(""),
     [confirmed, setConfirmed] = useState(false),
     [requestKey, setRequestKey] = useState(""),
     [busy, setBusy] = useState(false),
@@ -35,6 +36,7 @@ export function QuickbooksSalesMapping() {
   function reset() {
     setSource("");
     setExternal("");
+    setTaxCode("");
     setConfirmed(false);
     setRequestKey("");
   }
@@ -99,6 +101,7 @@ export function QuickbooksSalesMapping() {
           kind,
           sourceId: source,
           externalId: external,
+          ...(kind === "item" ? { taxCode } : {}),
           version: selected.mapping?.version ?? 0,
           confirmed: true,
         }),
@@ -165,6 +168,7 @@ export function QuickbooksSalesMapping() {
               onChange={(e) => {
                 setSource(e.target.value);
                 setExternal("");
+                setTaxCode("");
                 setConfirmed(false);
                 setRequestKey("");
               }}
@@ -178,7 +182,20 @@ export function QuickbooksSalesMapping() {
             </select>
           </label>
           {selected?.mapping && (
-            <p role="status">Saved link: {selected.mapping.externalName}.</p>
+            <div className="space-y-2" role="status">
+              <p>Saved link: {selected.mapping.externalName}.</p>
+              {kind === "item" && (
+                <p>
+                  Receipt tax treatment:{" "}
+                  {selected.mapping.taxCode === "TAX"
+                    ? "taxable"
+                    : selected.mapping.taxCode === "NON"
+                      ? "non-taxable"
+                      : "not reviewed"}
+                  .
+                </p>
+              )}
+            </div>
           )}
           {selected && data.canWrite && (
             <>
@@ -191,6 +208,7 @@ export function QuickbooksSalesMapping() {
                   value={external}
                   onChange={(e) => {
                     setExternal(e.target.value);
+                    setTaxCode("");
                     setConfirmed(false);
                     setRequestKey("");
                   }}
@@ -203,6 +221,30 @@ export function QuickbooksSalesMapping() {
                   ))}
                 </select>
               </label>
+              {kind === "item" && (
+                <label className="block">
+                  Receipt tax treatment
+                  <select
+                    aria-label="Receipt tax treatment"
+                    className="mt-1 block w-full rounded border p-2"
+                    value={taxCode}
+                    disabled={busy}
+                    onChange={(e) => {
+                      setTaxCode(e.target.value);
+                      setConfirmed(false);
+                      setRequestKey("");
+                    }}
+                  >
+                    <option value="">Review tax treatment</option>
+                    <option value="TAX">Taxable</option>
+                    <option value="NON">Non-taxable</option>
+                  </select>
+                  <span className="mt-2 block">
+                    Choose the reviewed treatment for this product. A zero-tax order does
+                    not establish that the product is non-taxable.
+                  </span>
+                </label>
+              )}
               <label className="flex items-start gap-3">
                 <input
                   type="checkbox"
@@ -215,7 +257,9 @@ export function QuickbooksSalesMapping() {
               </label>
               <button
                 className="ops-button"
-                disabled={busy || !external || !confirmed}
+                disabled={
+                  busy || !external || !confirmed || (kind === "item" && !taxCode)
+                }
                 onClick={save}
               >
                 Save sales link

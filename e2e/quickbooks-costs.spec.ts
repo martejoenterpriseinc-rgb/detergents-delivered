@@ -298,6 +298,7 @@ test("cost accounting preserves failed choices and distinguishes original sale f
                   externalId: input.externalId,
                   externalName: "Synthetic linked " + input.kind,
                   incomeAccountId: input.kind === "item" ? "9" : null,
+                  taxCode: input.taxCode ?? null,
                   verifiedAt: new Date().toISOString(),
                 },
         });
@@ -390,6 +391,10 @@ test("cost accounting preserves failed choices and distinguishes original sale f
       }),
     ).toHaveCount(0);
     await page.getByLabel("QuickBooks record", { exact: true }).selectOption("2");
+    await expect(
+      page.getByRole("button", { name: "Save sales link", exact: true }),
+    ).toBeDisabled();
+    await page.getByLabel("Receipt tax treatment", { exact: true }).selectOption("TAX");
     await page
       .getByLabel(
         "I checked that these records represent the same customer or product in this company.",
@@ -398,6 +403,9 @@ test("cost accounting preserves failed choices and distinguishes original sale f
     await page.getByRole("button", { name: "Save sales link", exact: true }).click();
     await expect(
       page.getByText("Saved link: Synthetic linked item.", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByText("Receipt tax treatment: taxable.", { exact: true }),
     ).toBeVisible();
     expect(
       await page.evaluate(
