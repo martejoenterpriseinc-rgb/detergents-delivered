@@ -47,6 +47,66 @@ test("home login, password visibility, recovery, and revoked sessions", async ({
     await expect(input).toHaveValue(password);
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
     await expect(page).toHaveURL(/\/account$/);
+    await expect(
+      page.getByRole("heading", { name: "Verify your email", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: "Admin / Owner", exact: true }),
+    ).toHaveCount(0);
+    // Synthetic verification evidence only in the guarded CI database. No email
+    // provider is contacted. A GET/link scanner never consumes the token.
+    const verificationToken = randomBytes(32).toString("hex");
+    await db.verificationToken.create({
+      data: {
+        identifier: `dd-email-verification:v1:${user.id}:${createHash("sha256").update(email).digest("hex")}:0`,
+        token: createHash("sha256").update(verificationToken).digest("hex"),
+        expires: new Date(Date.now() + 60000),
+      },
+    });
+    await page.goto(`/verify-email#token=${verificationToken}`);
+    await expect(
+      page.getByRole("button", { name: "Confirm email", exact: true }),
+    ).toBeVisible();
+    expect(page.url()).not.toContain(verificationToken);
+    expect(
+      (await db.user.findUniqueOrThrow({ where: { id: user.id } })).emailVerified,
+    ).toBeNull();
+    await page.route(
+      "**/api/account/email-verification",
+      async (route) => {
+        await route.fetch(); // Server committed, browser lost the response.
+        await route.abort("failed");
+      },
+      { times: 1 },
+    );
+    await page.getByRole("button", { name: "Confirm email", exact: true }).click();
+    await expect(
+      page.getByRole("alert").filter({ hasText: /fetch|connection|failed/i }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Confirm email", exact: true }).click();
+    await expect(page.getByRole("status")).toContainText("Email verified");
+    expect(
+      await db.auditLog.count({
+        where: { actorUserId: user.id, action: "user.email.verified" },
+      }),
+    ).toBe(1);
+    expect(
+      (await db.user.findUniqueOrThrow({ where: { id: user.id } })).passwordHash,
+    ).toBe(user.passwordHash);
+    await page.screenshot({
+      path: testInfo.outputPath("email-verification.png"),
+      fullPage: true,
+    });
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
+    await page.getByRole("link", { name: "Your account", exact: true }).click();
+    await expect(page.getByText("Email verified", { exact: true })).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: "Admin / Owner", exact: true }),
+    ).toHaveCount(0);
     const recovery = await second.newPage();
     await recovery.goto("/sign-in");
     await recovery

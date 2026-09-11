@@ -361,6 +361,41 @@
 .security svg {
   flex-shrink: 0;
 }
+.emailSetup {
+  border-top: 1px solid #edf1ef;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.emailSetup summary {
+  cursor: pointer;
+  padding: 14px 20px;
+  font-weight: 700;
+}
+.emailSetup > div {
+  padding: 0 20px 18px;
+}
+.emailSetup ol {
+  list-style: decimal;
+  padding-left: 20px;
+  margin: 12px 0;
+}
+.emailSetup li + li {
+  margin-top: 8px;
+}
+.setupLinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  margin: 16px 0;
+}
+.setupLinks a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #147b61;
+  font-weight: 700;
+  min-height: 36px;
+}
 .additional {
   border: 1px solid #dce7e2;
   border-radius: 10px;

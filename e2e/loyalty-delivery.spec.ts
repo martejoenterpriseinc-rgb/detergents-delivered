@@ -72,7 +72,7 @@ test("owner entry, matched live tiles, referrals and safe checkout rewards previ
     await ownerPage.getByRole("link", { name: "View as customer", exact: true }).click();
     await expect(ownerPage).toHaveURL(/\/account$/);
     await expect(ownerPage.getByText(owner.email, { exact: true })).toBeVisible();
-    await ownerPage.getByRole("link", { name: "Back to admin", exact: true }).click();
+    await ownerPage.getByRole("link", { name: "Admin / Owner", exact: true }).click();
     await expect(ownerPage).toHaveURL(/\/admin$/);
     expect(await db.userRole.count({ where: { userId: owner.id } })).toBe(2);
     await ownerPage
