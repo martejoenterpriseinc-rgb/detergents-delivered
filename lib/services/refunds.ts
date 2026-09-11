@@ -45,8 +45,8 @@ export async function claimRefundSubmission(userId: string, raw: unknown) {
   await refundAccess(prisma, userId);
   const commerce = await readCommerce(true);
   return prisma.$transaction(async (tx) => {
-    await refundAccess(tx, userId);
     await tx.$queryRaw`SELECT id FROM "Order" WHERE id = ${input.orderId} FOR UPDATE`;
+    await refundAccess(tx, userId);
     const request = await tx.refundRequest.findUnique({
       where: { id: input.requestId },
       include: {
