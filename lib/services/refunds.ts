@@ -65,117 +65,124 @@ async function refundAccess(tx: Tx, userId: string) {
     throw new AccountError("Order management access required.", 403);
 }
 
-/** Internal submission boundary. No HTTP/startup caller until settlement acceptance passes. */
-export async function claimRefundSubmission(userId: string, raw: unknown) {
-  const input = submissionInput.parse(raw);
-  await refundAccess(prisma, userId);
-  const commerce = await readCommerce(true);
-  return prisma.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT id FROM "Order" WHERE id = ${input.orderId} FOR UPDATE`;
-    await refundAccess(tx, userId);
-    const request = await tx.refundRequest.findUnique({
-      where: { id: input.requestId },
-      include: {
-        lines: true,
-        payment: {
-          include: {
-            events: true,
-            refunds: { include: { request: { include: { adjustments: true } } } },
-          },
-        },
-        order: {
-          include: {
-            items: true,
-            checkoutAttempt: true,
-            rewardReservation: true,
-            refundRequests: { include: { lines: true } },
-          },
+async function validatedPreparedRefund(
+  tx: Tx,
+  input: z.infer<typeof submissionInput>,
+  commerce: Pick<Awaited<ReturnType<typeof readCommerce>>, "accountId" | "live">,
+  rewardOnly = false,
+) {
+  const request = await tx.refundRequest.findUnique({
+    where: { id: input.requestId },
+    include: {
+      lines: true,
+      payment: {
+        include: {
+          events: true,
+          refunds: { include: { request: { include: { adjustments: true } } } },
         },
       },
-    });
-    if (!request || request.orderId !== input.orderId)
-      throw new AccountError("Refund request not found.", 404);
-    // Includes failed/canceled attempts: only reconciliation may resolve a prior submission.
-    if (request.submittedAt || request.providerRefundId || request.status !== "PREPARED")
-      throw new AccountError(
-        "This refund cannot be submitted again. Review its existing outcome.",
-        409,
-      );
-    const { payment, order } = request;
-    const checkout = order.checkoutAttempt;
-    if (
-      !checkout ||
-      checkout.state !== "PAID" ||
-      request.providerAccountId !== commerce.accountId ||
-      request.livemode !== commerce.live ||
-      checkout.stripeAccountId !== request.providerAccountId ||
-      checkout.livemode !== request.livemode ||
-      payment.orderId !== order.id ||
-      payment.provider !== "STRIPE" ||
-      !["CAPTURED", "PARTIALLY_REFUNDED"].includes(payment.status) ||
-      !payment.externalId?.startsWith("pi_") ||
-      payment.amountCents !== order.totalCents ||
-      payment.currency !== order.currency ||
-      request.currency !== payment.currency ||
-      !["PAID", "FULFILLING", "OUT_FOR_DELIVERY", "DELIVERED"].includes(order.status) ||
-      payment.refunds.some((r) => !r.requestId) ||
-      !payment.events.some(
-        (e) =>
-          e.verifiedAt &&
-          e.externalId === `checkout:${checkout.id}:paid` &&
-          ["checkout.session.completed", "checkout.session.reconciled"].includes(e.type),
-      )
-    )
-      throw new AccountError(
-        "Original payment and refund evidence requires review.",
-        409,
-      );
-    const rewardAmounts = await refundRewardAmounts(tx, order.id);
-    const originalInput = refundRequestInput.parse({
-      requestKey: request.requestKey,
-      orderId: request.orderId,
-      paymentId: request.paymentId,
-      reason: request.reason,
-      lines: request.lines
-        .map((l) => ({ orderItemId: l.orderItemId, quantity: l.quantity }))
-        .sort((a, b) => a.orderItemId.localeCompare(b.orderItemId)),
-    });
-    if (
-      fingerprint(originalInput) !== request.requestHash ||
-      request.amountCents <= 0 ||
-      request.lines.some((l) => l.rewardCents < 0 || l.netCents < 0 || l.taxCents < 0) ||
-      request.lines.reduce((total, l) => total + l.netCents + l.taxCents, 0) !==
-        request.amountCents
-    )
-      throw new AccountError("Saved refund allocation requires review.", 409);
-    const active = order.refundRequests.filter((r) =>
-      reservedRefundStates.includes(r.status as (typeof reservedRefundStates)[number]),
+      order: {
+        include: {
+          items: true,
+          checkoutAttempt: true,
+          rewardReservation: true,
+          refundRequests: { include: { lines: true } },
+        },
+      },
+    },
+  });
+  if (!request || request.orderId !== input.orderId)
+    throw new AccountError("Refund request not found.", 404);
+  // Includes failed/canceled attempts: only reconciliation may resolve a prior submission.
+  if (request.submittedAt || request.providerRefundId || request.status !== "PREPARED")
+    throw new AccountError(
+      "This refund cannot be submitted again. Review its existing outcome.",
+      409,
     );
-    if (
-      active.some(
-        (r) =>
-          r.id !== request.id &&
-          ["SUBMITTING", "UNKNOWN", "PENDING", "REQUIRES_ACTION"].includes(r.status),
-      )
+  const { payment, order } = request;
+  const checkout = order.checkoutAttempt;
+  if (
+    !checkout ||
+    checkout.state !== "PAID" ||
+    request.providerAccountId !== commerce.accountId ||
+    request.livemode !== commerce.live ||
+    checkout.stripeAccountId !== request.providerAccountId ||
+    checkout.livemode !== request.livemode ||
+    payment.orderId !== order.id ||
+    payment.provider !== "STRIPE" ||
+    !(
+      rewardOnly
+        ? ["CAPTURED", "PARTIALLY_REFUNDED", "REFUNDED"]
+        : ["CAPTURED", "PARTIALLY_REFUNDED"]
+    ).includes(payment.status) ||
+    !payment.externalId?.startsWith("pi_") ||
+    payment.amountCents !== order.totalCents ||
+    payment.currency !== order.currency ||
+    request.currency !== payment.currency ||
+    (rewardOnly && request.currency !== "USD") ||
+    !(
+      rewardOnly
+        ? ["PAID", "FULFILLING", "OUT_FOR_DELIVERY", "DELIVERED", "REFUNDED"]
+        : ["PAID", "FULFILLING", "OUT_FOR_DELIVERY", "DELIVERED"]
+    ).includes(order.status) ||
+    payment.refunds.some((r) => !r.requestId) ||
+    !payment.events.some(
+      (e) =>
+        e.verifiedAt &&
+        e.externalId === `checkout:${checkout.id}:paid` &&
+        ["checkout.session.completed", "checkout.session.reconciled"].includes(e.type),
     )
-      throw new AccountError(
-        "Resolve the existing refund attempt before submitting another.",
-        409,
-      );
-    for (const line of request.lines) {
-      const item = order.items.find((i) => i.id === line.orderItemId);
-      const held = active
-        .flatMap((r) => r.lines)
-        .filter((l) => l.orderItemId === line.orderItemId);
-      if (
-        !item ||
-        held.reduce((s, l) => s + l.quantity, 0) > item.quantity ||
-        held.reduce((s, l) => s + l.netCents, 0) > item.lineTotalCents - item.taxCents ||
-        held.reduce((s, l) => s + l.taxCents, 0) > item.taxCents ||
-        held.reduce((s, l) => s + l.rewardCents, 0) > (rewardAmounts.get(item.id) ?? 0)
-      )
-        throw new AccountError("Refund exceeds the purchased item allocation.", 409);
-    }
+  )
+    throw new AccountError("Original payment and refund evidence requires review.", 409);
+  const rewardAmounts = await refundRewardAmounts(tx, order.id);
+  const originalInput = refundRequestInput.parse({
+    requestKey: request.requestKey,
+    orderId: request.orderId,
+    paymentId: request.paymentId,
+    reason: request.reason,
+    lines: request.lines
+      .map((l) => ({ orderItemId: l.orderItemId, quantity: l.quantity }))
+      .sort((a, b) => a.orderItemId.localeCompare(b.orderItemId)),
+  });
+  if (
+    fingerprint(originalInput) !== request.requestHash ||
+    (rewardOnly
+      ? request.amountCents !== 0 || !request.lines.some((l) => l.rewardCents > 0)
+      : request.amountCents <= 0) ||
+    request.lines.some((l) => l.rewardCents < 0 || l.netCents < 0 || l.taxCents < 0) ||
+    request.lines.reduce((total, l) => total + l.netCents + l.taxCents, 0) !==
+      request.amountCents
+  )
+    throw new AccountError("Saved refund allocation requires review.", 409);
+  const active = order.refundRequests.filter((r) =>
+    reservedRefundStates.includes(r.status as (typeof reservedRefundStates)[number]),
+  );
+  if (
+    active.some(
+      (r) =>
+        r.id !== request.id &&
+        ["SUBMITTING", "UNKNOWN", "PENDING", "REQUIRES_ACTION"].includes(r.status),
+    )
+  )
+    throw new AccountError(
+      "Resolve the existing refund attempt before submitting another.",
+      409,
+    );
+  for (const line of request.lines) {
+    const item = order.items.find((i) => i.id === line.orderItemId);
+    const held = active
+      .flatMap((r) => r.lines)
+      .filter((l) => l.orderItemId === line.orderItemId);
+    if (
+      !item ||
+      held.reduce((s, l) => s + l.quantity, 0) > item.quantity ||
+      held.reduce((s, l) => s + l.netCents, 0) > item.lineTotalCents - item.taxCents ||
+      held.reduce((s, l) => s + l.taxCents, 0) > item.taxCents ||
+      held.reduce((s, l) => s + l.rewardCents, 0) > (rewardAmounts.get(item.id) ?? 0)
+    )
+      throw new AccountError("Refund exceeds the purchased item allocation.", 409);
+  }
+  if (!rewardOnly)
     assertRefundCapacity({
       capturedCents: payment.amountCents,
       settledCents: payment.refunds.reduce((s, r) => s + effectiveRefundCents(r), 0),
@@ -184,6 +191,22 @@ export async function claimRefundSubmission(userId: string, raw: unknown) {
         .reduce((s, r) => s + r.amountCents, 0),
       requestedCents: request.amountCents,
     });
+  return { request, payment, order, checkout };
+}
+
+/** Internal submission boundary. No HTTP/startup caller until settlement acceptance passes. */
+export async function claimRefundSubmission(userId: string, raw: unknown) {
+  const input = submissionInput.parse(raw);
+  await refundAccess(prisma, userId);
+  const commerce = await readCommerce(true);
+  return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "Order" WHERE id = ${input.orderId} FOR UPDATE`;
+    await refundAccess(tx, userId);
+    const { request, payment, order, checkout } = await validatedPreparedRefund(
+      tx,
+      input,
+      commerce,
+    );
     const submittedAt = new Date();
     await tx.refundRequest.update({
       where: { id: request.id },
@@ -235,7 +258,7 @@ export async function claimRefundSubmission(userId: string, raw: unknown) {
         accountId: request.providerAccountId,
         live: request.livemode,
         checkoutId: checkout.id,
-        paymentIntentId: payment.externalId,
+        paymentIntentId: payment.externalId!,
         amountCents: payment.amountCents,
         currency: payment.currency,
       },
@@ -435,7 +458,7 @@ async function recoverySnapshot(
       accountId: checkout.stripeAccountId,
       live: checkout.livemode,
       checkoutId: checkout.id,
-      paymentIntentId: payment.externalId,
+      paymentIntentId: payment.externalId!,
       amountCents: payment.amountCents,
       currency: payment.currency,
     },
@@ -735,6 +758,117 @@ export async function reconcileRefundSettlement(userId: string, raw: unknown) {
   });
 }
 
+/** Local credit restoration only. Never creates a zero-value provider refund. */
+export async function settleRewardOnlyRefund(userId: string, raw: unknown) {
+  const input = submissionInput.parse(raw);
+  await refundAccess(prisma, userId);
+  if (!["development", "staging", "production"].includes(process.env.APP_ENV ?? ""))
+    throw new AccountError("Application environment needs review.", 503);
+  return prisma.$transaction(async (tx) => {
+    await refundAccess(tx, userId);
+    const order = await tx.order.findUnique({
+      where: { id: input.orderId },
+      include: { qualifyingReferral: true },
+    });
+    if (!order) throw new AccountError("Order not found.", 404);
+    const referral = order.qualifyingReferral;
+    for (const id of [
+      ...new Set([
+        order.customerId,
+        ...(referral ? [referral.referrerId, referral.refereeId] : []),
+      ]),
+    ].sort())
+      await tx.$queryRaw`SELECT id FROM "Customer" WHERE id = ${id} FOR UPDATE`;
+    if (referral)
+      await tx.$queryRaw`SELECT id FROM "Referral" WHERE id = ${referral.id} FOR UPDATE`;
+    await tx.$queryRaw`SELECT id FROM "Order" WHERE id = ${input.orderId} FOR UPDATE`;
+    const current = await tx.order.findUniqueOrThrow({
+      where: { id: input.orderId },
+      include: { qualifyingReferral: true },
+    });
+    if (
+      current.customerId !== order.customerId ||
+      current.qualifyingReferral?.id !== referral?.id
+    )
+      throw new AccountError("Order changed. Refresh before restoring credit.", 409);
+    const previous = await tx.refundRequest.findUnique({
+      where: { id: input.requestId },
+      include: { adjustments: true },
+    });
+    if (
+      previous?.orderId === input.orderId &&
+      previous.status === "SUCCEEDED" &&
+      previous.amountCents === 0 &&
+      !previous.providerRefundId &&
+      !previous.submittedAt &&
+      previous.adjustments.some((a) => a.kind === "REWARD_ONLY")
+    )
+      return publicRefundRequest(previous);
+    const { request } = await validatedPreparedRefund(
+      tx,
+      input,
+      {
+        accountId: previous?.providerAccountId ?? "",
+        live: process.env.APP_ENV === "production",
+      },
+      true,
+    );
+    const rewards = request.lines.reduce((n, l) => n + l.rewardCents, 0);
+    await tx.refundAdjustment.create({
+      data: {
+        requestId: request.id,
+        kind: "REWARD_ONLY",
+        cashCents: 0,
+        netCents: 0,
+        taxCents: 0,
+        rewardCents: rewards,
+        currency: request.currency,
+        taxEvidenceStatus: "NOT_APPLICABLE",
+      },
+    });
+    await tx.rewardEntry.create({
+      data: {
+        customerId: order.customerId,
+        orderId: order.id,
+        sourceId: request.id,
+        kind: "RESTORE",
+        amountCents: rewards,
+        entryKey: `refund:${request.id}:restore`,
+        description: "Original reward credit restored; no cash refund",
+      },
+    });
+    const saved = await tx.refundRequest.update({
+      where: { id: request.id },
+      data: { status: "SUCCEEDED", reconciledAt: new Date() },
+    });
+    await tx.refundRequestEvent.create({
+      data: {
+        refundRequestId: request.id,
+        providerEventId: `dd:reward-refund:${request.id}`,
+        type: "refund.reward-only.settled",
+        status: "SUCCEEDED",
+        evidenceJson: {
+          rewardCents: rewards,
+          cashCents: 0,
+          source: "original-redemption",
+        },
+      },
+    });
+    if (referral) await reviewReferralInTransaction(tx, userId, referral.id);
+    await tx.auditLog.create({
+      data: {
+        actorUserId: userId,
+        action: "refund.reward-only.settled",
+        entityType: "RefundRequest",
+        entityId: request.id,
+        beforeJson: { status: "PREPARED" },
+        afterJson: { status: "SUCCEEDED", rewardCents: rewards, cashCents: 0 },
+      },
+    });
+    return publicRefundRequest(saved);
+  });
+}
+
 function publicRefundRequest(request: {
   id: string;
   orderId: string;
@@ -762,11 +896,22 @@ function publicRefundRequest(request: {
  * intentionally performs no network request while locks are held.
  */
 export async function prepareRefund(userId: string, raw: unknown) {
+  return prepareRefundInternal(userId, raw, false);
+}
+export async function prepareRewardOnlyRefund(userId: string, raw: unknown) {
+  return prepareRefundInternal(userId, raw, true);
+}
+async function prepareRefundInternal(userId: string, raw: unknown, rewardOnly: boolean) {
   const input = refundRequestInput.parse(raw);
   input.lines.sort((a, b) => a.orderItemId.localeCompare(b.orderItemId));
   const requestHash = fingerprint(input);
   await refundAccess(prisma, userId);
-  const commerce = await readCommerce(true);
+  if (
+    rewardOnly &&
+    !["development", "staging", "production"].includes(process.env.APP_ENV ?? "")
+  )
+    throw new AccountError("Application environment needs review.", 503);
+  const commerce = rewardOnly ? null : await readCommerce(true);
   return prisma.$transaction(
     async (tx) => {
       await refundAccess(tx, userId);
@@ -780,6 +925,8 @@ export async function prepareRefund(userId: string, raw: unknown) {
             "This request key was already used for another refund.",
             409,
           );
+        if (rewardOnly && prior.amountCents !== 0)
+          throw new AccountError("This draft includes a cash refund.", 409);
         return publicRefundRequest(prior);
       }
       await tx.$queryRaw`SELECT id FROM "Order" WHERE id = ${input.orderId} FOR UPDATE`;
@@ -808,11 +955,17 @@ export async function prepareRefund(userId: string, raw: unknown) {
         )
       )
         throw new AccountError("Only a verified paid order can be refunded.", 409);
+      const binding = commerce ?? {
+        accountId: order.checkoutAttempt?.stripeAccountId ?? "",
+        live: process.env.APP_ENV === "production",
+      };
       if (
         !order.checkoutAttempt ||
+        !/^acct_[A-Za-z0-9]+$/.test(binding.accountId) ||
+        (rewardOnly && order.currency !== "USD") ||
         order.checkoutAttempt.state !== "PAID" ||
-        order.checkoutAttempt.stripeAccountId !== commerce.accountId ||
-        order.checkoutAttempt.livemode !== commerce.live
+        order.checkoutAttempt.stripeAccountId !== binding.accountId ||
+        order.checkoutAttempt.livemode !== binding.live
       )
         throw new AccountError("The payment environment does not match this order.", 409);
       if (order.refunds.some((refund) => !refund.requestId))
@@ -826,7 +979,7 @@ export async function prepareRefund(userId: string, raw: unknown) {
       if (
         !payment ||
         payment.provider !== "STRIPE" ||
-        !["CAPTURED", "PARTIALLY_REFUNDED"].includes(payment.status) ||
+        !["CAPTURED", "PARTIALLY_REFUNDED", "REFUNDED"].includes(payment.status) ||
         payment.amountCents !== order.totalCents ||
         payment.currency !== order.currency ||
         !payment.externalId?.startsWith("pi_") ||
@@ -898,8 +1051,16 @@ export async function prepareRefund(userId: string, raw: unknown) {
           rewardCents: allocated.rewardCents,
         };
       });
-      if (!amountCents)
-        throw new AccountError("This selection has no refundable payment amount.", 409);
+      if (rewardOnly && amountCents !== 0)
+        throw new AccountError(
+          "This selection includes cash. Use the payment refund workflow.",
+          409,
+        );
+      if (!amountCents && !lines.some((l) => l.rewardCents > 0))
+        throw new AccountError(
+          "This selection has no refundable payment or reward credit.",
+          409,
+        );
       const settledCents = payment.refunds.reduce(
         (sum, refund) => sum + effectiveRefundCents(refund),
         0,
@@ -910,12 +1071,13 @@ export async function prepareRefund(userId: string, raw: unknown) {
         )
         .reduce((sum, request) => sum + request.amountCents, 0);
       try {
-        assertRefundCapacity({
-          capturedCents: payment.amountCents,
-          settledCents,
-          unresolvedCents,
-          requestedCents: amountCents,
-        });
+        if (amountCents)
+          assertRefundCapacity({
+            capturedCents: payment.amountCents,
+            settledCents,
+            unresolvedCents,
+            requestedCents: amountCents,
+          });
       } catch {
         throw new AccountError("Refund exceeds the unreserved captured amount.", 409);
       }
@@ -929,8 +1091,8 @@ export async function prepareRefund(userId: string, raw: unknown) {
           amountCents,
           currency: payment.currency,
           reason: input.reason,
-          providerAccountId: commerce.accountId,
-          livemode: commerce.live,
+          providerAccountId: binding.accountId,
+          livemode: binding.live,
           lines: { create: lines },
           events: { create: { type: "refund.prepared", status: "PREPARED" } },
         },

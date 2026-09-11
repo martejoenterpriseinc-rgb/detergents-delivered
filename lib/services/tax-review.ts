@@ -30,7 +30,7 @@ export async function readTaxReview(userId: string, raw: unknown) {
           take: 5001,
         }),
         tx.refundAdjustment.findMany({
-          where: { currency: "USD", createdAt: dates },
+          where: { currency: "USD", createdAt: dates, kind: { not: "REWARD_ONLY" } },
           include: {
             request: { select: { orderId: true, order: { select: { number: true } } } },
           },

@@ -1623,7 +1623,7 @@ model RefundAdjustment {
   taxCents Int
   rewardCents Int
   currency String
-  providerRefundId String
+  providerRefundId String?
   balanceTransactionId String?
   failureBalanceTransactionId String?
   taxEvidenceStatus String @default("UNVERIFIED")

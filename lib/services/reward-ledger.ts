@@ -109,7 +109,12 @@ export async function reviewReferralInTransaction(
       payments: true,
     },
   });
+  const rewardRefunds = await tx.refundAdjustment.findMany({
+    where: { kind: "REWARD_ONLY", request: { orderId: order.id } },
+    select: { id: true },
+  });
   const refunded =
+    rewardRefunds.length > 0 ||
     order.refunds.some((r) => effectiveRefundCents(r) > 0) ||
     ["REFUNDED", "CANCELLED"].includes(order.status) ||
     order.payments.some((p) => ["REFUNDED", "PARTIALLY_REFUNDED"].includes(p.status));
@@ -124,6 +129,7 @@ export async function reviewReferralInTransaction(
           .sort((a, b) => a.id.localeCompare(b.id)),
       ),
     )
+    .update(JSON.stringify(rewardRefunds.map((r) => r.id).sort()))
     .digest("hex");
   if (referral.status === "REVERSED") {
     const compensated = order.refunds.some((r) =>

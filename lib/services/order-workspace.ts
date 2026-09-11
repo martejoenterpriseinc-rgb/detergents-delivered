@@ -1,3 +1,4 @@
+import { refundReservationStates } from "@/lib/domain/refund-allocation";
 import {
   effectiveRefundCents,
   refundAccountingSelect,
@@ -188,6 +189,7 @@ export async function getOrder(userId: string, input: unknown) {
                   quantity: true,
                   netCents: true,
                   taxCents: true,
+                  rewardCents: true,
                 },
               },
             },
@@ -213,6 +215,7 @@ export async function getOrder(userId: string, input: unknown) {
               createdAt: true,
             },
           },
+          rewardReservation: { select: { amountCents: true, state: true } },
           checkoutAttempt: {
             select: {
               id: true,
@@ -256,6 +259,16 @@ export async function getOrder(userId: string, input: unknown) {
         where: { stockReturn: { orderId: id } },
         _sum: { quantity: true },
       });
+      const reservedRefundLines = await tx.refundRequestLine.groupBy({
+        by: ["orderItemId"],
+        where: {
+          refundRequest: { orderId: id, status: { in: [...refundReservationStates] } },
+        },
+        _sum: { quantity: true },
+      });
+      const refundedQuantities = new Map(
+        reservedRefundLines.map((l) => [l.orderItemId, l._sum.quantity ?? 0]),
+      );
       const returnedByItem = new Map(
         returned.map((line) => [line.orderItemId, line._sum.quantity ?? 0]),
       );
@@ -277,6 +290,24 @@ export async function getOrder(userId: string, input: unknown) {
           ...item,
           returnedQuantity: returnedByItem.get(item.id) ?? 0,
         })),
+        rewardRefundItems:
+          r.rewardReservation?.state === "USED" && r.rewardReservation.amountCents > 0
+            ? r.items
+                .filter((i) => i.lineTotalCents === 0 && i.discountCents > 0)
+                .map((i) => ({
+                  id: i.id,
+                  name: i.nameSnapshot,
+                  remaining: i.quantity - (refundedQuantities.get(i.id) ?? 0),
+                }))
+                .filter((i) => i.remaining > 0)
+            : [],
+        rewardRefundPaymentId:
+          r.payments.find(
+            (p) =>
+              p.provider === "STRIPE" &&
+              p.amountCents === r.totalCents &&
+              ["CAPTURED", "PARTIALLY_REFUNDED", "REFUNDED"].includes(p.status),
+          )?.id ?? null,
         canReceiveReturn:
           canManage &&
           r.checkoutAttempt?.state === "PAID" &&
@@ -324,6 +355,13 @@ export async function getOrder(userId: string, input: unknown) {
           status: request.status,
           createdAt: request.createdAt.toISOString(),
           updatedAt: request.updatedAt.toISOString(),
+          rewardCents: request.lines.reduce((n, l) => n + l.rewardCents, 0),
+          canRestoreCredit:
+            canManage &&
+            request.amountCents === 0 &&
+            request.status === "PREPARED" &&
+            !request.submittedAt &&
+            !request.providerRefundId,
           canCancel:
             canManage &&
             request.status === "PREPARED" &&

@@ -6,10 +6,34 @@ import {
   readAccountJson,
 } from "@/lib/account-api";
 import { AccountError } from "@/lib/domain/account";
-import { stockReturnInput, cancelRefundInput } from "@/lib/domain/refund-allocation";
-import { recordStockReturn, cancelPreparedRefund } from "@/lib/services/refunds";
+import {
+  stockReturnInput,
+  cancelRefundInput,
+  refundRequestInput,
+} from "@/lib/domain/refund-allocation";
+import {
+  recordStockReturn,
+  cancelPreparedRefund,
+  prepareRewardOnlyRefund,
+  settleRewardOnlyRefund,
+} from "@/lib/services/refunds";
 
 const operation = z.discriminatedUnion("action", [
+  z
+    .object({ action: z.literal("prepareRewardRefund"), data: refundRequestInput })
+    .strict(),
+  z
+    .object({
+      action: z.literal("restoreRewardRefund"),
+      confirmed: z.literal(true),
+      data: z
+        .object({
+          orderId: z.string().min(1).max(100),
+          requestId: z.string().min(1).max(100),
+        })
+        .strict(),
+    })
+    .strict(),
   z
     .object({
       action: z.literal("receiveReturn"),
@@ -30,9 +54,13 @@ export async function POST(
     if (input.data.orderId !== (await context.params).id)
       throw new AccountError("The request does not match this order.", 409);
     return accountJson(
-      input.action === "receiveReturn"
-        ? await recordStockReturn(actor, input.data)
-        : await cancelPreparedRefund(actor, input.data),
+      input.action === "prepareRewardRefund"
+        ? await prepareRewardOnlyRefund(actor, input.data)
+        : input.action === "restoreRewardRefund"
+          ? await settleRewardOnlyRefund(actor, input.data)
+          : input.action === "receiveReturn"
+            ? await recordStockReturn(actor, input.data)
+            : await cancelPreparedRefund(actor, input.data),
     );
   } catch (error) {
     return accountFailure(error);

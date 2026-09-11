@@ -1,9 +1,17 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
-const mocks = vi.hoisted(() => ({ auth: vi.fn(), receive: vi.fn(), cancel: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  auth: vi.fn(),
+  receive: vi.fn(),
+  cancel: vi.fn(),
+  prepare: vi.fn(),
+  restore: vi.fn(),
+}));
 vi.mock("@/auth", () => ({ auth: mocks.auth }));
 vi.mock("@/lib/services/refunds", () => ({
   recordStockReturn: mocks.receive,
   cancelPreparedRefund: mocks.cancel,
+  prepareRewardOnlyRefund: mocks.prepare,
+  settleRewardOnlyRefund: mocks.restore,
 }));
 import { POST } from "./route";
 const input = {
@@ -70,6 +78,35 @@ describe("order return operation boundary", () => {
       (await POST(request({ ...input, extra: "x".repeat(16000) }), context)).status,
     ).toBe(413);
     expect(mocks.receive).not.toHaveBeenCalled();
+  });
+  it("requires explicit credit confirmation and rejects client supplied amounts", async () => {
+    const data = { orderId: "order", requestId: "draft" };
+    expect(
+      (await POST(request({ action: "restoreRewardRefund", data }), context)).status,
+    ).toBe(400);
+    expect(
+      (
+        await POST(
+          request({
+            action: "restoreRewardRefund",
+            confirmed: true,
+            data: { ...data, amountCents: 999 },
+          }),
+          context,
+        )
+      ).status,
+    ).toBe(400);
+    expect(mocks.restore).not.toHaveBeenCalled();
+    mocks.restore.mockResolvedValue({ id: "draft", status: "SUCCEEDED" });
+    expect(
+      (
+        await POST(
+          request({ action: "restoreRewardRefund", confirmed: true, data }),
+          context,
+        )
+      ).status,
+    ).toBe(200);
+    expect(mocks.restore).toHaveBeenCalledWith("staff", data);
   });
   it("calls the staff service with a bounded order payload and private response", async () => {
     const response = await POST(request(input), context);
