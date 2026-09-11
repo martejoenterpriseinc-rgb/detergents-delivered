@@ -48,3 +48,5 @@ Reward-only returns passed CI 118 with 471 tests. Quarterly lifecycle controls p
 6. Finish production owner/business setup, reviewed catalog and stock, delivery capacity, approved domain, recovery rehearsal and controlled end-to-end acceptance before enabling checkout.
 
 The existing catalog/receiving, customer access, checkout backend, delivery operations, website builder and line-by-line integration settings are the foundation. An implemented screen is not proof that all external dependencies or public-launch requirements are satisfied. Consult GO-LIVE-BUILD-CONTRACT.md for the full acceptance scope; its historical checkpoint is not the current deployment revision.
+
+Catalog file exchange now adds reviewed draft imports and catalog/stock exports; see CATALOG-FILE-EXCHANGE.md.
