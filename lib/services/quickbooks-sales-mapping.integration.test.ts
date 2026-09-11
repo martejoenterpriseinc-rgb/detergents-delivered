@@ -255,15 +255,13 @@ it("checks product identity, non-inventory type and active USD income account", 
     tracksQuantity: false,
     incomeAccountId: "9",
   });
-  const income = vi
-    .spyOn(provider, "readQuickbooksAccount")
-    .mockResolvedValue({
-      Id: "9",
-      Name: "Synthetic income",
-      Active: true,
-      AccountType: "Income",
-      CurrencyRef: { value: "EUR" },
-    });
+  const income = vi.spyOn(provider, "readQuickbooksAccount").mockResolvedValue({
+    Id: "9",
+    Name: "Synthetic income",
+    Active: true,
+    AccountType: "Income",
+    CurrencyRef: { value: "EUR" },
+  });
   await expect(saveSalesMapping(admin, raw)).rejects.toMatchObject({ status: 409 });
   income.mockResolvedValue({
     Id: "9",
@@ -276,5 +274,68 @@ it("checks product identity, non-inventory type and active USD income account", 
     incomeAccountId: "9",
     kind: "item",
     sourceId: raw.sourceId,
+    taxCode: null,
   });
+});
+it("audits explicit item tax treatment, preserves it for an unchanged link and clears it when the provider item changes", async () => {
+  const product = await prisma.product.create({
+    data: {
+      name: "Synthetic tax review",
+      slug: randomUUID(),
+      brand: "Synthetic",
+      variants: { create: { sku: randomUUID(), name: "Synthetic tax pack" } },
+    },
+    include: { variants: true },
+  });
+  vi.mocked(provider.readQuickbooksSalesEntity).mockImplementation(
+    async (_c, _t, _kind, id) => ({
+      kind: "item",
+      id,
+      name: "Synthetic tax item",
+      active: true,
+      type: "NonInventory",
+      tracksQuantity: false,
+      incomeAccountId: "9",
+    }),
+  );
+  vi.spyOn(provider, "readQuickbooksAccount").mockResolvedValue({
+    Id: "9",
+    Name: "Synthetic income",
+    Active: true,
+    AccountType: "Income",
+    CurrencyRef: { value: "USD" },
+  });
+  const raw = {
+    ...input(),
+    kind: "item",
+    sourceId: product.variants[0].id,
+    taxCode: "TAX",
+  };
+  const saved = await saveSalesMapping(admin, raw);
+  expect(saved.taxCode).toBe("TAX");
+  expect(await saveSalesMapping(admin, raw)).toEqual(saved);
+  await expect(saveSalesMapping(admin, { ...raw, taxCode: "NON" })).rejects.toMatchObject(
+    { status: 409 },
+  );
+  const legacy = { ...input(), kind: "item", sourceId: raw.sourceId, version: 1 };
+  expect((await saveSalesMapping(admin, legacy)).taxCode).toBe("TAX");
+  const remapped = await saveSalesMapping(admin, {
+    ...legacy,
+    requestKey: randomUUID(),
+    version: 2,
+    externalId: "889977",
+  });
+  expect(remapped.taxCode).toBeNull();
+  expect(remapped.version).toBe(3);
+  await expect(saveSalesMapping(admin, { ...input(), taxCode: "TAX" })).rejects.toThrow();
+  expect((await salesMappingSources(cpa, { kind: "item" })).canWrite).toBe(false);
+  expect(
+    await prisma.auditLog.count({
+      where: {
+        actorUserId: admin,
+        entityId: `quickbooks:sales-map:v1:sandbox:${config.realm}:item:${raw.sourceId}`,
+        afterJson: { path: ["mapping", "taxCode"], equals: "TAX" },
+      },
+    }),
+  ).toBe(2);
 });
