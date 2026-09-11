@@ -15,6 +15,7 @@ import { canonicalJson } from "@/lib/commerce/domain";
 import { readCommerce } from "@/lib/commerce/runtime";
 import { accountIdentity } from "@/lib/services/customer-account";
 import { persistInventoryTransaction } from "@/lib/services/inventory-ledger";
+import { submitClaimedStripeRefund } from "@/lib/commerce/refund-provider";
 
 type Tx = Prisma.TransactionClient;
 const submissionInput = z
@@ -22,6 +23,23 @@ const submissionInput = z
     orderId: z.string().min(1).max(100),
     requestId: z.string().min(1).max(100),
   })
+  .strict();
+const providerObservation = z
+  .object({
+    id: z.string().min(1).max(255),
+    amountCents: z.number().int().positive().max(100_000_000),
+    currency: z.string().regex(/^[A-Z]{3}$/),
+    status: z.enum(["pending", "requires_action", "succeeded", "failed", "canceled"]),
+    created: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+    requestId: z.string().min(1).max(100),
+    requestHash: z.string().regex(/^[a-f0-9]{64}$/),
+    project: z.literal("detergents-delivered"),
+    balanceTransactionId: z.string().min(1).max(255).nullable(),
+    failureBalanceTransactionId: z.string().min(1).max(255).nullable(),
+  })
+  .strict();
+const submissionResultInput = submissionInput
+  .extend({ observation: providerObservation.nullable() })
   .strict();
 const reservedRefundStates = [
   "PREPARED",
@@ -188,6 +206,16 @@ export async function claimRefundSubmission(userId: string, raw: unknown) {
     // Internal envelope only; never return provider bindings to a browser.
     return {
       requestId: request.id,
+      otherRequests: order.refundRequests
+        .filter((r) => r.id !== request.id)
+        .map((r) => ({
+          id: r.id,
+          requestHash: r.requestHash,
+          providerRefundId: r.providerRefundId,
+          submitted: r.submittedAt !== null,
+          amountCents: r.amountCents,
+          currency: r.currency,
+        })),
       requestHash: request.requestHash,
       amountCents: request.amountCents,
       submittedAt: submittedAt.toISOString(),
@@ -205,6 +233,104 @@ export async function claimRefundSubmission(userId: string, raw: unknown) {
 
 function fingerprint(value: unknown) {
   return createHash("sha256").update(canonicalJson(value)).digest("hex");
+}
+
+/** Internal receipt persistence, not settlement. Accept only the server adapter's
+ * minimal observation, or null for an uncertain result. Never expose as a client API.
+ */
+export async function recordRefundSubmissionResult(userId: string, raw: unknown) {
+  const input = submissionResultInput.parse(raw);
+  await refundAccess(prisma, userId);
+  return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "Order" WHERE id = ${input.orderId} FOR UPDATE`;
+    await refundAccess(tx, userId);
+    const request = await tx.refundRequest.findUnique({ where: { id: input.requestId } });
+    if (!request || request.orderId !== input.orderId)
+      throw new AccountError("Refund request not found.", 404);
+    if (!request.submittedAt || !["SUBMITTING", "UNKNOWN"].includes(request.status))
+      throw new AccountError("This request is not awaiting a submission outcome.", 409);
+    const observed = input.observation;
+    if (
+      observed &&
+      (observed.requestId !== request.id ||
+        observed.requestHash !== request.requestHash ||
+        observed.amountCents !== request.amountCents ||
+        observed.currency !== request.currency ||
+        (request.providerRefundId && request.providerRefundId !== observed.id))
+    )
+      throw new AccountError("Refund response does not match the saved request.", 409);
+    // A delayed timeout cannot erase a receipt already recorded by another caller.
+    if (!observed && request.providerRefundId) return publicRefundRequest(request);
+    const evidence = observed
+      ? {
+          providerRefundId: observed.id,
+          providerStatus: observed.status,
+          amountCents: observed.amountCents,
+          currency: observed.currency,
+          created: observed.created,
+          balanceTransactionId: observed.balanceTransactionId,
+          failureBalanceTransactionId: observed.failureBalanceTransactionId,
+        }
+      : { outcome: "unconfirmed" };
+    const eventKey = `dd:refund:receipt:${request.id}:${fingerprint(evidence)}`;
+    const prior = await tx.refundRequestEvent.findUnique({
+      where: { providerEventId: eventKey },
+    });
+    if (prior) return publicRefundRequest(request);
+    const saved = await tx.refundRequest.update({
+      where: { id: request.id },
+      data: {
+        status: "UNKNOWN",
+        ...(observed ? { providerRefundId: observed.id } : {}),
+        lastError: observed
+          ? "Provider response recorded; settlement reconciliation required."
+          : "Submission outcome is unconfirmed; do not submit again.",
+      },
+    });
+    await tx.refundRequestEvent.create({
+      data: {
+        refundRequestId: request.id,
+        providerEventId: eventKey,
+        type: observed ? "refund.submission.observed" : "refund.submission.unconfirmed",
+        status: "UNKNOWN",
+        evidenceJson: evidence,
+        // This is receipt time, not a claim that money/tax/rewards have settled.
+        verifiedAt: observed ? new Date() : null,
+      },
+    });
+    await tx.auditLog.create({
+      data: {
+        actorUserId: userId,
+        action: "refund.submission.outcome-recorded",
+        entityType: "RefundRequest",
+        entityId: request.id,
+        beforeJson: { status: request.status },
+        afterJson: {
+          status: "UNKNOWN",
+          providerStatus: observed?.status ?? "unconfirmed",
+          amountCents: request.amountCents,
+        },
+      },
+    });
+    return publicRefundRequest(saved);
+  });
+}
+
+/** Internal orchestration only; no HTTP or worker entry point before settlement acceptance. */
+export async function submitPreparedRefund(userId: string, raw: unknown) {
+  const input = submissionInput.parse(raw);
+  const { otherRequests, ...claim } = await claimRefundSubmission(userId, input);
+  let observation;
+  try {
+    await refundAccess(prisma, userId);
+    observation = await submitClaimedStripeRefund(claim, otherRequests);
+  } catch {
+    // Never expose raw provider failures, retry creation or release the durable claim.
+    return recordRefundSubmissionResult(userId, { ...input, observation: null });
+  }
+  // Persistence failure after a provider response leaves the claim for recovery.
+  // Do not catch it and attempt a second provider submission.
+  return recordRefundSubmissionResult(userId, { ...input, observation });
 }
 
 function publicRefundRequest(request: {

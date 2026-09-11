@@ -1,10 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { prisma } from "@/lib/prisma";
-const refundReviewMocks = vi.hoisted(() => ({ inspect: vi.fn() }));
+const refundReviewMocks = vi.hoisted(() => ({ inspect: vi.fn(), submit: vi.fn() }));
 vi.mock("@/lib/commerce/refund-provider", async (original) => ({
   ...(await original<typeof import("@/lib/commerce/refund-provider")>()),
   inspectStripeRefunds: refundReviewMocks.inspect,
+  submitClaimedStripeRefund: refundReviewMocks.submit,
 }));
 import { reviewPaymentRefunds } from "./refund-review";
 
@@ -17,6 +18,8 @@ import {
   recordStockReturn,
   cancelPreparedRefund,
   claimRefundSubmission,
+  recordRefundSubmissionResult,
+  submitPreparedRefund,
 } from "./refunds";
 import { getOrder } from "./order-workspace";
 
@@ -397,6 +400,225 @@ describe("durable refund submission claim (isolated PostgreSQL, no provider writ
     const draft = await prepare();
     return { sale, draft, prepare, input: { orderId: sale.id, requestId: draft.id } };
   }
+  async function claimedFixture() {
+    const f = await fixture();
+    const claim = await claimRefundSubmission(admin, f.input);
+    const observation = {
+      id: `re_${randomUUID().replaceAll("-", "")}`,
+      amountCents: claim.amountCents,
+      currency: claim.binding.currency,
+      status: "succeeded" as const,
+      created: Math.floor(Date.now() / 1000),
+      requestId: claim.requestId,
+      requestHash: claim.requestHash,
+      project: "detergents-delivered" as const,
+      balanceTransactionId: "txn_synthetic",
+      failureBalanceTransactionId: null,
+    };
+    return { ...f, observation, outcome: { ...f.input, observation } };
+  }
+  it("orchestrates one provider attempt after the claim commits and records its receipt", async () => {
+    const f = await fixture();
+    refundReviewMocks.submit.mockReset();
+    refundReviewMocks.submit.mockImplementation(async (claim) => {
+      expect(
+        (await prisma.refundRequest.findUniqueOrThrow({ where: { id: f.draft.id } }))
+          .status,
+      ).toBe("SUBMITTING");
+      return {
+        id: `re_${randomUUID().replaceAll("-", "")}`,
+        amountCents: claim.amountCents,
+        currency: claim.binding.currency,
+        status: "pending",
+        created: Math.floor(Date.now() / 1000),
+        requestId: claim.requestId,
+        requestHash: claim.requestHash,
+        project: "detergents-delivered",
+        balanceTransactionId: null,
+        failureBalanceTransactionId: null,
+      };
+    });
+    const attempts = await Promise.allSettled([
+      submitPreparedRefund(admin, f.input),
+      submitPreparedRefund(admin, f.input),
+    ]);
+    expect(attempts.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    expect(refundReviewMocks.submit).toHaveBeenCalledTimes(1);
+    expect(
+      await prisma.refundRequest.findUniqueOrThrow({ where: { id: f.draft.id } }),
+    ).toMatchObject({
+      status: "UNKNOWN",
+      providerRefundId: expect.stringMatching(/^re_/),
+    });
+    expect(await prisma.refund.count({ where: { orderId: f.sale.id } })).toBe(0);
+  });
+  it("records a provider timeout without exposing errors or retrying the create", async () => {
+    const f = await fixture();
+    refundReviewMocks.submit
+      .mockReset()
+      .mockRejectedValue(new Error("Private synthetic provider error"));
+    const result = await submitPreparedRefund(admin, f.input);
+    expect(result.status).toBe("UNKNOWN");
+    expect(JSON.stringify(result)).not.toContain("Private synthetic");
+    await expect(submitPreparedRefund(admin, f.input)).rejects.toMatchObject({
+      status: 409,
+    });
+    expect(refundReviewMocks.submit).toHaveBeenCalledTimes(1);
+    const event = await prisma.refundRequestEvent.findFirstOrThrow({
+      where: { refundRequestId: f.draft.id, type: "refund.submission.unconfirmed" },
+    });
+    expect(event.evidenceJson).toEqual({ outcome: "unconfirmed" });
+    expect(event.verifiedAt).toBeNull();
+  });
+  it("records a receipt once under concurrent retries without settling cash or stock", async () => {
+    const f = await claimedFixture();
+    const stock = await prisma.inventoryBalance.findUnique({
+      where: { productVariantId: variant },
+    });
+    const results = await Promise.all([
+      recordRefundSubmissionResult(admin, f.outcome),
+      recordRefundSubmissionResult(admin, f.outcome),
+    ]);
+    expect(results[0]).toEqual(results[1]);
+    expect(results[0].status).toBe("UNKNOWN");
+    expect(JSON.stringify(results)).not.toContain(f.observation.id);
+    expect(JSON.stringify(results)).not.toContain(f.observation.requestHash);
+    expect(
+      await prisma.refundRequestEvent.count({
+        where: { refundRequestId: f.draft.id, type: "refund.submission.observed" },
+      }),
+    ).toBe(1);
+    expect(
+      await prisma.auditLog.count({
+        where: { entityId: f.draft.id, action: "refund.submission.outcome-recorded" },
+      }),
+    ).toBe(1);
+    expect(
+      (await prisma.refundRequest.findUniqueOrThrow({ where: { id: f.draft.id } }))
+        .providerRefundId,
+    ).toBe(f.observation.id);
+    expect(await prisma.refund.count({ where: { orderId: f.sale.id } })).toBe(0);
+    expect(
+      (await prisma.payment.findUniqueOrThrow({ where: { id: f.sale.payments[0].id } }))
+        .status,
+    ).toBe("CAPTURED");
+    expect(
+      await prisma.inventoryBalance.findUnique({ where: { productVariantId: variant } }),
+    ).toEqual(stock);
+  });
+  it("keeps a timeout reserved, accepts a later receipt, and ignores a delayed timeout", async () => {
+    const f = await claimedFixture();
+    await recordRefundSubmissionResult(admin, { ...f.input, observation: null });
+    await recordRefundSubmissionResult(admin, { ...f.input, observation: null });
+    expect(
+      await prisma.refundRequestEvent.count({
+        where: { refundRequestId: f.draft.id, type: "refund.submission.unconfirmed" },
+      }),
+    ).toBe(1);
+    await expect(claimRefundSubmission(admin, f.input)).rejects.toMatchObject({
+      status: 409,
+    });
+    await recordRefundSubmissionResult(admin, f.outcome);
+    const before = await prisma.refundRequest.findUniqueOrThrow({
+      where: { id: f.draft.id },
+    });
+    await recordRefundSubmissionResult(admin, { ...f.input, observation: null });
+    expect(
+      await prisma.refundRequest.findUniqueOrThrow({ where: { id: f.draft.id } }),
+    ).toEqual(before);
+  });
+  it("preserves success and later failure observations without releasing the reservation", async () => {
+    const f = await claimedFixture();
+    await recordRefundSubmissionResult(admin, f.outcome);
+    await recordRefundSubmissionResult(admin, {
+      ...f.outcome,
+      observation: {
+        ...f.observation,
+        status: "failed",
+        failureBalanceTransactionId: "txn_returned",
+      },
+    });
+    const events = await prisma.refundRequestEvent.findMany({
+      where: { refundRequestId: f.draft.id, type: "refund.submission.observed" },
+    });
+    expect(events).toHaveLength(2);
+    expect(
+      events
+        .map((e) => (e.evidenceJson as { providerStatus: string }).providerStatus)
+        .sort(),
+    ).toEqual(["failed", "succeeded"]);
+    expect(
+      (await prisma.refundRequest.findUniqueOrThrow({ where: { id: f.draft.id } }))
+        .status,
+    ).toBe("UNKNOWN");
+  });
+  it("rejects wrong roles, unsubmitted requests and mismatched provider receipts", async () => {
+    const f = await claimedFixture();
+    for (const actor of [cpa, users[2]])
+      await expect(recordRefundSubmissionResult(actor, f.outcome)).rejects.toMatchObject({
+        status: 403,
+      });
+    for (const patch of [
+      { amountCents: 1081 },
+      { currency: "EUR" },
+      { requestId: "other" },
+      { requestHash: "b".repeat(64) },
+    ])
+      await expect(
+        recordRefundSubmissionResult(admin, {
+          ...f.outcome,
+          observation: { ...f.observation, ...patch },
+        }),
+      ).rejects.toMatchObject({ status: 409 });
+    await expect(
+      recordRefundSubmissionResult(admin, {
+        ...f.outcome,
+        observation: { ...f.observation, instructions_email: "private@example.test" },
+      }),
+    ).rejects.toThrow();
+    const unsubmitted = await fixture();
+    await expect(
+      recordRefundSubmissionResult(admin, { ...unsubmitted.input, observation: null }),
+    ).rejects.toMatchObject({ status: 409 });
+  });
+  it("rejects replacement provider identifiers and cannot downgrade settled requests", async () => {
+    const f = await claimedFixture();
+    await recordRefundSubmissionResult(admin, f.outcome);
+    await expect(
+      recordRefundSubmissionResult(admin, {
+        ...f.outcome,
+        observation: { ...f.observation, id: "re_other" },
+      }),
+    ).rejects.toMatchObject({ status: 409 });
+    await prisma.refundRequest.update({
+      where: { id: f.draft.id },
+      data: { status: "SUCCEEDED" },
+    });
+    await expect(
+      recordRefundSubmissionResult(admin, { ...f.input, observation: null }),
+    ).rejects.toMatchObject({ status: 409 });
+  });
+  it("rolls back receipt, provider binding and status if the audit cannot be saved", async () => {
+    const f = await claimedFixture();
+    await prisma.$executeRawUnsafe(
+      "ALTER TABLE \"AuditLog\" ADD CONSTRAINT dd_refund_outcome_audit CHECK (action <> 'refund.submission.outcome-recorded') NOT VALID",
+    );
+    try {
+      await expect(recordRefundSubmissionResult(admin, f.outcome)).rejects.toThrow();
+      expect(
+        await prisma.refundRequest.findUniqueOrThrow({ where: { id: f.draft.id } }),
+      ).toMatchObject({ status: "SUBMITTING", providerRefundId: null });
+      expect(
+        await prisma.refundRequestEvent.count({
+          where: { refundRequestId: f.draft.id, type: "refund.submission.observed" },
+        }),
+      ).toBe(0);
+    } finally {
+      await prisma.$executeRawUnsafe(
+        'ALTER TABLE "AuditLog" DROP CONSTRAINT dd_refund_outcome_audit',
+      );
+    }
+  });
   it("allows exactly one claim under concurrency and preserves payment and stock", async () => {
     const f = await fixture();
     const results = await Promise.allSettled([
