@@ -661,6 +661,7 @@ enum PaymentProvider {
 }
 
 model Order {
+  receiptExports QboReceiptExport[]
   costExports QboCostExport[]
   smsDeliveries SmsDelivery[]
   id              String      @id @default(cuid())
@@ -1660,6 +1661,7 @@ model CheckoutProviderEvent {
 
 /// Append-only signed refund accounting. A compensation never removes the original refund.
 model RefundAdjustment {
+  receiptExports QboReceiptExport[]
   taxEvidence RefundTaxEvidence?
   id String @id @default(cuid())
   requestId String
@@ -1836,6 +1838,38 @@ model QboCostExport {
   updatedAt DateTime @updatedAt
   @@unique([mode, realm, docNumber])
   @@unique([mode, realm, externalId])
+  @@index([sourceKey, status])
+  @@index([mode, realm, status, recoveryCheckedAt])
+}
+
+model QboReceiptExport {
+  id String @id
+  orderId String
+  order Order @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  adjustmentId String?
+  adjustment RefundAdjustment? @relation(fields: [adjustmentId], references: [id], onDelete: Restrict)
+  parentSaleId String?
+  parentSale QboReceiptExport? @relation("ReceiptRefundSale", fields: [parentSaleId], references: [id], onDelete: Restrict)
+  refunds QboReceiptExport[] @relation("ReceiptRefundSale")
+  sourceKey String
+  entity String
+  mode String
+  realm String
+  status String @default("DRAFT")
+  docNumber String
+  requestHash String
+  source Json
+  mapping Json
+  payload Json
+  externalId String?
+  submittedAt DateTime?
+  confirmedAt DateTime?
+  recoveryCheckedAt DateTime?
+  reconciliationIssue String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([mode, realm, docNumber])
+  @@unique([mode, realm, entity, externalId])
   @@index([sourceKey, status])
   @@index([mode, realm, status, recoveryCheckedAt])
 }

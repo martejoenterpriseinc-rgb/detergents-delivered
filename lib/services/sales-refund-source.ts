@@ -385,7 +385,7 @@ export async function reviewSalesRefundSource(actor: string, raw: unknown) {
   );
 }
 export async function salesRefundChoices(actor: string, cursor?: string) {
-  await financeAccess(prisma, actor);
+  const canWrite = await financeAccess(prisma, actor);
   id.optional().parse(cursor);
   const mode = integrationEnvironment();
   if (!mode) throw new AccountError("Accounting environment is unavailable.", 503);
@@ -409,6 +409,7 @@ export async function salesRefundChoices(actor: string, cursor?: string) {
     },
   });
   return {
+    canWrite,
     nextCursor: rows.length > 50 ? rows[49].id : null,
     rows: rows.slice(0, 50).map((r) => ({
       id: r.id,

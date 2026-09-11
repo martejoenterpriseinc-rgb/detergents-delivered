@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { PrepareReceiptDraft } from "./quickbooks-receipts";
 import type {
   salesRefundChoices,
   reviewSalesRefundSource,
@@ -214,6 +215,17 @@ export function SalesRefundSource() {
             </>
           )}
           <p>Reviewing this evidence does not send money or post to QuickBooks.</p>
+          {data?.canWrite &&
+            source.cashCents > 0 &&
+            (source.kind === "SALE" ||
+              (source.kind === "SETTLEMENT" &&
+                source.taxEvidenceStatus === "MATCHED")) && (
+              <PrepareReceiptDraft
+                key={order + ":" + adjustment}
+                orderId={order}
+                adjustmentId={adjustment || undefined}
+              />
+            )}
         </article>
       )}
       {error && <p role="alert">{error}</p>}
