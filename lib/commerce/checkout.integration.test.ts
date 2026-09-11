@@ -8,7 +8,7 @@ import { businessDate } from "@/lib/domain/operations";
 import { createQuote, json } from "./quote";
 import { reserveCheckout } from "./reservations";
 import { ownedCheckout, settleVerifiedSession } from "./checkout";
-import { saveVehicleCapacity } from "@/lib/services/launch";
+import { saveVehicleCapacity, launchConfig, saveLaunch } from "@/lib/services/launch";
 import { saveDeliveryAddress, approveDeliveryAddress } from "./onboarding";
 vi.mock("./stripe", async (importOriginal) => {
   const original = await importOriginal<typeof import("./stripe")>();
@@ -461,4 +461,80 @@ it("requires real staff authorization and preserves address changes as new unapp
   expect(await prisma.address.findUnique({ where: { id: a.id } })).toMatchObject({
     validationSource: "STAFF_REVIEW",
   });
+});
+
+it("requires explicit ongoing booking and preserves capacity and saved paid promises", async () => {
+  const saved = await launchConfig();
+  const previous = new Date(businessDate());
+  previous.setUTCDate(previous.getUTCDate() - 1);
+  const yesterday = previous.toISOString().slice(0, 10);
+  const closed = await saveLaunch(f.admin.id, {
+    ...saved,
+    launchDate: yesterday,
+    cutoffDate: yesterday,
+    firstDeliveryBy: yesterday,
+  });
+  await expect(createQuote(f.one.id, input())).rejects.toMatchObject({ status: 409 });
+  await saveLaunch(f.admin.id, {
+    ...closed,
+    rolling: { enabled: true, leadDays: 1, horizonDays: 7 },
+  });
+  await prisma.vehicle.update({
+    where: { id: f.vehicle.id },
+    data: {
+      capacityStops: 1,
+      capacityUnits: 1,
+      detergentBucketLimit: 1,
+    },
+  });
+  const a = await createQuote(f.one.id, input());
+  const b = await createQuote(f.two.id, input(f.two));
+  expect(a.launchDate > businessDate()).toBe(true);
+  await reserveCheckout(f.one.id, a.id, true);
+  await expect(reserveCheckout(f.two.id, b.id, true)).rejects.toMatchObject({
+    status: 409,
+  });
+  await settleVerifiedSession(session(a), evidence(), taxLines(a));
+  const paid = await prisma.checkoutAttempt.findUniqueOrThrow({ where: { id: a.id } });
+  expect(paid.state).toBe("PAID");
+  const current = await launchConfig();
+  await saveLaunch(f.admin.id, {
+    ...current,
+    rolling: { ...current.rolling!, enabled: false },
+  });
+  expect(await prisma.checkoutAttempt.findUniqueOrThrow({ where: { id: a.id } })).toEqual(
+    paid,
+  );
+  await expect(createQuote(f.two.id, input(f.two))).rejects.toMatchObject({
+    status: 409,
+  });
+});
+it("rechecks ongoing booking configuration before reserving an earlier quote", async () => {
+  const saved = await launchConfig();
+  const d = new Date(businessDate());
+  d.setUTCDate(d.getUTCDate() - 1);
+  const yesterday = d.toISOString().slice(0, 10);
+  const config = await saveLaunch(f.admin.id, {
+    ...saved,
+    launchDate: yesterday,
+    cutoffDate: yesterday,
+    firstDeliveryBy: yesterday,
+    rolling: { enabled: true, leadDays: 1, horizonDays: 30 },
+  });
+  const q = await createQuote(f.one.id, input());
+  await saveLaunch(f.admin.id, {
+    ...config,
+    rolling: { ...config.rolling!, leadDays: 3 },
+  });
+  await expect(reserveCheckout(f.one.id, q.id, true)).rejects.toMatchObject({
+    status: 409,
+  });
+  expect(await prisma.order.count({ where: { customerId: f.one.customer!.id } })).toBe(0);
+  expect(
+    (
+      await prisma.inventoryBalance.findUniqueOrThrow({
+        where: { productVariantId: f.variant.id },
+      })
+    ).reservedQty,
+  ).toBe(0);
 });

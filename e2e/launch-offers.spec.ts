@@ -54,37 +54,72 @@ test("shop, support KPI, configurable launch and promotions persist with custome
     const initialDate = await launchDate.inputValue();
     const changedDate = initialDate === "2026-10-19" ? "2026-10-20" : "2026-10-19";
     const beforeLaunch = await db.setting.findUnique({ where: { key: LAUNCH_KEY } });
-    const beforeVersion = beforeLaunch ? launchSchema.parse(beforeLaunch.valueJson).version : 0;
+    const beforeVersion = beforeLaunch
+      ? launchSchema.parse(beforeLaunch.valueJson).version
+      : 0;
     await launchDate.fill(changedDate);
+    await page
+      .getByRole("checkbox", {
+        name: "Allow ongoing booking after the launch cutoff, starting on launch day",
+        exact: true,
+      })
+      .check();
+    await page.getByLabel("Delivery lead time (days)", { exact: true }).fill("3");
+    await page.getByLabel("Booking horizon (days)", { exact: true }).fill("35");
     await page.getByLabel("Include orders through", { exact: true }).fill("2026-10-18");
     await page.getByLabel("First delivery by", { exact: true }).fill("2026-10-31");
-    await expect(page.getByTestId("saved-launch-date")).toContainText("Unsaved launch changes");
+    await expect(page.getByTestId("saved-launch-date")).toContainText(
+      "Unsaved launch changes",
+    );
     await page.getByRole("button", { name: "Save launch & cadence" }).click();
     await expect(page.getByRole("status")).toContainText("Settings saved");
-    const savedLaunch = await db.setting.findUniqueOrThrow({ where: { key: LAUNCH_KEY } });
+    const savedLaunch = await db.setting.findUniqueOrThrow({
+      where: { key: LAUNCH_KEY },
+    });
     expect(launchSchema.parse(savedLaunch.valueJson)).toMatchObject({
-      launchDate: changedDate, version: beforeVersion + 1,
+      launchDate: changedDate,
+      version: beforeVersion + 1,
+      rolling: { enabled: true, leadDays: 3, horizonDays: 35 },
     });
     await page.reload();
     await expect(launchDate).toHaveValue(changedDate);
+    await expect(
+      page.getByLabel("Delivery lead time (days)", { exact: true }),
+    ).toHaveValue("3");
+    await expect(page.getByLabel("Booking horizon (days)", { exact: true })).toHaveValue(
+      "35",
+    );
     await expect(page.getByTestId("saved-launch-date")).toHaveText(
       `Saved launch date: ${changedDate}`,
     );
     // Explicitly mocked network failure: the real database must remain unchanged.
     await page.route("**/api/admin/launch", async (route) => {
-      await route.fulfill({ status: 503, contentType: "application/json",
-        body: JSON.stringify({ error: "Synthetic save failure. Please retry." }) });
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "Synthetic save failure. Please retry." }),
+      });
     });
     await launchDate.fill("2026-10-21");
     await page.getByRole("button", { name: "Save launch & cadence" }).click();
-    await expect(page.getByRole("main").getByRole("alert")).toContainText("Synthetic save failure");
+    await expect(page.getByRole("main").getByRole("alert")).toContainText(
+      "Synthetic save failure",
+    );
     await expect(page.getByRole("status")).toHaveCount(0);
     await expect(page.getByTestId("saved-launch-date")).toContainText(changedDate);
-    const afterFailure = await db.setting.findUniqueOrThrow({ where: { key: LAUNCH_KEY } });
+    const afterFailure = await db.setting.findUniqueOrThrow({
+      where: { key: LAUNCH_KEY },
+    });
     expect(afterFailure.valueJson).toEqual(savedLaunch.valueJson);
     await page.unroute("**/api/admin/launch");
     await page.reload();
     await expect(launchDate).toHaveValue(changedDate);
+    await expect(
+      page.getByLabel("Delivery lead time (days)", { exact: true }),
+    ).toHaveValue("3");
+    await expect(page.getByLabel("Booking horizon (days)", { exact: true })).toHaveValue(
+      "35",
+    );
     await page.screenshot({
       path: info.outputPath("launch-calendar-capacity.png"),
       fullPage: true,
@@ -137,9 +172,14 @@ test("shop, support KPI, configurable launch and promotions persist with custome
           inventoryBalance: null,
           promotion: await db.promotion.findUnique({ where: { code } }),
           customerAdminRequest: denied.status(),
-          launch: { initialDate, changedDate, saved: savedLaunch.valueJson,
-            persistedAfterRefresh: true, failedSave: "MOCKED HTTP 503",
-            databaseUnchangedAfterFailedSave: true },
+          launch: {
+            initialDate,
+            changedDate,
+            saved: savedLaunch.valueJson,
+            persistedAfterRefresh: true,
+            failedSave: "MOCKED HTTP 503",
+            databaseUnchangedAfterFailedSave: true,
+          },
           providerCalls: "NONE",
           checkout: "CLOSED",
           note: "No real payment, tax or email sandbox integration tested.",

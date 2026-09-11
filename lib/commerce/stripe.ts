@@ -116,7 +116,7 @@ export async function createStripeCheckout(
       cancel_url: `${config.origin}/checkout/receipt/${id}?cancelled=1`,
       custom_text: {
         submit: {
-          message: `First delivery: ${s.launchDate}–${s.firstDeliveryBy}. Exact date follows route review. Promotions $${(s.promotionCents / 100).toFixed(2)}; reward credit $${(s.rewardsCents / 100).toFixed(2)} already deducted.`,
+          message: `Delivery window: ${s.launchDate}–${s.firstDeliveryBy}. Exact date follows route review. Promotions $${(s.promotionCents / 100).toFixed(2)}; reward credit $${(s.rewardsCents / 100).toFixed(2)} already deducted.`,
         },
       },
     },

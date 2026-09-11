@@ -6,6 +6,8 @@ Public launch is not complete. Checkout remains disabled in sandbox and isolated
 
 Stripe setup is deferred until application construction is complete. Continue independent implementation without repeatedly requesting provider setup. The reward-only return increment adds staff preparation, explicit credit confirmation, idempotent restoration and responsive browser acceptance; see REWARD-ONLY-REFUNDS.md. It does not activate cash refunds or public checkout.
 
+Quarterly consent and lifecycle controls are implemented in PR 39; due-cycle checkout is still being built. Ongoing delivery booking adds an opt-in lead time and horizon to the existing checkout and capacity services; see ONGOING-DELIVERY-BOOKING.md. Neither change enables checkout or substitutes for provider acceptance.
+
 ## Current build and provider checkpoint
 
 The deployed release subsequently advanced to `a2495c4afa459a9c258804841fa37b038ecdd828` (PR 33). The release evidence below describes an earlier deployment, not the current revision. PRs 34–36 add internal submission, outcome recording and lost-response recovery; PR 36 passed CI 112 with 454 tests. Those increments have no public refund submission caller.

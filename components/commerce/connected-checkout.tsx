@@ -137,7 +137,7 @@ export function ConnectedCheckout({
           <>
             <p>{quote.address}</p>
             <p>
-              First delivery window:{" "}
+              Delivery window:{" "}
               <strong>
                 {quote.launchDate}–{quote.firstDeliveryBy}
               </strong>
