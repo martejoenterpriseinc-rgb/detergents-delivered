@@ -423,6 +423,7 @@ test("cost accounting preserves failed choices and distinguishes original sale f
       if (!q.has("orderId"))
         return route.fulfill({
           json: {
+            canWrite: true,
             nextCursor: null,
             rows: [
               {
@@ -610,6 +611,97 @@ test("cost accounting preserves failed choices and distinguishes original sale f
     await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
     await page.screenshot({
       path: info.outputPath("receipt-clearing-settings.png"),
+      fullPage: true,
+    });
+    let draftStatus = "DRAFT",
+      draftAttempts = 0,
+      draftKey = "";
+    const draft = () => ({
+      id: "synthetic-receipt",
+      orderId: "financial-order",
+      adjustmentId: null,
+      parentSaleId: null,
+      entity: "SalesReceipt",
+      status: draftStatus,
+      realm: "123456789",
+      docNumber: "DS" + "a".repeat(19),
+      number: "Synthetic financial order",
+      date: "2026-02-01",
+      cashCents: 2268,
+      clearingAccount: "Synthetic receipt clearing",
+      customerName: "Synthetic linked customer",
+      externalId: null,
+      reconciliationIssue: null,
+      submittedAt: null,
+      confirmedAt: null,
+    });
+    await page.route("**/api/admin/quickbooks/receipts*", async (route) => {
+      if (route.request().method() === "GET")
+        return route.fulfill({
+          json: { canWrite: true, canSubmit: false, nextCursor: null, rows: [draft()] },
+        });
+      const body = route.request().postDataJSON();
+      if (body.action === "cancel") {
+        draftStatus = "CANCELED";
+        return route.fulfill({ json: { canceled: true } });
+      }
+      draftAttempts++;
+      if (draftAttempts === 1) {
+        draftKey = body.requestKey;
+        return route.fulfill({
+          status: 503,
+          json: { error: "Synthetic receipt preparation interrupted" },
+        });
+      }
+      expect(body.requestKey).toBe(draftKey);
+      return route.fulfill({ json: draft() });
+    });
+    await expect(
+      page.getByRole("button", { name: "Prepare receipt draft", exact: true }),
+    ).toHaveCount(0);
+    await page.getByLabel("Accounting entry", { exact: true }).selectOption("");
+    await page
+      .getByRole("button", { name: "Review accounting evidence", exact: true })
+      .click();
+    await page.getByLabel("I reviewed this source for a receipt draft.").check();
+    await page
+      .getByRole("button", { name: "Prepare receipt draft", exact: true })
+      .click();
+    await expect(
+      page.getByText("Synthetic receipt preparation interrupted", { exact: true }),
+    ).toBeVisible();
+    await page
+      .getByRole("button", { name: "Prepare receipt draft", exact: true })
+      .click();
+    await expect(
+      page.getByText(
+        "Receipt draft DS" +
+          "a".repeat(19) +
+          " saved. Load receipt drafts below to review it.",
+        { exact: true },
+      ),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Load receipt drafts", exact: true }).click();
+    await expect(
+      page.getByRole("heading", {
+        name: "Synthetic financial order · Sale receipt",
+        exact: true,
+      }),
+    ).toBeVisible();
+    await page.getByLabel("Cancel this unsent receipt draft.").check();
+    await page.getByRole("button", { name: "Cancel receipt draft", exact: true }).click();
+    await expect(
+      page.getByText("2026-02-01 · $22.68 · canceled", { exact: true }),
+    ).toBeVisible();
+    expect(draftAttempts).toBe(2);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
+    await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
+    await page.screenshot({
+      path: info.outputPath("receipt-draft-review.png"),
       fullPage: true,
     });
   } finally {
