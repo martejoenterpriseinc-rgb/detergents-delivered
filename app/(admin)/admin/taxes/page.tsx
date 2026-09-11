@@ -1,3 +1,4 @@
+import { TaxEvidence } from "@/components/commerce/tax-evidence";
 import { ZodError } from "zod";
 import { requireRole } from "@/lib/authz";
 import { readTaxReview } from "@/lib/services/tax-review";
@@ -83,8 +84,9 @@ export default async function Page({
       </div>
       <p className="text-sm text-slate-700">
         USD records use Chicago business dates. Refund allocations use saved item tax
-        amounts; compensation reverses those allocations. Provider tax matching is
-        pending. These totals are not a tax return or an amount due.
+        amounts; compensation reverses those allocations. Tax report evidence is shown
+        separately from payment settlement. These totals are not a tax return or an amount
+        due.
       </p>
       {data.excludedOrders > 0 && (
         <p role="alert">
@@ -119,6 +121,7 @@ export default async function Page({
               </p>
             </div>
             <strong>{money(row.taxCents)}</strong>
+            {row.canMatch && <TaxEvidence adjustmentId={row.id} />}
           </article>
         ))}
       </section>

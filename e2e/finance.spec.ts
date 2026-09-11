@@ -119,6 +119,83 @@ test("expenses and mileage persist, recover lost saves, export and restrict CPA 
       await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
     ).toBe(true);
     await page.screenshot({ path: info.outputPath("mileage.png"), fullPage: true });
+    const taxCustomer = await db.customer.create({
+      data: { userId: users[0], firstName: "Synthetic tax report" },
+    });
+    const taxOrder = await db.order.create({
+      data: {
+        number: "TAX-" + marker,
+        customerId: taxCustomer.id,
+        status: "PAID",
+        subtotalCents: 1000,
+        taxCents: 80,
+        totalCents: 1080,
+      },
+    });
+    const taxPayment = await db.payment.create({
+      data: {
+        orderId: taxOrder.id,
+        provider: "STRIPE",
+        status: "PARTIALLY_REFUNDED",
+        amountCents: 1080,
+      },
+    });
+    const taxRequest = await db.refundRequest.create({
+      data: {
+        orderId: taxOrder.id,
+        paymentId: taxPayment.id,
+        actorUserId: users[0],
+        requestKey: randomUUID(),
+        requestHash: "a".repeat(64),
+        amountCents: 540,
+        currency: "USD",
+        reason: "Synthetic tax report UI fixture",
+        providerAccountId: "acct_synthetic",
+        livemode: false,
+        status: "SUCCEEDED",
+        submittedAt: new Date(),
+      },
+    });
+    const taxAdjustment = await db.refundAdjustment.create({
+      data: {
+        requestId: taxRequest.id,
+        kind: "SETTLEMENT",
+        cashCents: 540,
+        netCents: 500,
+        taxCents: 40,
+        rewardCents: 0,
+        currency: "USD",
+        providerRefundId: "re_" + marker.replaceAll("-", ""),
+      },
+    });
+    await page.goto("/admin/taxes");
+    const taxCard = page.locator("article").filter({ hasText: taxOrder.number });
+    await taxCard.getByLabel("Completed Stripe tax report ID").fill("frr_synthetic");
+    await page.route("**/api/admin/taxes/refund-evidence", (route) =>
+      route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "Synthetic tax report unavailable" }),
+      }),
+    );
+    await taxCard.getByRole("button", { name: "Match tax report", exact: true }).click();
+    await expect(taxCard.getByRole("alert")).toHaveText(
+      "Synthetic tax report unavailable",
+    );
+    await expect(taxCard.getByLabel("Completed Stripe tax report ID")).toHaveValue(
+      "frr_synthetic",
+    );
+    expect(
+      await db.refundTaxEvidence.count({ where: { adjustmentId: taxAdjustment.id } }),
+    ).toBe(0);
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+    ).toBe(true);
+    await page.screenshot({
+      path: info.outputPath("tax-report-matching.png"),
+      fullPage: true,
+    });
+    await page.unroute("**/api/admin/taxes/refund-evidence");
     const crossOrigin = await page.request.post("/api/admin/finance", {
       headers: { origin: "https://untrusted.example" },
       data: {},
@@ -160,6 +237,21 @@ test("expenses and mileage persist, recover lost saves, export and restrict CPA 
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
     ).toBe(true);
+    await expect(
+      page.getByRole("button", { name: "Match tax report", exact: true }),
+    ).toHaveCount(0);
+    expect(
+      (
+        await page.request.post("/api/admin/taxes/refund-evidence", {
+          headers: { origin: "http://localhost:3000" },
+          data: {
+            adjustmentId: taxAdjustment.id,
+            reportRunId: "frr_synthetic",
+            confirmed: true,
+          },
+        })
+      ).status(),
+    ).toBe(403);
     await page.screenshot({ path: info.outputPath("tax-review.png"), fullPage: true });
     await page.goto("/admin/taxes?from=2026-02-30&to=2026-03-01");
     await expect(
