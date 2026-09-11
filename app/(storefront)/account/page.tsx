@@ -40,6 +40,9 @@ export default async function AccountPage() {
           <Link href="/account/addresses" className="font-semibold underline">
             Delivery addresses
           </Link>
+          <Link href="/account/connections" className="font-semibold underline">
+            Connected apps
+          </Link>
           <form action={signOutAction}>
             <Button type="submit" variant="outline">
               Sign out

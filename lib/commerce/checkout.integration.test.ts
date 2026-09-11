@@ -1,3 +1,5 @@
+import { issueCommerceGrant, revokeCommerceGrant } from "@/lib/services/commerce-grants";
+import { commerceGateway } from "@/lib/services/commerce-gateway";
 import "@/tests/integration-guard";
 import { randomUUID } from "node:crypto";
 import { beforeEach, afterEach, it, expect, vi } from "vitest";
@@ -758,4 +760,53 @@ it("rolls back cycle generation and financial settlement when their audit eviden
   expect(
     (await prisma.subscriptionCycle.findUniqueOrThrow({ where: { id: c.id } })).state,
   ).toBe("PAID");
+});
+
+it("prepares scoped agent quotes through shared checkout and blocks consent revoked during tax lookup", async () => {
+  const grant = await issueCommerceGrant(f.one.id, {
+    requestKey: randomUUID(),
+    label: "Synthetic quote application",
+    scopes: ["quotes.create"],
+    days: 1,
+    consentVersion: "commerce-delegation-v1",
+    confirmed: true,
+  });
+  const header = `Bearer ${grant.token}`;
+  const result = await commerceGateway(header, {
+    action: "quotes.create",
+    quote: input(),
+  });
+  const data = result.data as {
+    id: string;
+    reviewUrl: string;
+    paymentRequiresCustomer: boolean;
+  };
+  expect(data.reviewUrl).toBe(`/checkout/review/${data.id}`);
+  expect(data.paymentRequiresCustomer).toBe(true);
+  expect(await prisma.order.count({ where: { customerId: f.one.customer!.id } })).toBe(0);
+  expect(
+    await prisma.checkoutAttempt.findUniqueOrThrow({ where: { id: data.id } }),
+  ).toMatchObject({ state: "QUOTED", orderId: null });
+  expect(JSON.stringify(result)).not.toMatch(/spaceUnits|loadKind/);
+  const stripe = await import("./stripe");
+  vi.mocked(stripe.calculateCheckoutTax).mockImplementationOnce(async (snapshot) => {
+    await revokeCommerceGrant(f.one.id, { id: grant.id });
+    return {
+      taxCents: 80,
+      totalCents:
+        snapshot.subtotalCents - snapshot.rewardsCents - snapshot.promotionCents + 80,
+      taxCalculationId: "taxcalc_mock_revoked",
+      taxBreakdown: [],
+    };
+  });
+  const body = input();
+  await expect(
+    commerceGateway(header, { action: "quotes.create", quote: body }),
+  ).rejects.toMatchObject({ status: 401 });
+  expect(
+    await prisma.checkoutAttempt.count({
+      where: { customerId: f.one.customer!.id, requestKey: body.requestKey },
+    }),
+  ).toBe(0);
+  expect(await prisma.order.count({ where: { customerId: f.one.customer!.id } })).toBe(0);
 });

@@ -10,8 +10,10 @@ type Quote = ReturnType<typeof publicCheckout>;
 export function ConnectedCheckout({
   addresses,
   subscription,
+  initialQuote,
 }: {
   addresses: { id: string; label: string }[];
+  initialQuote?: Quote;
   subscription?: {
     id: string;
     lines: {
@@ -23,13 +25,21 @@ export function ConnectedCheckout({
   };
 }) {
   const cart = useCart();
-  const ready = Boolean(subscription) || cart.ready;
-  const lines = subscription?.lines ?? cart.lines;
+  const ready = Boolean(initialQuote) || Boolean(subscription) || cart.ready;
+  const lines =
+    initialQuote?.lines.map((line) => ({
+      variantId: line.variantId,
+      quantity: line.quantity,
+      productName: line.name,
+      unitPriceCents: line.unitPriceCents,
+    })) ??
+    subscription?.lines ??
+    cart.lines;
   const [addressId, setAddress] = useState(addresses[0]?.id ?? "");
   const [promotionCode, setPromo] = useState("");
   const [useRewards, setRewards] = useState(false);
   const [accepted, setAccepted] = useState(false);
-  const [quote, setQuote] = useState<Quote | null>(null);
+  const [quote, setQuote] = useState<Quote | null>(initialQuote ?? null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [pendingKey, setPendingKey] = useState<string | null>(null);
