@@ -22,7 +22,7 @@ test("staff restore original reward-only credit with retry safety and CPA read-o
         (
           await db.user.create({
             data: {
-              email: `credit-${code}-${marker}@example.test`,
+              email: `credit-${code.toLowerCase()}-${marker}@example.test`,
               passwordHash: await bcrypt.hash(password, 4),
               userRoles: { create: { roleId: role.id } },
             },
@@ -140,7 +140,7 @@ test("staff restore original reward-only credit with retry safety and CPA read-o
       await page.goto("/sign-in");
       await page
         .getByLabel("Email", { exact: true })
-        .fill(`credit-${code}-${marker}@example.test`);
+        .fill(`credit-${code.toLowerCase()}-${marker}@example.test`);
       await page.getByLabel("Password", { exact: true }).fill(password);
       await page.getByRole("button", { name: "Sign in", exact: true }).click();
       await expect(page).toHaveURL(/\/admin$/);
