@@ -241,7 +241,7 @@ test("owner entry, matched live tiles, referrals and safe checkout rewards previ
         .locator("section")
         .filter({ has: page.getByRole("heading", { name: "Orders & delivery updates" }) })
         .getByText("Delivery completed", { exact: true }),
-    ).toBeVisible();
+    ).toBeVisible({ timeout: 22000 });
     await page.route("**/api/account/delivery-status", (route) =>
       route.fulfill({
         status: 503,

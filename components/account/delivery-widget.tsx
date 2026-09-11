@@ -15,7 +15,6 @@ export function DeliveryWidget({ initial }: { initial: DeliverySnapshot }) {
   const [snapshot, setSnapshot] = useState(initial);
   const [unavailable, setUnavailable] = useState(false);
   useEffect(() => {
-    let lastKey = savedKey;
     let stopped = false;
     let busy = false;
     let controller: AbortController | undefined;
@@ -40,9 +39,9 @@ export function DeliveryWidget({ initial }: { initial: DeliverySnapshot }) {
             data.orderNumber,
             data.plannedArrival,
           ]);
-          if (nextKey !== lastKey) {
-            lastKey = nextKey;
-            // Refresh the saved order cards too, preserving scroll and client state.
+          if (nextKey !== savedKey) {
+            // Retry until server props confirm the new state. An interrupted
+            // refresh must not leave order cards stale after the widget updates.
             router.refresh();
           }
         }

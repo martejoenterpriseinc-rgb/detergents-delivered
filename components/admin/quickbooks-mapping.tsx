@@ -123,7 +123,8 @@ export function QuickbooksMapping() {
           )}
           <label className="block">
             Expense category
-            <select
+          <select
+            aria-label="Expense category"
               className="mt-1 block w-full rounded border p-2"
               value={category}
               onChange={(e) => {
@@ -152,7 +153,8 @@ export function QuickbooksMapping() {
             <>
               <label className="block">
                 QuickBooks expense account
-                <select
+              <select
+                aria-label="QuickBooks expense account"
                   className="mt-1 block w-full rounded border p-2"
                   value={expense}
                   onChange={(e) => {
@@ -170,7 +172,8 @@ export function QuickbooksMapping() {
               </label>
               <label className="block">
                 Paid from account
-                <select
+              <select
+                aria-label="Paid from account"
                   className="mt-1 block w-full rounded border p-2"
                   value={payment}
                   onChange={(e) => {
