@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { requireRole } from "@/lib/authz";
 import { dailyQueue } from "@/lib/services/operations";
 import { businessDate, dateSchema } from "@/lib/domain/operations";
@@ -42,10 +43,15 @@ export default async function Page({
     );
   }
   return (
-    <DeliveryQueue
-      key={`${data.date}-${q.status ?? "all"}`}
-      initial={data}
-      initialStatus={q.status === "completed" ? "completed" : "all"}
-    />
+    <div className="space-y-4">
+      <Link href="/admin/deliveries/texts" className="font-semibold underline">
+        Delivery text messages
+      </Link>
+      <DeliveryQueue
+        key={`${data.date}-${q.status ?? "all"}`}
+        initial={data}
+        initialStatus={q.status === "completed" ? "completed" : "all"}
+      />
+    </div>
   );
 }

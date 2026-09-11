@@ -13,6 +13,8 @@ import { runOperationalCycle } from "./work";
 const ids = [
   "sandbox:payment-reconciliation",
   "sandbox:recovery-email",
+  "sandbox:delivery-sms",
+  "live:delivery-sms",
   "live:recovery-email",
   "sandbox:subscription-cycles",
   "sandbox:refund-reconciliation",

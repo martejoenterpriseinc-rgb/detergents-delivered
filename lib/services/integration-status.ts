@@ -157,7 +157,7 @@ export function integrationStatus(env: Record<string, string | undefined> = proc
       name: "Customer text messages",
       state: "implementation-needed",
       summary:
-        "Phone-bound delivery-text consent, signed inbound verification and opt-out handling are implemented. Outbound delivery and real sender acceptance remain unfinished.",
+        "Phone-verified delivery consent, transactional delivery updates, signed receipts and protected recovery are implemented. Sender activation and real delivery acceptance remain outstanding.",
       nextSteps: [
         "Finish the approved sender, customer consent, delivery notifications and retry handling before sending messages.",
       ],
