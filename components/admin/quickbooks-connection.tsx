@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { QuickbooksMapping } from "./quickbooks-mapping";
 import type { quickbooksConnectionStatus } from "@/lib/services/quickbooks-connection";
 type Status = Awaited<ReturnType<typeof quickbooksConnectionStatus>>;
 export function QuickbooksConnection({
@@ -144,6 +145,7 @@ export function QuickbooksConnection({
           {error}
         </p>
       )}
+      <QuickbooksMapping />
     </div>
   );
 }

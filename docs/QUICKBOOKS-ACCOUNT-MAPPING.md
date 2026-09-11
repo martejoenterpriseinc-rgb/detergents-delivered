@@ -1,0 +1,11 @@
+# QuickBooks expense account mapping
+
+The QuickBooks connection screen can load the authorized company's active chart of accounts and map a saved expense category to an expense account and a bank/credit-card account. Account pages contain at most 100 rows; the screen loads at most 1,000 accounts and 250 expense categories. Only names, IDs, types, active state and currency are exposed, excluding account balances.
+
+An administrator must explicitly select and confirm both accounts. CPA access can view account choices and saved mappings but cannot save. The server re-reads the selected accounts from the company before saving and requires matching IDs, active status, USD currency, Expense/Other Expense and Bank/Credit Card types. Missing currency is not assumed to mean USD. Company access, connection version and finance authority are rechecked after provider I/O.
+
+Mappings are scoped to the current environment, company and expense category. They do not reuse the legacy unscoped `ExpenseCategory.qboAccountId` column. Each save uses an expected version, a stable request key, a serialized transaction and an atomic audit record. A lost-response retry returns the prior mapping; changed payload/company and stale versions are rejected. An audit failure or revocation during provider reads prevents the save. Previously saved mappings must be revalidated again before future posting; they do not establish provider account permanence.
+
+This increment changes no expense amount, currency, date, tax, inventory or accounting transaction. It does not create a QuickBooks transaction. Outbound posting and provider acceptance remain unfinished and disabled. Native tests use encrypted synthetic authorization and mocked account reads. Browser mapping responses are explicitly simulated to check interrupted-save recovery; native tests establish database/audit behavior.
+
+The fixed company-scoped account and query requests follow [Intuit DataService entity reads and query pagination](https://github.com/intuit/QuickBooks-V3-PHP-SDK/blob/master/src/DataService/DataService.php) and the [Intuit SDK query guide](https://intuit.github.io/QuickBooks-V3-PHP-SDK/quickstart.html). Real sandbox account selection and posting must still be accepted with the intended company.

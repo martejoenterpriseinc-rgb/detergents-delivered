@@ -98,6 +98,46 @@ export async function quickbooksConnectionStatus(actor: string) {
     companyName: row?.companyName ?? null,
   };
 }
+// Server-only capability snapshot. Never serialize this object into an API response.
+export async function authorizedQuickbooks(actor: string) {
+  await financeAccess(prisma, actor);
+  const config = await quickbooksConfig(),
+    key = connectionKey(),
+    row = await saved(prisma, key);
+  if (
+    !row ||
+    row.status !== "CONNECTED" ||
+    !row.secret ||
+    row.fingerprint !== config.fingerprint ||
+    new Date(row.expiresAt).getTime() <= Date.now() + 10000
+  )
+    throw new AccountError(
+      "An administrator must connect or refresh QuickBooks first.",
+      409,
+    );
+  const token = quickbooksTokenSchema.parse(
+    openIntegration(row.secret, key + ":" + row.version),
+  );
+  return { config, key, version: row.version, accessToken: token.access_token };
+}
+export async function assertQuickbooksSnapshot(
+  tx: Prisma.TransactionClient,
+  actor: string,
+  snapshot: Awaited<ReturnType<typeof authorizedQuickbooks>>,
+  write = false,
+) {
+  await lock(tx, snapshot.key);
+  await financeAccess(tx, actor, write);
+  const current = await saved(tx, snapshot.key);
+  if (
+    !current ||
+    current.version !== snapshot.version ||
+    current.status !== "CONNECTED" ||
+    current.fingerprint !== snapshot.config.fingerprint ||
+    new Date(current.expiresAt) <= new Date()
+  )
+    throw new AccountError("QuickBooks connection changed. Refresh before saving.", 409);
+}
 export async function beginQuickbooksConnection(actor: string) {
   await financeAccess(prisma, actor, true);
   const config = await quickbooksConfig(),
