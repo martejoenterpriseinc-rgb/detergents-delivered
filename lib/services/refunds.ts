@@ -15,7 +15,11 @@ import { canonicalJson } from "@/lib/commerce/domain";
 import { readCommerce } from "@/lib/commerce/runtime";
 import { accountIdentity } from "@/lib/services/customer-account";
 import { persistInventoryTransaction } from "@/lib/services/inventory-ledger";
-import { submitClaimedStripeRefund } from "@/lib/commerce/refund-provider";
+import {
+  submitClaimedStripeRefund,
+  inspectStripeRefunds,
+  matchProviderRefunds,
+} from "@/lib/commerce/refund-provider";
 
 type Tx = Prisma.TransactionClient;
 const submissionInput = z
@@ -244,76 +248,84 @@ export async function recordRefundSubmissionResult(userId: string, raw: unknown)
   return prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM "Order" WHERE id = ${input.orderId} FOR UPDATE`;
     await refundAccess(tx, userId);
-    const request = await tx.refundRequest.findUnique({ where: { id: input.requestId } });
-    if (!request || request.orderId !== input.orderId)
-      throw new AccountError("Refund request not found.", 404);
-    if (!request.submittedAt || !["SUBMITTING", "UNKNOWN"].includes(request.status))
-      throw new AccountError("This request is not awaiting a submission outcome.", 409);
-    const observed = input.observation;
-    if (
-      observed &&
-      (observed.requestId !== request.id ||
-        observed.requestHash !== request.requestHash ||
-        observed.amountCents !== request.amountCents ||
-        observed.currency !== request.currency ||
-        (request.providerRefundId && request.providerRefundId !== observed.id))
-    )
-      throw new AccountError("Refund response does not match the saved request.", 409);
-    // A delayed timeout cannot erase a receipt already recorded by another caller.
-    if (!observed && request.providerRefundId) return publicRefundRequest(request);
-    const evidence = observed
-      ? {
-          providerRefundId: observed.id,
-          providerStatus: observed.status,
-          amountCents: observed.amountCents,
-          currency: observed.currency,
-          created: observed.created,
-          balanceTransactionId: observed.balanceTransactionId,
-          failureBalanceTransactionId: observed.failureBalanceTransactionId,
-        }
-      : { outcome: "unconfirmed" };
-    const eventKey = `dd:refund:receipt:${request.id}:${fingerprint(evidence)}`;
-    const prior = await tx.refundRequestEvent.findUnique({
-      where: { providerEventId: eventKey },
-    });
-    if (prior) return publicRefundRequest(request);
-    const saved = await tx.refundRequest.update({
-      where: { id: request.id },
-      data: {
-        status: "UNKNOWN",
-        ...(observed ? { providerRefundId: observed.id } : {}),
-        lastError: observed
-          ? "Provider response recorded; settlement reconciliation required."
-          : "Submission outcome is unconfirmed; do not submit again.",
-      },
-    });
-    await tx.refundRequestEvent.create({
-      data: {
-        refundRequestId: request.id,
-        providerEventId: eventKey,
-        type: observed ? "refund.submission.observed" : "refund.submission.unconfirmed",
-        status: "UNKNOWN",
-        evidenceJson: evidence,
-        // This is receipt time, not a claim that money/tax/rewards have settled.
-        verifiedAt: observed ? new Date() : null,
-      },
-    });
-    await tx.auditLog.create({
-      data: {
-        actorUserId: userId,
-        action: "refund.submission.outcome-recorded",
-        entityType: "RefundRequest",
-        entityId: request.id,
-        beforeJson: { status: request.status },
-        afterJson: {
-          status: "UNKNOWN",
-          providerStatus: observed?.status ?? "unconfirmed",
-          amountCents: request.amountCents,
-        },
-      },
-    });
-    return publicRefundRequest(saved);
+    return persistSubmissionResult(tx, userId, input);
   });
+}
+
+async function persistSubmissionResult(
+  tx: Tx,
+  userId: string,
+  input: z.infer<typeof submissionResultInput>,
+) {
+  const request = await tx.refundRequest.findUnique({ where: { id: input.requestId } });
+  if (!request || request.orderId !== input.orderId)
+    throw new AccountError("Refund request not found.", 404);
+  if (!request.submittedAt || !["SUBMITTING", "UNKNOWN"].includes(request.status))
+    throw new AccountError("This request is not awaiting a submission outcome.", 409);
+  const observed = input.observation;
+  if (
+    observed &&
+    (observed.requestId !== request.id ||
+      observed.requestHash !== request.requestHash ||
+      observed.amountCents !== request.amountCents ||
+      observed.currency !== request.currency ||
+      (request.providerRefundId && request.providerRefundId !== observed.id))
+  )
+    throw new AccountError("Refund response does not match the saved request.", 409);
+  // A delayed timeout cannot erase a receipt already recorded by another caller.
+  if (!observed && request.providerRefundId) return publicRefundRequest(request);
+  const evidence = observed
+    ? {
+        providerRefundId: observed.id,
+        providerStatus: observed.status,
+        amountCents: observed.amountCents,
+        currency: observed.currency,
+        created: observed.created,
+        balanceTransactionId: observed.balanceTransactionId,
+        failureBalanceTransactionId: observed.failureBalanceTransactionId,
+      }
+    : { outcome: "unconfirmed" };
+  const eventKey = `dd:refund:receipt:${request.id}:${fingerprint(evidence)}`;
+  const prior = await tx.refundRequestEvent.findUnique({
+    where: { providerEventId: eventKey },
+  });
+  if (prior) return publicRefundRequest(request);
+  const saved = await tx.refundRequest.update({
+    where: { id: request.id },
+    data: {
+      status: "UNKNOWN",
+      ...(observed ? { providerRefundId: observed.id } : {}),
+      lastError: observed
+        ? "Provider response recorded; settlement reconciliation required."
+        : "Submission outcome is unconfirmed; do not submit again.",
+    },
+  });
+  await tx.refundRequestEvent.create({
+    data: {
+      refundRequestId: request.id,
+      providerEventId: eventKey,
+      type: observed ? "refund.submission.observed" : "refund.submission.unconfirmed",
+      status: "UNKNOWN",
+      evidenceJson: evidence,
+      // This is receipt time, not a claim that money/tax/rewards have settled.
+      verifiedAt: observed ? new Date() : null,
+    },
+  });
+  await tx.auditLog.create({
+    data: {
+      actorUserId: userId,
+      action: "refund.submission.outcome-recorded",
+      entityType: "RefundRequest",
+      entityId: request.id,
+      beforeJson: { status: request.status },
+      afterJson: {
+        status: "UNKNOWN",
+        providerStatus: observed?.status ?? "unconfirmed",
+        amountCents: request.amountCents,
+      },
+    },
+  });
+  return publicRefundRequest(saved);
 }
 
 /** Internal orchestration only; no HTTP or worker entry point before settlement acceptance. */
@@ -331,6 +343,129 @@ export async function submitPreparedRefund(userId: string, raw: unknown) {
   // Persistence failure after a provider response leaves the claim for recovery.
   // Do not catch it and attempt a second provider submission.
   return recordRefundSubmissionResult(userId, { ...input, observation });
+}
+
+async function recoverySnapshot(
+  tx: Tx,
+  userId: string,
+  input: z.infer<typeof submissionInput>,
+) {
+  await refundAccess(tx, userId);
+  const request = await tx.refundRequest.findUnique({
+    where: { id: input.requestId },
+    include: {
+      lines: { orderBy: { id: "asc" } },
+      payment: {
+        include: {
+          events: { orderBy: { id: "asc" } },
+          refunds: { orderBy: { id: "asc" } },
+        },
+      },
+      order: {
+        include: {
+          checkoutAttempt: true,
+          refundRequests: { orderBy: { id: "asc" } },
+        },
+      },
+    },
+  });
+  if (!request || request.orderId !== input.orderId)
+    throw new AccountError("Refund request not found.", 404);
+  if (!request.submittedAt || !["SUBMITTING", "UNKNOWN"].includes(request.status))
+    throw new AccountError("This request is not awaiting a submission outcome.", 409);
+  const { payment, order } = request;
+  const checkout = order.checkoutAttempt;
+  if (
+    !checkout ||
+    checkout.state !== "PAID" ||
+    payment.orderId !== order.id ||
+    payment.provider !== "STRIPE" ||
+    !payment.externalId ||
+    !["CAPTURED", "PARTIALLY_REFUNDED", "REFUNDED"].includes(payment.status) ||
+    payment.amountCents !== order.totalCents ||
+    payment.currency !== order.currency ||
+    request.currency !== payment.currency ||
+    request.providerAccountId !== checkout.stripeAccountId ||
+    request.livemode !== checkout.livemode ||
+    payment.refunds.some((r) => !r.requestId) ||
+    order.refundRequests.some(
+      (r) =>
+        r.paymentId === payment.id &&
+        (r.providerAccountId !== checkout.stripeAccountId ||
+          r.livemode !== checkout.livemode ||
+          r.currency !== payment.currency),
+    ) ||
+    !payment.events.some(
+      (e) =>
+        e.verifiedAt &&
+        e.externalId === `checkout:${checkout.id}:paid` &&
+        ["checkout.session.completed", "checkout.session.reconciled"].includes(e.type),
+    )
+  )
+    throw new AccountError("Original payment evidence requires reconciliation.", 409);
+  return {
+    request,
+    binding: {
+      accountId: checkout.stripeAccountId,
+      live: checkout.livemode,
+      checkoutId: checkout.id,
+      paymentIntentId: payment.externalId,
+      amountCents: payment.amountCents,
+      currency: payment.currency,
+    },
+  };
+}
+
+/** Recover a lost receipt using provider reads only. Never retries refund creation
+ * or settles money. Internal only until the complete refund workflow is accepted.
+ */
+export async function recoverRefundSubmission(userId: string, raw: unknown) {
+  const input = submissionInput.parse(raw);
+  const before = await prisma.$transaction(
+    async (tx) => {
+      await tx.$executeRawUnsafe("SET TRANSACTION READ ONLY");
+      return recoverySnapshot(tx, userId, input);
+    },
+    { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
+  );
+  let observation;
+  try {
+    // The adapter verifies the original payment/account/mode and complete history.
+    // No transaction or database lock is held during network I/O.
+    observation = await inspectStripeRefunds(before.binding);
+  } catch {
+    throw new AccountError(
+      "Refund lookup could not be verified. The existing request remains reserved.",
+      409,
+    );
+  }
+  const expected = before.request.order.refundRequests
+    .filter((r) => r.paymentId === before.request.paymentId)
+    .map((r) => ({
+      id: r.id,
+      requestHash: r.requestHash,
+      providerRefundId: r.providerRefundId,
+      submitted: r.submittedAt !== null,
+      amountCents: r.amountCents,
+      currency: r.currency,
+    }));
+  const { matched } = matchProviderRefunds(observation, expected);
+  const result = submissionResultInput.parse({
+    ...input,
+    observation: matched.get(input.requestId) ?? null,
+  });
+  return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "Order" WHERE id = ${input.orderId} FOR UPDATE`;
+    const after = await recoverySnapshot(tx, userId, input);
+    if (canonicalJson(before) !== canonicalJson(after))
+      throw new AccountError(
+        "Payment records changed during recovery. Check again.",
+        409,
+      );
+    // Validation and receipt/audit writes share one lock and transaction.
+    // Missing evidence is uncertainty, never permission to release or resubmit.
+    return persistSubmissionResult(tx, userId, result);
+  });
 }
 
 function publicRefundRequest(request: {
