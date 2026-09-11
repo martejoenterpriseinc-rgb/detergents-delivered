@@ -275,6 +275,140 @@ test("cost accounting preserves failed choices and distinguishes original sale f
       path: info.outputPath("quickbooks-cost-journal.png"),
       fullPage: true,
     });
+
+    const linkRequests: Array<{ requestKey: string }> = [];
+    await page.route("**/api/admin/quickbooks/sales-mappings*", (route) => {
+      const request = route.request(),
+        url = new URL(request.url()),
+        kind = url.searchParams.get("kind") ?? request.postDataJSON()?.kind ?? "customer";
+      if (request.method() === "POST") {
+        const input = request.postDataJSON();
+        linkRequests.push(input);
+        return route.fulfill({
+          status: linkRequests.length === 1 ? 503 : 200,
+          json:
+            linkRequests.length === 1
+              ? { error: "Synthetic sales link interrupted" }
+              : {
+                  version: 1,
+                  kind: input.kind,
+                  sourceId: input.sourceId,
+                  mode: "sandbox",
+                  realm: mapping.realm,
+                  externalId: input.externalId,
+                  externalName: "Synthetic linked " + input.kind,
+                  incomeAccountId: input.kind === "item" ? "9" : null,
+                  verifiedAt: new Date().toISOString(),
+                },
+        });
+      }
+      if (url.searchParams.get("view") === "provider")
+        return route.fulfill({
+          json: {
+            realm: mapping.realm,
+            nextStart: null,
+            rows:
+              kind === "customer"
+                ? [
+                    {
+                      kind,
+                      id: "1",
+                      name: "Synthetic company customer",
+                      active: true,
+                      currency: "USD",
+                    },
+                  ]
+                : [
+                    {
+                      kind,
+                      id: "2",
+                      name: "Synthetic non-inventory item",
+                      active: true,
+                      type: "NonInventory",
+                      tracksQuantity: false,
+                      incomeAccountId: "9",
+                    },
+                    {
+                      kind,
+                      id: "3",
+                      name: "Tracked inventory must be excluded",
+                      active: true,
+                      type: "Inventory",
+                      tracksQuantity: true,
+                      incomeAccountId: "9",
+                    },
+                  ],
+          },
+        });
+      return route.fulfill({
+        json: {
+          canWrite: true,
+          realm: mapping.realm,
+          nextCursor: null,
+          rows: [
+            {
+              id: "source-" + kind,
+              name: "Synthetic application " + kind,
+              mapping: null,
+            },
+          ],
+        },
+      });
+    });
+    await page.getByRole("button", { name: "Load sales links", exact: true }).click();
+    await page
+      .getByLabel("Application record", { exact: true })
+      .selectOption("source-customer");
+    await page.getByLabel("QuickBooks record", { exact: true }).selectOption("1");
+    await page
+      .getByLabel(
+        "I checked that these records represent the same customer or product in this company.",
+      )
+      .check();
+    await page.getByRole("button", { name: "Save sales link", exact: true }).click();
+    await expect(
+      page.getByRole("alert").filter({ hasText: "Synthetic sales link interrupted" }),
+    ).toBeVisible();
+    await expect(page.getByLabel("QuickBooks record", { exact: true })).toHaveValue("1");
+    await page.getByRole("button", { name: "Save sales link", exact: true }).click();
+    await expect(
+      page.getByText("Saved link: Synthetic linked customer.", { exact: true }),
+    ).toBeVisible();
+    expect(linkRequests[0].requestKey).toBe(linkRequests[1].requestKey);
+    await page.getByLabel("Link type", { exact: true }).selectOption("item");
+    await expect(
+      page.getByText("Saved link: Synthetic linked customer.", { exact: true }),
+    ).toHaveCount(0);
+    await page.getByRole("button", { name: "Load sales links", exact: true }).click();
+    await page
+      .getByLabel("Application record", { exact: true })
+      .selectOption("source-item");
+    await expect(
+      page.getByRole("option", {
+        name: "Tracked inventory must be excluded",
+        exact: true,
+      }),
+    ).toHaveCount(0);
+    await page.getByLabel("QuickBooks record", { exact: true }).selectOption("2");
+    await page
+      .getByLabel(
+        "I checked that these records represent the same customer or product in this company.",
+      )
+      .check();
+    await page.getByRole("button", { name: "Save sales link", exact: true }).click();
+    await expect(
+      page.getByText("Saved link: Synthetic linked item.", { exact: true }),
+    ).toBeVisible();
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
+    await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
+    await page.screenshot({
+      path: info.outputPath("quickbooks-sales-links.png"),
+      fullPage: true,
+    });
   } finally {
     await db.user.update({ where: { id: user.id }, data: { deletedAt: new Date() } });
     await db.$disconnect();

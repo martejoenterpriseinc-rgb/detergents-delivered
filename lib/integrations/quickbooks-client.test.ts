@@ -1,5 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import {
+  readQuickbooksSalesEntity,
+  readQuickbooksSalesEntities,
   createQuickbooksCostJournal,
   findQuickbooksCostJournal,
   quickbooksAuthorizationUrl,
@@ -138,6 +140,73 @@ it("uses one fixed journal POST and a bounded read-only exact-reference query", 
   );
   await expect(
     findQuickbooksCostJournal(config, "synthetic-access", "' or 1=1"),
+  ).rejects.toThrow();
+  expect(call).toHaveBeenCalledTimes(2);
+});
+
+it("bounds sales-entity reads and exposes only the fields needed for record mapping", async () => {
+  const call = vi
+    .fn()
+    .mockResolvedValueOnce(
+      Response.json({
+        QueryResponse: {
+          Customer: [
+            {
+              Id: "1",
+              DisplayName: "Synthetic customer",
+              Active: true,
+              CurrencyRef: { value: "USD" },
+              PrimaryEmailAddr: { Address: "private@example.test" },
+              Balance: 999,
+            },
+          ],
+        },
+      }),
+    )
+    .mockResolvedValueOnce(
+      Response.json({
+        Item: {
+          Id: "2",
+          Name: "Synthetic item",
+          Active: true,
+          Type: "NonInventory",
+          IncomeAccountRef: { value: "9" },
+          PurchaseCost: 999,
+        },
+      }),
+    );
+  vi.stubGlobal("fetch", call);
+  const customers = await readQuickbooksSalesEntities(
+    config,
+    "synthetic-access",
+    "customer",
+    1,
+  );
+  expect(customers.rows).toEqual([
+    {
+      kind: "customer",
+      id: "1",
+      name: "Synthetic customer",
+      active: true,
+      currency: "USD",
+    },
+  ]);
+  expect(
+    await readQuickbooksSalesEntity(config, "synthetic-access", "item", "2"),
+  ).toEqual({
+    kind: "item",
+    id: "2",
+    name: "Synthetic item",
+    active: true,
+    type: "NonInventory",
+    tracksQuantity: false,
+    incomeAccountId: "9",
+  });
+  await expect(
+    readQuickbooksSalesEntities(config, "synthetic-access", "customer", 0),
+  ).rejects.toThrow();
+  await expect(
+    readQuickbooksSalesEntity(config, "synthetic-access", "item", "2/other"),
   ).rejects.toThrow();
   expect(call).toHaveBeenCalledTimes(2);
 });

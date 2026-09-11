@@ -1,4 +1,5 @@
 "use client";
+import { QuickbooksSalesMapping } from "./quickbooks-sales-mapping";
 import { QuickbooksJournals } from "./quickbooks-journals";
 import { QuickbooksCosts } from "./quickbooks-costs";
 import { useState } from "react";
@@ -152,6 +153,7 @@ export function QuickbooksConnection({
       <QuickbooksExpenses />
       <QuickbooksCosts />
       <QuickbooksJournals />
+      <QuickbooksSalesMapping />
     </div>
   );
 }

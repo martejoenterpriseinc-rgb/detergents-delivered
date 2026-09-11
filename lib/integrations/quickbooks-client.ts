@@ -311,3 +311,119 @@ export async function revokeQuickbooksToken(
     true,
   );
 }
+
+const salesEntitySchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("customer"),
+    id: z.string(),
+    name: z.string(),
+    active: z.boolean(),
+    currency: z.string().nullable(),
+  }),
+  z.object({
+    kind: z.literal("item"),
+    id: z.string(),
+    name: z.string(),
+    active: z.boolean(),
+    type: z.string(),
+    tracksQuantity: z.boolean(),
+    incomeAccountId: z.string().nullable(),
+  }),
+]);
+export type QuickbooksSalesEntity = z.infer<typeof salesEntitySchema>;
+function salesEntity(kind: "customer" | "item", raw: unknown): QuickbooksSalesEntity {
+  const reference = z.object({ value: z.string().regex(/^\d{1,30}$/) });
+  const common = { Id: z.string().regex(/^\d{1,30}$/), Active: z.boolean() };
+  if (kind === "customer") {
+    const r = z
+      .object({
+        ...common,
+        DisplayName: z.string().min(1).max(500),
+        CurrencyRef: z.object({ value: z.string() }).optional(),
+      })
+      .parse(raw);
+    return salesEntitySchema.parse({
+      kind,
+      id: r.Id,
+      name: r.DisplayName,
+      active: r.Active,
+      currency: r.CurrencyRef?.value ?? null,
+    });
+  }
+  const r = z
+    .object({
+      ...common,
+      Name: z.string().min(1).max(500),
+      Type: z.string(),
+      TrackQtyOnHand: z.boolean().optional(),
+      IncomeAccountRef: reference.optional(),
+    })
+    .parse(raw);
+  return salesEntitySchema.parse({
+    kind,
+    id: r.Id,
+    name: r.Name,
+    active: r.Active,
+    type: r.Type,
+    tracksQuantity: r.TrackQtyOnHand === true,
+    incomeAccountId: r.IncomeAccountRef?.value ?? null,
+  });
+}
+export async function readQuickbooksSalesEntities(
+  config: QuickbooksConfig,
+  accessToken: string,
+  kind: "customer" | "item",
+  start: number,
+) {
+  z.enum(["customer", "item"]).parse(kind);
+  z.number().int().min(1).max(100001).parse(start);
+  const entity = kind === "customer" ? "Customer" : "Item",
+    host =
+      config.mode === "sandbox"
+        ? "https://sandbox-quickbooks.api.intuit.com"
+        : "https://quickbooks.api.intuit.com";
+  const url = new URL(`${host}/v3/company/${config.realm}/query`);
+  url.searchParams.set(
+    "query",
+    `select * from ${entity} where Active = true startposition ${start} maxresults 100`,
+  );
+  const result = z
+    .object({ QueryResponse: z.record(z.string(), z.unknown()) })
+    .parse(
+      await providerRequest(url.toString(), {
+        method: "GET",
+        headers: { Authorization: "Bearer " + accessToken, Accept: "application/json" },
+      }),
+    );
+  const rows = z
+    .array(z.unknown())
+    .max(100)
+    .parse(result.QueryResponse[entity] ?? [])
+    .map((r) => salesEntity(kind, r));
+  return { rows, nextStart: rows.length === 100 ? start + 100 : null };
+}
+export async function readQuickbooksSalesEntity(
+  config: QuickbooksConfig,
+  accessToken: string,
+  kind: "customer" | "item",
+  id: string,
+) {
+  z.enum(["customer", "item"]).parse(kind);
+  z.string()
+    .regex(/^\d{1,30}$/)
+    .parse(id);
+  const entity = kind === "customer" ? "Customer" : "Item",
+    host =
+      config.mode === "sandbox"
+        ? "https://sandbox-quickbooks.api.intuit.com"
+        : "https://quickbooks.api.intuit.com";
+  const result = z
+    .record(z.string(), z.unknown())
+    .parse(
+      await providerRequest(`${host}/v3/company/${config.realm}/${kind}/${id}`, {
+        method: "GET",
+        headers: { Authorization: "Bearer " + accessToken, Accept: "application/json" },
+      }),
+    );
+  return salesEntity(kind, result[entity]);
+}
