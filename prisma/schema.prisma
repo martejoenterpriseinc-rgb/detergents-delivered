@@ -1282,6 +1282,7 @@ model ExpenseCategory {
 }
 
 model Expense {
+  quickbooksExports QboExpenseExport[]
   id                String          @id @default(cuid())
   categoryId        String
   category          ExpenseCategory @relation(fields: [categoryId], references: [id])
@@ -1295,6 +1296,28 @@ model Expense {
   updatedAt         DateTime        @updatedAt
 
   @@index([categoryId, incurredOn])
+}
+
+model QboExpenseExport {
+  id String @id
+  expenseId String
+  expense Expense @relation(fields: [expenseId], references: [id], onDelete: Restrict)
+  mode String
+  realm String
+  status String @default("DRAFT")
+  docNumber String
+  requestHash String
+  source Json
+  mapping Json
+  payload Json
+  externalId String?
+  submittedAt DateTime?
+  confirmedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([mode, realm, docNumber])
+  @@unique([mode, realm, externalId])
+  @@index([expenseId, status])
 }
 
 // ---------------------------------------------------------------------------
