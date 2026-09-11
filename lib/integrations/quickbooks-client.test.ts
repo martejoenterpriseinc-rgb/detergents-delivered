@@ -1,5 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import {
+  createQuickbooksCashReceipt,
+  findQuickbooksCashReceipt,
   readQuickbooksReceiptCompany,
   readQuickbooksSalesEntity,
   readQuickbooksSalesEntities,
@@ -22,27 +24,25 @@ const config = {
 };
 it("reads receipt company facts without exposing unrelated company information or assuming missing currency", async () => {
   let missing = false;
-  const call = vi
-    .fn()
-    .mockImplementation(async (url: string) =>
-      Response.json(
-        url.endsWith("preferences")
-          ? {
-              Preferences: {
-                CurrencyPrefs: missing ? {} : { HomeCurrency: { value: "USD" } },
-                TaxPrefs: { UsingSalesTax: true },
-                EmailMessagesPrefs: { hidden: "private" },
-              },
-            }
-          : {
-              CompanyInfo: {
-                Country: "US",
-                CompanyName: "Private name",
-                Email: { Address: "private@example.test" },
-              },
+  const call = vi.fn().mockImplementation(async (url: string) =>
+    Response.json(
+      url.endsWith("preferences")
+        ? {
+            Preferences: {
+              CurrencyPrefs: missing ? {} : { HomeCurrency: { value: "USD" } },
+              TaxPrefs: { UsingSalesTax: true },
+              EmailMessagesPrefs: { hidden: "private" },
             },
-      ),
-    );
+          }
+        : {
+            CompanyInfo: {
+              Country: "US",
+              CompanyName: "Private name",
+              Email: { Address: "private@example.test" },
+            },
+          },
+    ),
+  );
   vi.stubGlobal("fetch", call);
   expect(await readQuickbooksReceiptCompany(config, "synthetic-access")).toEqual({
     country: "US",
@@ -63,6 +63,65 @@ it("reads receipt company facts without exposing unrelated company information o
   ).rejects.toThrow();
 });
 afterEach(() => vi.unstubAllGlobals());
+it("uses bounded receipt endpoints and entity-bound document queries without retrying a POST", async () => {
+  const payload = {
+    DocNumber: "DS" + "a".repeat(19),
+    TxnDate: "2026-02-01",
+    CurrencyRef: { value: "USD" },
+    CustomerRef: { value: "1" },
+    DepositToAccountRef: { value: "2" },
+    ShipAddr: {
+      Line1: "1 Synthetic",
+      City: "Synthetic",
+      CountrySubDivisionCode: "IL",
+      PostalCode: "60000",
+      Country: "US",
+    },
+    TxnTaxDetail: { TotalTax: 1.68 },
+    Line: [
+      {
+        Amount: 21,
+        Description: "Synthetic original item",
+        DetailType: "SalesItemLineDetail",
+        SalesItemLineDetail: { ItemRef: { value: "3" }, TaxCodeRef: { value: "TAX" } },
+      },
+    ],
+  };
+  const call = vi
+    .fn()
+    .mockRejectedValueOnce(new Error("Synthetic transport interruption"))
+    .mockResolvedValueOnce(
+      Response.json({
+        QueryResponse: { SalesReceipt: [{ ...payload, Id: "4", TotalAmt: 22.68 }] },
+      }),
+    );
+  vi.stubGlobal("fetch", call);
+  await expect(
+    createQuickbooksCashReceipt(config, "synthetic", "SalesReceipt", payload),
+  ).rejects.toThrow();
+  expect(call).toHaveBeenCalledTimes(1);
+  expect(call.mock.calls[0][0]).toBe(
+    "https://sandbox-quickbooks.api.intuit.com/v3/company/123/salesreceipt",
+  );
+  expect(call.mock.calls[0][1]).toMatchObject({ method: "POST", redirect: "error" });
+  const rows = await findQuickbooksCashReceipt(
+    config,
+    "synthetic",
+    "SalesReceipt",
+    payload.DocNumber,
+  );
+  expect(rows).toHaveLength(1);
+  expect(new URL(call.mock.calls[1][0]).searchParams.get("query")).toBe(
+    `select * from SalesReceipt where DocNumber = '${payload.DocNumber}' maxresults 2`,
+  );
+  await expect(
+    findQuickbooksCashReceipt(config, "synthetic", "RefundReceipt", payload.DocNumber),
+  ).rejects.toThrow();
+  await expect(
+    findQuickbooksCashReceipt(config, "synthetic", "SalesReceipt", "' OR true"),
+  ).rejects.toThrow();
+  expect(call).toHaveBeenCalledTimes(2);
+});
 it("builds a fixed Intuit authorization URL with exact callback, state and accounting scope", () => {
   const url = new URL(quickbooksAuthorizationUrl(config, "synthetic-state"));
   expect(url.origin + url.pathname).toBe("https://appcenter.intuit.com/connect/oauth2");

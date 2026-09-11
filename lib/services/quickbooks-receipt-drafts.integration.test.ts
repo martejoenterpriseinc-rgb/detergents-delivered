@@ -13,6 +13,12 @@ import {
 } from "./quickbooks-receipt-drafts";
 import { receiptSettingsKey } from "./quickbooks-receipt-settings";
 import { salesMappingKey } from "./quickbooks-sales-mapping";
+import { preparedReceiptSchema } from "./quickbooks-receipt-drafts";
+import {
+  submitQuickbooksReceipt,
+  reconcileQuickbooksReceipt,
+  reconcileScheduledQuickbooksReceipts,
+} from "./quickbooks-receipt-posting";
 const config = {
   mode: "sandbox" as const,
   clientId: "synthetic",
@@ -210,7 +216,10 @@ beforeEach(async () => {
     structuredClone(sale),
   );
 });
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllEnvs();
+});
 afterAll(async () => {
   await prisma.setting.deleteMany({
     where: {
@@ -234,6 +243,334 @@ const input = () => ({
   requestKey: randomUUID(),
   orderId: sale.orderId,
   confirmed: true,
+});
+function postingProvider() {
+  vi.stubEnv("DD_QBO_RECEIPT_POSTING_ENABLED", "true");
+  vi.stubEnv("DD_QBO_RECEIPT_POSTING_COMPANY", config.mode + ":" + config.realm);
+  vi.spyOn(provider, "readQuickbooksReceiptCompany").mockResolvedValue({
+    country: "US",
+    homeCurrency: "USD",
+    usingSalesTax: true,
+    partnerTaxEnabled: null,
+  });
+  vi.spyOn(provider, "readQuickbooksAccount").mockImplementation(async (_c, _t, id) => ({
+    Id: id,
+    Name: "Synthetic account",
+    Active: true,
+    AccountType: id === "12" ? "Bank" : "Income",
+    CurrencyRef: { value: "USD" },
+  }));
+  vi.spyOn(provider, "readQuickbooksSalesEntity").mockImplementation(
+    async (_c, _t, kind, id) =>
+      kind === "customer"
+        ? { kind, id, name: "Synthetic customer", active: true, currency: "USD" }
+        : {
+            kind,
+            id,
+            name: "Synthetic item",
+            active: true,
+            type: "NonInventory",
+            tracksQuantity: false,
+            incomeAccountId: "23",
+          },
+  );
+  return vi
+    .spyOn(provider, "createQuickbooksCashReceipt")
+    .mockImplementation(async (_c, _t, entity, payload) => ({
+      [entity]: {
+        ...(payload as object),
+        Id: "990" + randomUUID().replaceAll(/\D/g, "").slice(0, 12),
+        TotalAmt: entity === "SalesReceipt" ? 22.68 : 7.56,
+      },
+    }));
+}
+async function evidence(
+  id: string,
+  remoteId = "990" + randomUUID().replace(/\D/g, "").slice(0, 12),
+) {
+  const record = await prisma.qboReceiptExport.findUniqueOrThrow({ where: { id } }),
+    prepared = preparedReceiptSchema.parse(record.payload);
+  return {
+    [prepared.entity]: {
+      ...prepared.payload,
+      Id: remoteId,
+      TotalAmt: prepared.entity === "SalesReceipt" ? 22.68 : 7.56,
+    },
+  };
+}
+it("claims once before the only provider POST and recovers a lost response through read-only receipt lookup", async () => {
+  const create = postingProvider(),
+    draft = await prepareQuickbooksReceiptDraft(admin, input()),
+    receipt = await evidence(draft.id);
+  create.mockImplementation(async () => {
+    expect(
+      (await prisma.qboReceiptExport.findUniqueOrThrow({ where: { id: draft.id } }))
+        .status,
+    ).toBe("SUBMITTING");
+    expect(
+      await prisma.auditLog.count({
+        where: { entityId: draft.id, action: "quickbooks.receipt.submitting" },
+      }),
+    ).toBe(1);
+    throw new Error("Synthetic response lost after provider acceptance");
+  });
+  const results = await Promise.allSettled([
+    submitQuickbooksReceipt(admin, draft.id),
+    submitQuickbooksReceipt(admin, draft.id),
+  ]);
+  expect(results.some((r) => r.status === "rejected")).toBe(true);
+  expect(create).toHaveBeenCalledTimes(1);
+  expect((await submitQuickbooksReceipt(admin, draft.id)).status).toBe("UNKNOWN");
+  expect(create).toHaveBeenCalledTimes(1);
+  const read = vi
+    .spyOn(provider, "findQuickbooksCashReceipt")
+    .mockResolvedValue([receipt]);
+  expect((await reconcileQuickbooksReceipt(admin, draft.id)).status).toBe("POSTED");
+  expect((await reconcileQuickbooksReceipt(admin, draft.id)).status).toBe("POSTED");
+  expect(read).toHaveBeenCalledTimes(2);
+  expect(
+    await prisma.auditLog.count({
+      where: { entityId: draft.id, action: "quickbooks.receipt.confirmed" },
+    }),
+  ).toBe(1);
+  expect(create).toHaveBeenCalledTimes(1);
+});
+it("blocks disabled/wrong-company posting, CPA authority and changed product accounts before any POST", async () => {
+  const create = postingProvider(),
+    draft = await prepareQuickbooksReceiptDraft(admin, input());
+  vi.stubEnv("DD_QBO_RECEIPT_POSTING_COMPANY", "sandbox:other");
+  await expect(submitQuickbooksReceipt(admin, draft.id)).rejects.toMatchObject({
+    status: 409,
+  });
+  vi.stubEnv("DD_QBO_RECEIPT_POSTING_COMPANY", "sandbox:" + config.realm);
+  await expect(submitQuickbooksReceipt(cpa, draft.id)).rejects.toMatchObject({
+    status: 403,
+  });
+  vi.mocked(provider.readQuickbooksSalesEntity).mockImplementation(
+    async (_c, _t, kind, id) =>
+      kind === "customer"
+        ? { kind, id, name: "Synthetic", active: true, currency: "USD" }
+        : {
+            kind,
+            id,
+            name: "Synthetic",
+            active: true,
+            type: "Inventory",
+            tracksQuantity: true,
+            incomeAccountId: "23",
+          },
+  );
+  await expect(submitQuickbooksReceipt(admin, draft.id)).rejects.toMatchObject({
+    status: 409,
+  });
+  expect(create).not.toHaveBeenCalled();
+  expect(
+    (await prisma.qboReceiptExport.findUniqueOrThrow({ where: { id: draft.id } })).status,
+  ).toBe("DRAFT");
+});
+it("rolls back a failed submission audit and refuses changed local mappings before the provider send", async () => {
+  const create = postingProvider(),
+    draft = await prepareQuickbooksReceiptDraft(admin, input());
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE "AuditLog" ADD CONSTRAINT "receipt_claim_audit_test" CHECK (action <> 'quickbooks.receipt.submitting') NOT VALID`,
+  );
+  try {
+    await expect(submitQuickbooksReceipt(admin, draft.id)).rejects.toThrow();
+    expect(
+      (await prisma.qboReceiptExport.findUniqueOrThrow({ where: { id: draft.id } }))
+        .status,
+    ).toBe("DRAFT");
+    expect(create).not.toHaveBeenCalled();
+  } finally {
+    await prisma.$executeRawUnsafe(
+      'ALTER TABLE "AuditLog" DROP CONSTRAINT "receipt_claim_audit_test"',
+    );
+  }
+  const key = salesMappingKey(config.mode, config.realm, "item", variantId),
+    row = await prisma.setting.findUniqueOrThrow({ where: { key } });
+  await setting(key, {
+    ...(row.valueJson as Prisma.JsonObject),
+    version: 2,
+    taxCode: "NON",
+  });
+  await expect(submitQuickbooksReceipt(admin, draft.id)).rejects.toMatchObject({
+    status: 409,
+  });
+  expect(create).not.toHaveBeenCalled();
+});
+it("keeps an accepted-but-unrecorded receipt held after confirmation audit failure and lets the worker recover without sending", async () => {
+  const create = postingProvider(),
+    draft = await prepareQuickbooksReceiptDraft(admin, input()),
+    receipt = await evidence(draft.id);
+  create.mockResolvedValue(receipt);
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE "AuditLog" ADD CONSTRAINT "receipt_confirmation_audit_test" CHECK (action <> 'quickbooks.receipt.confirmed') NOT VALID`,
+  );
+  try {
+    await expect(submitQuickbooksReceipt(admin, draft.id)).rejects.toMatchObject({
+      status: 503,
+    });
+    expect(
+      (await prisma.qboReceiptExport.findUniqueOrThrow({ where: { id: draft.id } }))
+        .status,
+    ).toBe("UNKNOWN");
+  } finally {
+    await prisma.$executeRawUnsafe(
+      'ALTER TABLE "AuditLog" DROP CONSTRAINT "receipt_confirmation_audit_test"',
+    );
+  }
+  vi.spyOn(provider, "findQuickbooksCashReceipt").mockResolvedValue([receipt]);
+  // Other test receipts in this isolated company are excluded from this due batch.
+  await prisma.qboReceiptExport.updateMany({
+    where: { mode: config.mode, realm: config.realm, id: { not: draft.id } },
+    data: { recoveryCheckedAt: new Date() },
+  });
+  const result = await reconcileScheduledQuickbooksReceipts(async () => true);
+  expect(result.checked).toBe(1);
+  expect(result.completed).toBe(1);
+  expect(
+    (await prisma.qboReceiptExport.findUniqueOrThrow({ where: { id: draft.id } })).status,
+  ).toBe("POSTED");
+  expect(create).toHaveBeenCalledTimes(1);
+  await expect(reconcileScheduledQuickbooksReceipts(async () => false)).rejects.toThrow(
+    "Worker lease expired",
+  );
+});
+it("holds ambiguous or changed-tax evidence and never reopens a submitted receipt for another send", async () => {
+  const create = postingProvider(),
+    draft = await prepareQuickbooksReceiptDraft(admin, input()),
+    receipt = await evidence(draft.id);
+  create.mockRejectedValue(new Error("Synthetic timeout"));
+  await expect(submitQuickbooksReceipt(admin, draft.id)).rejects.toMatchObject({
+    status: 503,
+  });
+  const read = vi
+    .spyOn(provider, "findQuickbooksCashReceipt")
+    .mockResolvedValue([receipt, receipt]);
+  await expect(reconcileQuickbooksReceipt(admin, draft.id)).rejects.toMatchObject({
+    status: 409,
+  });
+  read.mockResolvedValue([
+    { SalesReceipt: { ...receipt.SalesReceipt, TxnTaxDetail: { TotalTax: 1.69 } } },
+  ]);
+  await expect(reconcileQuickbooksReceipt(admin, draft.id)).rejects.toThrow();
+  expect(
+    (await prisma.qboReceiptExport.findUniqueOrThrow({ where: { id: draft.id } }))
+      .reconciliationIssue,
+  ).toBe("EVIDENCE_UNCONFIRMED");
+  await expect(cancelQuickbooksReceiptDraft(admin, draft.id)).rejects.toMatchObject({
+    status: 409,
+  });
+  expect((await submitQuickbooksReceipt(admin, draft.id)).status).toBe("UNKNOWN");
+  expect(create).toHaveBeenCalledTimes(1);
+});
+it("blocks a refund that failed before posting and keeps a later refund failure flagged after receipt reconciliation", async () => {
+  const create = postingProvider(),
+    parent = await prepareQuickbooksReceiptDraft(admin, input());
+  await submitQuickbooksReceipt(admin, parent.id);
+  const refunds = new Map<
+    string,
+    Awaited<ReturnType<typeof sources.recordedRefundSource>>
+  >();
+  vi.spyOn(sources, "recordedRefundSource").mockImplementation(
+    async (_tx, _orderId, id) => refunds.get(id)!,
+  );
+  async function refundFixture() {
+    const providerRefundId = "re_" + randomUUID();
+    const request = await prisma.refundRequest.create({
+      data: {
+        orderId: sale.orderId,
+        paymentId: sale.paymentId,
+        actorUserId: admin,
+        requestKey: randomUUID(),
+        requestHash: randomUUID(),
+        amountCents: 756,
+        currency: "USD",
+        reason: "Synthetic failed refund receipt",
+        providerAccountId: "acct_synthetic",
+        livemode: false,
+        providerRefundId,
+        status: "SUCCEEDED",
+        submittedAt: new Date(),
+      },
+    });
+    const a = await prisma.refundAdjustment.create({
+      data: {
+        requestId: request.id,
+        kind: "SETTLEMENT",
+        cashCents: 756,
+        netCents: 700,
+        taxCents: 56,
+        rewardCents: 200,
+        currency: "USD",
+        providerRefundId,
+      },
+    });
+    refunds.set(a.id, {
+      kind: "SETTLEMENT",
+      orderId: sale.orderId,
+      sourceId: a.id,
+      requestId: request.id,
+      customerId,
+      number: sale.number,
+      date: "2026-02-02",
+      currency: "USD",
+      cashCents: 756,
+      netCents: 700,
+      taxCents: 56,
+      rewardCents: 200,
+      providerRefundId,
+      taxEvidenceStatus: "MATCHED",
+      taxEvidenceId: "synthetic",
+      originalTaxTransactionId: "tax_original",
+      refundTaxTransactionId: "tax_refund",
+      requiresCashReceipt: true,
+      lines: [
+        {
+          orderItemId: sale.lines[0].orderItemId,
+          variantId,
+          name: "Synthetic",
+          sku: "synthetic",
+          quantity: 1,
+          netCents: 700,
+          taxCents: 56,
+          rewardCents: 200,
+        },
+      ],
+    });
+    const draft = await prepareQuickbooksReceiptDraft(admin, {
+      ...input(),
+      adjustmentId: a.id,
+    });
+    return { request, draft };
+  }
+  const first = await refundFixture();
+  await prisma.refundRequest.update({
+    where: { id: first.request.id },
+    data: { status: "FAILED" },
+  });
+  await expect(submitQuickbooksReceipt(admin, first.draft.id)).rejects.toMatchObject({
+    status: 409,
+  });
+  expect(create).toHaveBeenCalledTimes(1);
+  const second = await refundFixture(),
+    posted = await submitQuickbooksReceipt(admin, second.draft.id);
+  expect(posted.status).toBe("POSTED");
+  expect(create).toHaveBeenCalledTimes(2);
+  await prisma.refundRequest.update({
+    where: { id: second.request.id },
+    data: { status: "FAILED" },
+  });
+  vi.spyOn(provider, "findQuickbooksCashReceipt").mockResolvedValue([
+    await evidence(second.draft.id, posted.externalId!),
+  ]);
+  expect(
+    (await reconcileQuickbooksReceipt(admin, second.draft.id)).reconciliationIssue,
+  ).toBe("REFUND_COMPENSATION_REVIEW");
+  expect(
+    (await reconcileQuickbooksReceipt(admin, second.draft.id)).reconciliationIssue,
+  ).toBe("REFUND_COMPENSATION_REVIEW");
+  expect(create).toHaveBeenCalledTimes(2);
 });
 it("prepares one immutable receipt across retries, keeps cancellation history and prevents duplicate active sources", async () => {
   const raw = input(),

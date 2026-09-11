@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { cashReceiptPayload } from "@/lib/domain/quickbooks-receipt";
 import { createHash } from "node:crypto";
 import { AccountError } from "@/lib/domain/account";
 import { readManagedEnvironment } from "./vault";
@@ -194,6 +195,62 @@ export async function findQuickbooksCostJournal(
 }
 const basic = (c: QuickbooksConfig) =>
   "Basic " + Buffer.from(c.clientId + ":" + c.clientSecret).toString("base64");
+function receiptIdentity(entity: unknown, documentNumber: unknown) {
+  const kind = z.enum(["SalesReceipt", "RefundReceipt"]).parse(entity);
+  const pattern = kind === "SalesReceipt" ? /^DS[a-f0-9]{19}$/ : /^DR[a-f0-9]{19}$/;
+  return { kind, docNumber: z.string().regex(pattern).parse(documentNumber) };
+}
+export async function createQuickbooksCashReceipt(
+  config: QuickbooksConfig,
+  accessToken: string,
+  entity: "SalesReceipt" | "RefundReceipt",
+  raw: unknown,
+) {
+  const payload = cashReceiptPayload.parse(raw),
+    { kind } = receiptIdentity(entity, payload.DocNumber);
+  const host =
+    config.mode === "sandbox"
+      ? "https://sandbox-quickbooks.api.intuit.com"
+      : "https://quickbooks.api.intuit.com";
+  return providerRequest(`${host}/v3/company/${config.realm}/${kind.toLowerCase()}`, {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer " + accessToken,
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+}
+export async function findQuickbooksCashReceipt(
+  config: QuickbooksConfig,
+  accessToken: string,
+  entity: "SalesReceipt" | "RefundReceipt",
+  documentNumber: string,
+) {
+  const { kind, docNumber } = receiptIdentity(entity, documentNumber);
+  const host =
+    config.mode === "sandbox"
+      ? "https://sandbox-quickbooks.api.intuit.com"
+      : "https://quickbooks.api.intuit.com";
+  const url = new URL(`${host}/v3/company/${config.realm}/query`);
+  url.searchParams.set(
+    "query",
+    `select * from ${kind} where DocNumber = '${docNumber}' maxresults 2`,
+  );
+  const raw = await providerRequest(url.toString(), {
+    method: "GET",
+    headers: { Authorization: "Bearer " + accessToken, Accept: "application/json" },
+  });
+  const response = z
+    .object({ QueryResponse: z.record(z.string(), z.unknown()) })
+    .parse(raw).QueryResponse;
+  return z
+    .array(z.unknown())
+    .max(2)
+    .parse(response[kind] ?? [])
+    .map((r) => ({ [kind]: r }));
+}
 export async function verifyQuickbooksCompany(
   config: QuickbooksConfig,
   accessToken: string,

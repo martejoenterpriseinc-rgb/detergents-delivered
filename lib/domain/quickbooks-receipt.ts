@@ -273,6 +273,9 @@ export function matchCashReceipt(raw: unknown, expectedRaw: unknown) {
         .min(1)
         .max(31),
       Balance: money.optional(),
+      DiscountAmt: money.optional(),
+      DiscountRate: z.number().optional(),
+      HomeTotalAmt: money.optional(),
       ExchangeRate: z.number().optional(),
       GlobalTaxCalculation: z
         .enum(["TaxExcluded", "TaxInclusive", "NotApplicable"])
@@ -296,6 +299,10 @@ export function matchCashReceipt(raw: unknown, expectedRaw: unknown) {
     qboAmountCents(receipt.TotalAmt) !== expected.cashCents ||
     qboAmountCents(receipt.TxnTaxDetail.TotalTax) !== tax ||
     (receipt.Balance ?? 0) !== 0 ||
+    (receipt.DiscountAmt ?? 0) !== 0 ||
+    (receipt.DiscountRate ?? 0) !== 0 ||
+    (receipt.HomeTotalAmt !== undefined &&
+      qboAmountCents(receipt.HomeTotalAmt) !== expected.cashCents) ||
     (receipt.ExchangeRate ?? 1) !== 1 ||
     receipt.GlobalTaxCalculation === "TaxInclusive" ||
     (receipt.TxnTaxDetail.TaxLine !== undefined &&

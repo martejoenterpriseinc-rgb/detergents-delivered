@@ -69,7 +69,7 @@ export function PrepareReceiptDraft({
       </button>
       {saved && (
         <p role="status">
-          Receipt draft {saved} saved. Load receipt drafts below to review it.
+          Receipt draft {saved} saved. Load receipt exports below to review it.
         </p>
       )}
       {error && <p role="alert">{error}</p>}
@@ -78,6 +78,7 @@ export function PrepareReceiptDraft({
 }
 export function QuickbooksReceipts() {
   const [data, setData] = useState<Data | null>(null),
+    [held, setHeld] = useState<string[]>([]),
     [busy, setBusy] = useState(false),
     [confirmed, setConfirmed] = useState(""),
     [error, setError] = useState("");
@@ -110,6 +111,7 @@ export function QuickbooksReceipts() {
           : result,
       );
       setConfirmed("");
+      if (!more) setHeld([]);
     });
   }
   const money = (v: number) =>
@@ -118,16 +120,20 @@ export function QuickbooksReceipts() {
     );
   return (
     <section className="space-y-4 rounded-xl border p-5">
-      <h2 className="text-xl font-semibold">Receipt drafts</h2>
+      <h2 className="text-xl font-semibold">Receipt exports</h2>
       <p>
         Review prepared sale and cash-refund receipts. Only unsent drafts can be canceled
         here.
       </p>
       <button className="ops-button" disabled={busy} onClick={() => load()}>
-        Load receipt drafts
+        Load receipt exports
       </button>
       {data && (
         <>
+          <p>
+            New receipt submissions:{" "}
+            {data.canSubmit ? "enabled for this company" : "disabled"}.
+          </p>
           {!data.rows.length && <p>No receipt drafts are saved for this company.</p>}
           {data.rows.map((r) => (
             <article key={r.id} className="space-y-3 rounded border p-4">
@@ -144,13 +150,23 @@ export function QuickbooksReceipts() {
               <p>
                 {r.customerName} · {r.clearingAccount}
               </p>
-              {r.reconciliationIssue && <p role="alert">{r.reconciliationIssue}</p>}
+              {r.externalId && <p>QuickBooks receipt {r.externalId}</p>}
+              {r.reconciliationIssue && (
+                <p role="alert">
+                  {r.reconciliationIssue === "REFUND_COMPENSATION_REVIEW"
+                    ? "This refund was later reversed. Its accounting adjustment needs review."
+                    : "Provider receipt evidence has not been confirmed."}
+                </p>
+              )}
+              {held.includes(r.id) && r.status === "DRAFT" && (
+                <p>Reload receipt exports to check the submission state.</p>
+              )}
               {data.canWrite && r.status === "DRAFT" && (
                 <>
                   <label className="flex items-start gap-2">
                     <input
                       type="checkbox"
-                      disabled={busy}
+                      disabled={busy || held.includes(r.id)}
                       checked={confirmed === r.id}
                       onChange={(e) => setConfirmed(e.target.checked ? r.id : "")}
                     />
@@ -158,7 +174,7 @@ export function QuickbooksReceipts() {
                   </label>
                   <button
                     className="ops-button"
-                    disabled={busy || confirmed !== r.id}
+                    disabled={busy || confirmed !== r.id || held.includes(r.id)}
                     onClick={() =>
                       run(async () => {
                         await post({ action: "cancel", id: r.id, confirmed: true });
@@ -174,13 +190,73 @@ export function QuickbooksReceipts() {
                   >
                     Cancel receipt draft
                   </button>
+                  {data.canSubmit && (
+                    <>
+                      <label className="flex items-start gap-2">
+                        <input
+                          type="checkbox"
+                          disabled={busy || held.includes(r.id)}
+                          checked={confirmed === "submit:" + r.id}
+                          onChange={(e) =>
+                            setConfirmed(e.target.checked ? "submit:" + r.id : "")
+                          }
+                        />
+                        Submit this receipt to QuickBooks.
+                      </label>
+                      <button
+                        className="ops-button"
+                        disabled={
+                          busy || held.includes(r.id) || confirmed !== "submit:" + r.id
+                        }
+                        onClick={() =>
+                          run(async () => {
+                            setHeld((old) => [...new Set([...old, r.id])]);
+                            const result = await post({
+                              action: "submit",
+                              id: r.id,
+                              confirmed: true,
+                            });
+                            setData({
+                              ...data,
+                              rows: data.rows.map((p) => (p.id === r.id ? result : p)),
+                            });
+                            setConfirmed("");
+                          })
+                        }
+                      >
+                        Submit receipt once
+                      </button>
+                    </>
+                  )}
                 </>
               )}
+              {data.canWrite &&
+                ["SUBMITTING", "UNKNOWN", "POSTED"].includes(r.status) && (
+                  <button
+                    className="ops-button"
+                    disabled={busy}
+                    onClick={() =>
+                      run(async () => {
+                        const result = await post({
+                          action: "reconcile",
+                          id: r.id,
+                          confirmed: true,
+                        });
+                        setData({
+                          ...data,
+                          rows: data.rows.map((p) => (p.id === r.id ? result : p)),
+                        });
+                      })
+                    }
+                  >
+                    Check QuickBooks receipt
+                  </button>
+                )}
             </article>
           ))}
           {data.nextCursor && data.rows.length < 500 && (
             <button className="ops-button" disabled={busy} onClick={() => load(true)}>
-              More receipt drafts
+              More receipt exports
             </button>
           )}
         </>

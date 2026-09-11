@@ -1,5 +1,9 @@
 import { z } from "zod";
 import {
+  submitQuickbooksReceipt,
+  reconcileQuickbooksReceipt,
+} from "@/lib/services/quickbooks-receipt-posting";
+import {
   accountRequest,
   accountJson,
   accountFailure,
@@ -38,23 +42,27 @@ export async function POST(request: Request) {
             .strict(),
           z
             .object({
-              action: z.literal("cancel"),
+              action: z.enum(["cancel", "submit", "reconcile"]),
               id: z.string().min(1).max(100),
               confirmed: z.literal(true),
             })
             .strict(),
         ])
         .parse(await readAccountJson(request));
+    if (body.action === "prepare")
+      return accountJson(
+        await prepareQuickbooksReceiptDraft(actor, {
+          requestKey: body.requestKey,
+          orderId: body.orderId,
+          ...(body.adjustmentId ? { adjustmentId: body.adjustmentId } : {}),
+          confirmed: true,
+        }),
+      );
     if (body.action === "cancel")
       return accountJson(await cancelQuickbooksReceiptDraft(actor, body.id));
-    return accountJson(
-      await prepareQuickbooksReceiptDraft(actor, {
-        requestKey: body.requestKey,
-        orderId: body.orderId,
-        ...(body.adjustmentId ? { adjustmentId: body.adjustmentId } : {}),
-        confirmed: true,
-      }),
-    );
+    if (body.action === "submit")
+      return accountJson(await submitQuickbooksReceipt(actor, body.id));
+    return accountJson(await reconcileQuickbooksReceipt(actor, body.id));
   } catch (e) {
     return accountFailure(e);
   }

@@ -677,11 +677,11 @@ test("cost accounting preserves failed choices and distinguishes original sale f
       page.getByText(
         "Receipt draft DS" +
           "a".repeat(19) +
-          " saved. Load receipt drafts below to review it.",
+          " saved. Load receipt exports below to review it.",
         { exact: true },
       ),
     ).toBeVisible();
-    await page.getByRole("button", { name: "Load receipt drafts", exact: true }).click();
+    await page.getByRole("button", { name: "Load receipt exports", exact: true }).click();
     await expect(
       page.getByRole("heading", {
         name: "Synthetic financial order · Sale receipt",
@@ -702,6 +702,62 @@ test("cost accounting preserves failed choices and distinguishes original sale f
     await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
     await page.screenshot({
       path: info.outputPath("receipt-draft-review.png"),
+      fullPage: true,
+    });
+    let receiptPosts = 0,
+      submissionState = "DRAFT";
+    const posting = () => ({
+      ...draft(),
+      id: "synthetic-posting-receipt",
+      docNumber: "DS" + "b".repeat(19),
+      status: submissionState,
+      externalId: submissionState === "POSTED" ? "991" : null,
+      reconciliationIssue: submissionState === "UNKNOWN" ? "EVIDENCE_UNCONFIRMED" : null,
+    });
+    await page.route("**/api/admin/quickbooks/receipts*", async (route) => {
+      if (route.request().method() === "GET")
+        return route.fulfill({
+          json: { canWrite: true, canSubmit: true, nextCursor: null, rows: [posting()] },
+        });
+      const body = route.request().postDataJSON();
+      if (body.action === "submit") {
+        receiptPosts++;
+        submissionState = "UNKNOWN";
+        return route.fulfill({
+          status: 503,
+          json: { error: "Synthetic receipt response lost" },
+        });
+      }
+      expect(body.action).toBe("reconcile");
+      submissionState = "POSTED";
+      return route.fulfill({ json: posting() });
+    });
+    await page.getByRole("button", { name: "Load receipt exports", exact: true }).click();
+    await page.getByLabel("Submit this receipt to QuickBooks.").check();
+    await page.getByRole("button", { name: "Submit receipt once", exact: true }).click();
+    await expect(
+      page.getByText("Synthetic receipt response lost", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Submit receipt once", exact: true }),
+    ).toBeDisabled();
+    await page.getByRole("button", { name: "Load receipt exports", exact: true }).click();
+    await expect(
+      page.getByRole("button", { name: "Submit receipt once", exact: true }),
+    ).toHaveCount(0);
+    await page
+      .getByRole("button", { name: "Check QuickBooks receipt", exact: true })
+      .click();
+    await expect(page.getByText("QuickBooks receipt 991", { exact: true })).toBeVisible();
+    expect(receiptPosts).toBe(1);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
+    await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
+    await page.screenshot({
+      path: info.outputPath("receipt-posting-recovery.png"),
       fullPage: true,
     });
   } finally {
