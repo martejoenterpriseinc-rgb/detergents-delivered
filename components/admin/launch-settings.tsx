@@ -133,6 +133,70 @@ export function LaunchSettings({ initial }: { initial: Workspace }) {
             payment is collected at purchase and the delivery window must be accepted at
             checkout.
           </p>
+          <h2 className="text-xl font-semibold">Ongoing delivery booking</h2>
+          <label className="flex items-start gap-2">
+            <input
+              type="checkbox"
+              checked={config.rolling?.enabled ?? false}
+              onChange={(e) =>
+                setConfig({
+                  ...config,
+                  rolling: {
+                    leadDays: config.rolling?.leadDays ?? 2,
+                    horizonDays: config.rolling?.horizonDays ?? 30,
+                    enabled: e.target.checked,
+                  },
+                })
+              }
+            />
+            Allow ongoing booking after the launch cutoff, starting on launch day
+          </label>
+          <p className="text-sm">
+            New purchases use the locked area cadence within this window. Stock and
+            vehicle space must still be available. Existing delivery promises stay fixed.
+          </p>
+          {config.rolling?.enabled && (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Delivery lead time (days)">
+                <Input
+                  type="number"
+                  min={1}
+                  max={30}
+                  step={1}
+                  required
+                  value={config.rolling.leadDays}
+                  onChange={(e) =>
+                    setConfig({
+                      ...config,
+                      rolling: {
+                        ...config.rolling!,
+                        leadDays: Number(e.target.value),
+                      },
+                    })
+                  }
+                />
+              </Field>
+              <Field label="Booking horizon (days)">
+                <Input
+                  type="number"
+                  min={7}
+                  max={90}
+                  step={1}
+                  required
+                  value={config.rolling.horizonDays}
+                  onChange={(e) =>
+                    setConfig({
+                      ...config,
+                      rolling: {
+                        ...config.rolling!,
+                        horizonDays: Number(e.target.value),
+                      },
+                    })
+                  }
+                />
+              </Field>
+            </div>
+          )}
           <h2 className="text-xl font-semibold">Recurring area cadence</h2>
           <p className="text-sm">
             Assign each area to calendar weeks and a delivery day. Week 1 is the first

@@ -1,9 +1,12 @@
 import { listFeaturedShopProducts } from "@/lib/catalog-public";
 import { launchConfig } from "@/lib/services/launch";
 import { runtimeCommerceConfiguration } from "@/lib/commerce/runtime";
+import { businessDate } from "@/lib/domain/operations";
 export async function storefrontLaunchNotice() {
   const launch = await launchConfig();
-  return launch.enabled && !(await runtimeCommerceConfiguration()).enabled
+  return launch.enabled &&
+    businessDate() <= launch.cutoffDate &&
+    !(await runtimeCommerceConfiguration()).enabled
     ? `Planned launch: ${launch.launchDate}. First delivery window: ${launch.launchDate}–${launch.firstDeliveryBy}. Ordering is not open yet.`
     : "";
 }

@@ -75,6 +75,18 @@ export const launchSchema = z
     cutoffDate: dateSchema,
     firstDeliveryBy: dateSchema,
     cadences: z.array(cadenceSchema).max(100),
+    rolling: z
+      .object({
+        enabled: z.boolean(),
+        leadDays: z.number().int().min(1).max(30),
+        horizonDays: z.number().int().min(7).max(90),
+      })
+      .strict()
+      .refine(
+        (v) => v.horizonDays > v.leadDays,
+        "The booking horizon must be longer than the delivery lead time.",
+      )
+      .optional(),
   })
   .strict()
   .superRefine((v, ctx) => {
@@ -136,4 +148,31 @@ export function zonePostalCodes(boundary: unknown): string[] {
     .object({ postalCodes: z.array(z.string().regex(/^\d{5}$/)).max(500) })
     .safeParse(boundary);
   return parsed.success ? [...new Set(parsed.data.postalCodes)] : [];
+}
+
+/** Saved launch promises remain fixed. Ongoing booking is an explicit opt-in. */
+export function deliveryBookingWindow(
+  config: LaunchConfig,
+  today: string,
+): { start: string; end: string; kind: "LAUNCH" | "ROLLING" } | null {
+  dateSchema.parse(today);
+  if (!config.enabled) return null;
+  if (today <= config.cutoffDate && today <= config.firstDeliveryBy)
+    return {
+      start: config.launchDate > today ? config.launchDate : today,
+      end: config.firstDeliveryBy,
+      kind: "LAUNCH",
+    };
+  // Never bypass the launch cutoff before opening day.
+  if (!config.rolling?.enabled || today < config.launchDate) return null;
+  const add = (days: number) => {
+    const d = new Date(today);
+    d.setUTCDate(d.getUTCDate() + days);
+    return d.toISOString().slice(0, 10);
+  };
+  return {
+    start: add(config.rolling.leadDays),
+    end: add(config.rolling.horizonDays),
+    kind: "ROLLING",
+  };
 }

@@ -6,7 +6,11 @@ import { launchConfig } from "@/lib/services/launch";
 import { quotePromotion } from "@/lib/services/promotions";
 import { rewardBalance } from "@/lib/services/loyalty";
 import { businessDate } from "@/lib/domain/operations";
-import { cadenceDates, zonePostalCodes } from "@/lib/domain/launch";
+import {
+  cadenceDates,
+  zonePostalCodes,
+  deliveryBookingWindow,
+} from "@/lib/domain/launch";
 import { AccountError } from "@/lib/domain/account";
 import { pickCurrentPrice } from "@/lib/prices";
 import {
@@ -53,8 +57,8 @@ export async function buildSnapshot(
   if (matches.length !== 1) throw new AccountError("Delivery area needs review.", 409);
   const launch = await launchConfig(tx);
   const today = businessDate();
-  if (!launch.enabled || today > launch.cutoffDate || launch.firstDeliveryBy < today)
-    throw new AccountError("The launch order window is closed.", 409);
+  const window = deliveryBookingWindow(launch, today);
+  if (!window) throw new AccountError("The order window is closed.", 409);
   const cadence = launch.cadences.find(
     (c) => c.zoneId === address.deliveryZoneId && c.locked,
   );
@@ -63,13 +67,12 @@ export async function buildSnapshot(
       "Delivery capacity for this area is not open for booking yet.",
       409,
     );
-  const dates = cadenceDates(
-    cadence,
-    launch.launchDate > today ? launch.launchDate : today,
-    launch.firstDeliveryBy,
-  );
+  const dates = cadenceDates(cadence, window.start, window.end);
   if (!dates.length)
-    throw new AccountError("No delivery dates are available in this launch window.", 409);
+    throw new AccountError(
+      "No delivery dates are available in this booking window.",
+      409,
+    );
   const lines = [];
   for (const item of [...input.lines].sort((a, b) =>
     a.variantId.localeCompare(b.variantId),
@@ -159,8 +162,8 @@ export async function buildSnapshot(
     },
     zoneId: address.deliveryZoneId!,
     launchVersion: launch.version,
-    launchDate: launch.launchDate,
-    firstDeliveryBy: launch.firstDeliveryBy,
+    launchDate: window.start,
+    firstDeliveryBy: window.end,
     vehicleId: cadence.vehicleId,
     dates,
     lines,

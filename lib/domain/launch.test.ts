@@ -9,6 +9,7 @@ import {
   cadenceDates,
   zonePostalCodes,
   calendarWeek,
+  deliveryBookingWindow,
 } from "./launch";
 describe("launch and mixed vehicle capacity", () => {
   const capacity = {
@@ -69,5 +70,47 @@ describe("launch and mixed vehicle capacity", () => {
     expect(zonePostalCodes({ type: "Polygon", coordinates: [] })).toEqual([]);
     expect(zonePostalCodes({ postalCodes: ["60102", "60102"] })).toEqual(["60102"]);
     expect(zonePostalCodes({ postalCodes: ["60102", "6010"] })).toEqual([]);
+  });
+});
+
+describe("ongoing delivery booking", () => {
+  const config = {
+    ...defaultLaunch,
+    enabled: true,
+    rolling: { enabled: true, leadDays: 2, horizonDays: 30 },
+  };
+  it("keeps legacy settings closed after cutoff and does not bypass the prelaunch gap", () => {
+    expect(
+      deliveryBookingWindow({ ...defaultLaunch, enabled: true }, "2026-11-01"),
+    ).toBeNull();
+    expect(deliveryBookingWindow({ ...config, enabled: false }, "2026-11-01")).toBeNull();
+    expect(
+      deliveryBookingWindow({ ...config, cutoffDate: "2026-10-10" }, "2026-10-12"),
+    ).toBeNull();
+    expect(deliveryBookingWindow(config, "2026-10-14")).toEqual({
+      start: "2026-10-15",
+      end: "2026-10-31",
+      kind: "LAUNCH",
+    });
+  });
+  it("uses calendar-day lead and horizon across month/year and leap boundaries", () => {
+    expect(deliveryBookingWindow(config, "2026-12-31")).toEqual({
+      start: "2027-01-02",
+      end: "2027-01-30",
+      kind: "ROLLING",
+    });
+    expect(deliveryBookingWindow(config, "2028-02-28")?.start).toBe("2028-03-01");
+    expect(() => deliveryBookingWindow(config, "2026-02-30")).toThrow();
+  });
+  it("rejects unsafe lead/horizon settings and unknown overrides", () => {
+    for (const rolling of [
+      { enabled: true, leadDays: 0, horizonDays: 30 },
+      { enabled: true, leadDays: 7, horizonDays: 7 },
+      { enabled: true, leadDays: 2, horizonDays: 91 },
+      { enabled: true, leadDays: 1.5, horizonDays: 30 },
+      { enabled: true, leadDays: 2, horizonDays: 30, ignoreCapacity: true },
+    ])
+      expect(launchSchema.safeParse({ ...config, rolling }).success).toBe(false);
+    expect(launchSchema.parse(defaultLaunch).rolling).toBeUndefined();
   });
 });

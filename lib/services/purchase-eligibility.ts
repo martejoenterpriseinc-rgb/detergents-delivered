@@ -2,7 +2,12 @@ import { runtimeCommerceConfiguration } from "@/lib/commerce/runtime";
 import { prisma } from "@/lib/prisma";
 import { accountIdentity } from "./customer-account";
 import { launchConfig } from "./launch";
-import { zonePostalCodes } from "@/lib/domain/launch";
+import { businessDate } from "@/lib/domain/operations";
+import {
+  zonePostalCodes,
+  deliveryBookingWindow,
+  cadenceDates,
+} from "@/lib/domain/launch";
 
 export async function purchaseEligibility(userId: string | null, zip: string) {
   if (!/^\d{5}$/.test(zip))
@@ -58,15 +63,20 @@ export async function purchaseEligibility(userId: string | null, zip: string) {
     };
   const launch = await launchConfig();
   const commerce = await runtimeCommerceConfiguration();
+  const window = deliveryBookingWindow(launch, businessDate());
+  const cadence = launch.cadences.find((c) => c.zoneId === matches[0].id && c.locked);
+  const bookable = Boolean(
+    window && cadence && cadenceDates(cadence, window.start, window.end).length,
+  );
   return {
     ...base,
     eligible: true,
-    canPurchase: commerce.enabled && launch.enabled,
+    canPurchase: commerce.enabled && bookable,
     message:
-      commerce.enabled && launch.enabled
+      commerce.enabled && bookable
         ? `Your account is eligible. Review delivery availability and final pricing at checkout.`
-        : launch.enabled
+        : launch.enabled && businessDate() < launch.launchDate
           ? `Planned launch: ${launch.launchDate}. The first delivery window is ${launch.launchDate}–${launch.firstDeliveryBy}; exact dates will be confirmed after routes are reviewed. Ordering is not open yet.`
-          : "Your account and delivery address are eligible. Ordering opens after payment and delivery booking are connected.",
+          : "Your account and delivery address are eligible. Ordering is not open for this address right now.",
   };
 }

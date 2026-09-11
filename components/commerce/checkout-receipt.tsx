@@ -75,8 +75,8 @@ export function CheckoutReceipt({ initial }: { initial: Receipt }) {
       )}
       <p>Delivery address: {data.address}</p>
       <p>
-        First delivery window: {data.launchDate}–{data.firstDeliveryBy}. The exact date
-        will be confirmed after route review.
+        Delivery window: {data.launchDate}–{data.firstDeliveryBy}. The exact date will be
+        confirmed after route review.
       </p>
       {data.lines.map((l) => (
         <p key={l.variantId}>
