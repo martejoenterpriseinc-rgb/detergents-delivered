@@ -188,7 +188,12 @@ export async function buildSnapshot(
     taxBreakdown: [],
   };
 }
-export async function createQuote(userId: string, raw: unknown) {
+export async function createQuote(
+  userId: string,
+  raw: unknown,
+  authorizationGuard?: (tx: Prisma.TransactionClient) => Promise<void>,
+) {
+  await authorizationGuard?.(prisma);
   const config = await readCommerce();
   const input = checkoutInput.parse(raw);
   input.lines.sort((a, b) => a.variantId.localeCompare(b.variantId));
@@ -205,6 +210,7 @@ export async function createQuote(userId: string, raw: unknown) {
   }
   await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM "Customer" WHERE id = ${customer.id} FOR UPDATE`;
+    await authorizationGuard?.(tx);
     const attempts = await tx.auditLog.count({
       where: {
         entityType: "Customer",
@@ -241,6 +247,7 @@ export async function createQuote(userId: string, raw: unknown) {
   const attempt = await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM "Customer" WHERE id = ${customer.id} FOR UPDATE`;
     await customerIdentity(tx, userId);
+    await authorizationGuard?.(tx);
     await attachSubscriptionQuote(tx, customer.id, input);
     return tx.checkoutAttempt.upsert({
       where: { customerId_requestKey: key },

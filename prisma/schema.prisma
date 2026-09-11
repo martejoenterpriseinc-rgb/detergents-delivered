@@ -31,6 +31,7 @@ enum RoleCode {
 }
 
 model User {
+  commerceGrants CommerceGrant[]
   id            String    @id @default(cuid())
   name          String?
   email         String    @unique
@@ -183,6 +184,7 @@ model UserRole {
 // ---------------------------------------------------------------------------
 
 model Customer {
+  commerceGrants CommerceGrant[]
   purchaseApprovedAt DateTime?
   id        String    @id @default(cuid())
   userId    String    @unique
@@ -1691,4 +1693,26 @@ model RefundTaxEvidence {
  currency String
  createdAt DateTime @default(now())
  @@unique([providerAccountId, livemode, refundTaxTransactionId], map: "RefundTaxEvidence_provider_refund_key")
+}
+
+model CommerceGrant {
+ id String @id
+ userId String
+ user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+ customerId String
+ customer Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+ tokenHash String @unique
+ requestHash String
+ sessionVersion Int
+ environment String
+ label String
+ scopes String[]
+ consentVersion String
+ expiresAt DateTime
+ revokedAt DateTime?
+ lastUsedAt DateTime?
+ windowStartedAt DateTime?
+ requestCount Int @default(0)
+ createdAt DateTime @default(now())
+ @@index([customerId, createdAt])
 }
