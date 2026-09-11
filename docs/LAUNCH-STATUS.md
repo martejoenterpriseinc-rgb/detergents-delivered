@@ -1,8 +1,16 @@
-# Launch status — September 10, 2026
+# Launch status — September 11, 2026
 
 Public launch is not complete. Checkout remains disabled in sandbox and isolated production.
 
-## Verified release
+## Current build and provider checkpoint
+
+The deployed release subsequently advanced to `a2495c4afa459a9c258804841fa37b038ecdd828` (PR 33). The release evidence below describes an earlier deployment, not the current revision. PRs 34–36 add internal submission, outcome recording and lost-response recovery; PR 36 passed CI 112 with 454 tests. Those increments have no public refund submission caller.
+
+The next increment adds atomic signed refund settlement/compensation, redeemed-credit and referral adjustments, and a read-only Taxes report. See REFUND-SETTLEMENT.md for exact behavior and unfinished activation gates. Its new migration has not been applied to either hosted database.
+
+A September 11 read of each hosted app's effective commerce configuration confirmed checkout disabled and Stripe server key, account identity and webhook secret missing in both environments. Production acceptance acknowledgement is also missing. No real provider acceptance or Go Live status is claimed.
+
+## Earlier verified release
 
 Revision `c23118f26c52c7f313453c1e546f9df4536a05f3` passed CI 101, run 34490225118: lint, typecheck, schema validation, migration replay, build, 255 unit tests, 108 native PostgreSQL tests and 40 browser tests (403 total). It includes the staff return controls, read-only Stripe refund inspection and explicit first production owner command.
 

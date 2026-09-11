@@ -148,6 +148,23 @@ test("expenses and mileage persist, recover lost saves, export and restrict CPA 
       await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
     ).toBe(true);
     await page.screenshot({ path: info.outputPath("cpa-center.png"), fullPage: true });
+    await page.goto("/admin/taxes");
+    await expect(page.getByRole("heading", { name: "Taxes", exact: true })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Recorded sale tax" })).toBeVisible();
+    await expect(
+      page.getByRole("region", { name: "Awaiting provider tax matching" }),
+    ).toBeVisible();
+    await expect(
+      page.getByText("These totals are not a tax return", { exact: false }),
+    ).toBeVisible();
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+    ).toBe(true);
+    await page.screenshot({ path: info.outputPath("tax-review.png"), fullPage: true });
+    await page.goto("/admin/taxes?from=2026-02-30&to=2026-03-01");
+    await expect(
+      page.getByRole("alert").filter({ hasText: "Choose valid dates" }),
+    ).toBeVisible();
     await page.goto("/admin/cpa?from=2026-02-30&to=2026-03-01");
     await expect(
       page.getByRole("alert").filter({ hasText: "Choose valid dates" }),

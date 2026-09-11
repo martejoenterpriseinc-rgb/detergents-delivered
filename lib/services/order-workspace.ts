@@ -1,3 +1,7 @@
+import {
+  effectiveRefundCents,
+  refundAccountingSelect,
+} from "@/lib/domain/refund-settlement";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { accountIdentity } from "@/lib/services/customer-account";
@@ -158,6 +162,7 @@ export async function getOrder(userId: string, input: unknown) {
           },
           refunds: {
             select: {
+              ...refundAccountingSelect,
               id: true,
               amountCents: true,
               currency: true,
@@ -305,7 +310,12 @@ export async function getOrder(userId: string, input: unknown) {
             verifiedAt: e.verifiedAt?.toISOString() ?? null,
           })),
         })),
-        refunds: r.refunds.map((f) => ({ ...f, createdAt: f.createdAt.toISOString() })),
+        refunds: r.refunds.map(({ request, ...f }) => ({
+          ...f,
+          originalAmountCents: f.amountCents,
+          amountCents: effectiveRefundCents({ ...f, request }),
+          createdAt: f.createdAt.toISOString(),
+        })),
         refundRequests: r.refundRequests.map((request) => ({
           id: request.id,
           amountCents: request.amountCents,

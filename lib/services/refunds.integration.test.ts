@@ -1,11 +1,16 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { prisma } from "@/lib/prisma";
-const refundReviewMocks = vi.hoisted(() => ({ inspect: vi.fn(), submit: vi.fn() }));
+const refundReviewMocks = vi.hoisted(() => ({
+  inspect: vi.fn(),
+  submit: vi.fn(),
+  verifyBalance: vi.fn(async () => undefined),
+}));
 vi.mock("@/lib/commerce/refund-provider", async (original) => ({
   ...(await original<typeof import("@/lib/commerce/refund-provider")>()),
   inspectStripeRefunds: refundReviewMocks.inspect,
   submitClaimedStripeRefund: refundReviewMocks.submit,
+  verifyRefundBalanceEvidence: refundReviewMocks.verifyBalance,
 }));
 import { reviewPaymentRefunds } from "./refund-review";
 
@@ -21,8 +26,10 @@ import {
   recordRefundSubmissionResult,
   submitPreparedRefund,
   recoverRefundSubmission,
+  reconcileRefundSettlement,
 } from "./refunds";
 import { getOrder } from "./order-workspace";
+import { readTaxReview } from "./tax-review";
 
 const marker = randomUUID();
 const checkoutId = randomUUID();
@@ -418,6 +425,358 @@ describe("durable refund submission claim (isolated PostgreSQL, no provider writ
     };
     return { ...f, observation, outcome: { ...f.input, observation } };
   }
+  async function rewardFixture() {
+    const f = await fixture();
+    await cancelPreparedRefund(admin, {
+      ...f.input,
+      reason: "Replace with reward-funded synthetic purchase",
+    });
+    await prisma.order.update({
+      where: { id: f.sale.id },
+      data: { discountCents: 900, taxCents: 168, totalCents: 2268 },
+    });
+    await prisma.orderItem.update({
+      where: { id: f.sale.items[0].id },
+      data: { discountCents: 900, taxCents: 168, lineTotalCents: 2268 },
+    });
+    await prisma.payment.update({
+      where: { id: f.sale.payments[0].id },
+      data: { amountCents: 2268 },
+    });
+    await prisma.checkoutAttempt.update({
+      where: { orderId: f.sale.id },
+      data: {
+        snapshot: {
+          rewardsCents: 600,
+          promotionCents: 300,
+          lines: [
+            { variantId: variant, quantity: 3, discountCents: 900, netCents: 2100 },
+          ],
+        },
+      },
+    });
+    const hold = await prisma.rewardReservation.create({
+      data: {
+        orderId: f.sale.id,
+        customerId: customer,
+        requestKey: randomUUID(),
+        amountCents: 600,
+        orderTotalCents: 2868,
+        state: "USED",
+      },
+    });
+    await prisma.rewardEntry.create({
+      data: {
+        customerId: customer,
+        orderId: f.sale.id,
+        sourceId: hold.id,
+        kind: "REDEMPTION",
+        amountCents: -600,
+        entryKey: `order:${f.sale.id}:use`,
+        description: "Synthetic redemption",
+      },
+    });
+    const draft = await f.prepare();
+    const input = { orderId: f.sale.id, requestId: draft.id };
+    const claim = await claimRefundSubmission(admin, input);
+    const observation = {
+      id: `re_${randomUUID().replaceAll("-", "")}`,
+      amountCents: 756,
+      currency: "USD",
+      status: "succeeded" as const,
+      created: Math.floor(Date.now() / 1000),
+      requestId: draft.id,
+      requestHash: claim.requestHash,
+      project: "detergents-delivered" as const,
+      balanceTransactionId: "txn_synthetic",
+      failureBalanceTransactionId: null,
+    };
+    const provider = {
+      paymentIntentId: claim.binding.paymentIntentId,
+      chargeId: "ch_synthetic",
+      accountId: "acct_synthetic",
+      live: false,
+      capturedCents: 2268,
+      currency: "USD",
+      disputed: false,
+      refunds: [observation],
+    };
+    return { ...f, draft, input, observation, provider };
+  }
+  it("settles mixed reward purchases once and compensates cash, tax and rewards atomically", async () => {
+    const f = await rewardFixture();
+    refundReviewMocks.inspect.mockResolvedValue({
+      ...f.provider,
+      refunds: [{ ...f.observation, status: "pending" }],
+    });
+    await reconcileRefundSettlement(admin, f.input);
+    expect(
+      await prisma.refundAdjustment.count({ where: { requestId: f.draft.id } }),
+    ).toBe(0);
+    refundReviewMocks.inspect.mockResolvedValue(f.provider);
+    await reconcileRefundSettlement(admin, f.input);
+    await reconcileRefundSettlement(admin, f.input);
+    expect(
+      await prisma.refundAdjustment.findMany({ where: { requestId: f.draft.id } }),
+    ).toMatchObject([
+      {
+        kind: "SETTLEMENT",
+        cashCents: 756,
+        netCents: 700,
+        taxCents: 56,
+        rewardCents: 200,
+        taxEvidenceStatus: "UNVERIFIED",
+      },
+    ]);
+    expect(
+      await prisma.payment.findUniqueOrThrow({ where: { id: f.sale.payments[0].id } }),
+    ).toMatchObject({ status: "PARTIALLY_REFUNDED", amountCents: 2268 });
+    expect(
+      await prisma.rewardEntry.aggregate({
+        where: { sourceId: f.draft.id },
+        _sum: { amountCents: true },
+      }),
+    ).toMatchObject({ _sum: { amountCents: 200 } });
+    const year = new Date().getUTCFullYear();
+    const taxFilter = { from: `${year}-01-01`, to: `${year}-12-31` };
+    const taxBefore = await readTaxReview(cpa, taxFilter);
+    expect(taxBefore.rows.filter((r) => r.orderId === f.sale.id)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: "SALE", taxCents: 168 }),
+        expect.objectContaining({
+          kind: "SETTLEMENT",
+          taxCents: 56,
+          evidence: "Provider tax matching pending",
+        }),
+      ]),
+    );
+    await expect(readTaxReview(users[2], taxFilter)).rejects.toMatchObject({
+      status: 403,
+    });
+    refundReviewMocks.inspect.mockResolvedValue({
+      ...f.provider,
+      refunds: [
+        {
+          ...f.observation,
+          status: "failed",
+          failureBalanceTransactionId: "txn_returned",
+        },
+      ],
+    });
+    refundReviewMocks.verifyBalance.mockResolvedValue(undefined);
+    await reconcileRefundSettlement(admin, f.input);
+    await reconcileRefundSettlement(admin, f.input);
+    expect(refundReviewMocks.verifyBalance).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ failureBalanceTransactionId: "txn_returned" }),
+      true,
+    );
+    expect(
+      await prisma.refundAdjustment.aggregate({
+        where: { requestId: f.draft.id },
+        _sum: { cashCents: true, taxCents: true, rewardCents: true },
+      }),
+    ).toMatchObject({ _sum: { cashCents: 0, taxCents: 0, rewardCents: 0 } });
+    expect(await prisma.refund.count({ where: { requestId: f.draft.id } })).toBe(1);
+    expect(
+      await prisma.rewardEntry.aggregate({
+        where: { sourceId: f.draft.id },
+        _sum: { amountCents: true },
+      }),
+    ).toMatchObject({ _sum: { amountCents: 0 } });
+    expect(
+      await prisma.payment.findUniqueOrThrow({ where: { id: f.sale.payments[0].id } }),
+    ).toMatchObject({ status: "CAPTURED" });
+    const viewed = await getOrder(admin, f.sale.id);
+    expect(viewed.refunds[0].amountCents).toBe(0);
+    expect(viewed.refunds[0].originalAmountCents).toBe(756);
+    const taxAfter = await readTaxReview(cpa, taxFilter);
+    expect(taxAfter.rows.filter((r) => r.orderId === f.sale.id)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: "COMPENSATION", taxCents: -56 }),
+        expect.objectContaining({ kind: "SETTLEMENT", taxCents: 56 }),
+      ]),
+    );
+    expect(taxAfter.refundTaxCents).toBe(taxBefore.refundTaxCents - 56);
+    expect(taxAfter.unverifiedAdjustments).toBe(taxBefore.unverifiedAdjustments + 1);
+    expect(JSON.stringify(viewed)).not.toContain("txn_returned");
+    // Released quantity can be prepared again without consuming historical failed cash.
+    expect((await f.prepare()).amountCents).toBe(756);
+  });
+  it("rejects stale success after failure and unverified compensation without releasing funds", async () => {
+    const f = await rewardFixture();
+    refundReviewMocks.inspect.mockResolvedValue(f.provider);
+    await reconcileRefundSettlement(admin, f.input);
+    refundReviewMocks.inspect.mockResolvedValue({
+      ...f.provider,
+      refunds: [{ ...f.observation, status: "failed" }],
+    });
+    refundReviewMocks.verifyBalance.mockRejectedValueOnce(
+      new Error("Unverified returned funds"),
+    );
+    await expect(reconcileRefundSettlement(admin, f.input)).rejects.toThrow();
+    expect(
+      await prisma.refundAdjustment.count({ where: { requestId: f.draft.id } }),
+    ).toBe(1);
+    refundReviewMocks.inspect.mockResolvedValue({
+      ...f.provider,
+      refunds: [
+        {
+          ...f.observation,
+          status: "failed",
+          failureBalanceTransactionId: "txn_returned",
+        },
+      ],
+    });
+    await reconcileRefundSettlement(admin, f.input);
+    refundReviewMocks.inspect.mockResolvedValue(f.provider);
+    await expect(reconcileRefundSettlement(admin, f.input)).rejects.toMatchObject({
+      status: 409,
+    });
+  });
+  it("serializes settlement retries and rolls all ledger writes back with an audit failure", async () => {
+    const f = await rewardFixture();
+    refundReviewMocks.inspect.mockResolvedValue(f.provider);
+    await prisma.$executeRawUnsafe(
+      "ALTER TABLE \"AuditLog\" ADD CONSTRAINT dd_settlement_audit CHECK (action <> 'refund.settlement.reconciled') NOT VALID",
+    );
+    try {
+      await expect(reconcileRefundSettlement(admin, f.input)).rejects.toThrow();
+      expect(
+        await prisma.refundAdjustment.count({ where: { requestId: f.draft.id } }),
+      ).toBe(0);
+      expect(await prisma.refund.count({ where: { requestId: f.draft.id } })).toBe(0);
+      expect(await prisma.rewardEntry.count({ where: { sourceId: f.draft.id } })).toBe(0);
+      expect(
+        await prisma.payment.findUniqueOrThrow({ where: { id: f.sale.payments[0].id } }),
+      ).toMatchObject({ status: "CAPTURED" });
+    } finally {
+      await prisma.$executeRawUnsafe(
+        'ALTER TABLE "AuditLog" DROP CONSTRAINT dd_settlement_audit',
+      );
+    }
+    const results = await Promise.allSettled([
+      reconcileRefundSettlement(admin, f.input),
+      reconcileRefundSettlement(admin, f.input),
+    ]);
+    expect(results.some((r) => r.status === "fulfilled")).toBe(true);
+    await reconcileRefundSettlement(admin, f.input);
+    expect(
+      await prisma.refundAdjustment.count({ where: { requestId: f.draft.id } }),
+    ).toBe(1);
+    const adjustment = await prisma.refundAdjustment.findFirstOrThrow({
+      where: { requestId: f.draft.id },
+    });
+    await expect(
+      prisma.refundAdjustment.update({
+        where: { id: adjustment.id },
+        data: { cashCents: 1 },
+      }),
+    ).rejects.toThrow();
+    await expect(
+      prisma.refundAdjustment.delete({ where: { id: adjustment.id } }),
+    ).rejects.toThrow();
+  });
+  it("denies settlement to CPA/customer and rejects changed saved allocation", async () => {
+    const f = await rewardFixture();
+    for (const actor of [cpa, users[2]])
+      await expect(reconcileRefundSettlement(actor, f.input)).rejects.toMatchObject({
+        status: 403,
+      });
+    refundReviewMocks.inspect.mockImplementationOnce(async () => {
+      await prisma.refundRequestLine.updateMany({
+        where: { refundRequestId: f.draft.id },
+        data: { rewardCents: 201 },
+      });
+      return f.provider;
+    });
+    await expect(reconcileRefundSettlement(admin, f.input)).rejects.toMatchObject({
+      status: 409,
+    });
+    expect(await prisma.refund.count({ where: { requestId: f.draft.id } })).toBe(0);
+  });
+  it("reverses and restores earned referral awards with the same refund transaction", async () => {
+    const f = await rewardFixture();
+    const owner = await prisma.user.create({
+      data: { email: `referrer-${randomUUID()}@example.test`, customer: { create: {} } },
+      include: { customer: true },
+    });
+    users.push(owner.id);
+    const link = await prisma.referralLink.create({
+      data: {
+        customerId: owner.customer!.id,
+        token: randomUUID(),
+        label: "Synthetic",
+        requestKey: randomUUID(),
+        expiresAt: new Date(Date.now() + 86400000),
+      },
+    });
+    const referral = await prisma.referral.create({
+      data: {
+        referrerId: owner.customer!.id,
+        refereeId: customer,
+        code: randomUUID(),
+        linkId: link.id,
+        status: "REWARDED",
+        creditCents: 100,
+        friendCreditCents: 50,
+        qualifyingOrderId: f.sale.id,
+        redeemedAt: new Date(),
+      },
+    });
+    for (const [id, amount] of [
+      [owner.customer!.id, 100],
+      [customer, 50],
+    ] as const)
+      await prisma.rewardEntry.create({
+        data: {
+          customerId: id,
+          kind: "REFERRAL",
+          amountCents: amount,
+          entryKey: randomUUID(),
+          sourceId: referral.id,
+          orderId: f.sale.id,
+          description: "Synthetic earned referral reward",
+        },
+      });
+    refundReviewMocks.inspect.mockResolvedValue(f.provider);
+    await reconcileRefundSettlement(admin, f.input);
+    expect(
+      await prisma.referral.findUniqueOrThrow({ where: { id: referral.id } }),
+    ).toMatchObject({ status: "REVERSED" });
+    expect(
+      await prisma.rewardEntry.aggregate({
+        where: { sourceId: referral.id },
+        _sum: { amountCents: true },
+      }),
+    ).toMatchObject({ _sum: { amountCents: 0 } });
+    refundReviewMocks.inspect.mockResolvedValue({
+      ...f.provider,
+      refunds: [
+        {
+          ...f.observation,
+          status: "failed",
+          failureBalanceTransactionId: "txn_returned",
+        },
+      ],
+    });
+    await reconcileRefundSettlement(admin, f.input);
+    await reconcileRefundSettlement(admin, f.input);
+    expect(
+      await prisma.referral.findUniqueOrThrow({ where: { id: referral.id } }),
+    ).toMatchObject({ status: "REWARDED" });
+    expect(
+      await prisma.rewardEntry.aggregate({
+        where: { sourceId: referral.id },
+        _sum: { amountCents: true },
+      }),
+    ).toMatchObject({ _sum: { amountCents: 150 } });
+    expect(
+      await prisma.rewardEntry.count({
+        where: { sourceId: referral.id, kind: "RESTORE" },
+      }),
+    ).toBe(2);
+  });
   function recoveryObservation(f: Awaited<ReturnType<typeof claimedFixture>>) {
     return {
       paymentIntentId: f.sale.payments[0].externalId!,
