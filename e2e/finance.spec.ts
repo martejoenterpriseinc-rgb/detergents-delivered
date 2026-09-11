@@ -126,6 +126,30 @@ test("expenses and mileage persist, recover lost saves, export and restrict CPA 
     expect(crossOrigin.status()).toBe(403);
     await page.context().clearCookies();
     await login(`cpa-${email}`);
+    await page.goto("/admin/cpa");
+    await expect(
+      page.getByRole("heading", { name: "CPA Center", exact: true }),
+    ).toBeVisible();
+    const expenseReview = page.getByRole("region", { name: "Recorded expenses" });
+    const expenseExport = await expenseReview
+      .getByRole("link", { name: "Export expenses CSV" })
+      .getAttribute("href");
+    const cpaCsv = await page.request.get(expenseExport!);
+    expect(cpaCsv.status()).toBe(200);
+    expect(await cpaCsv.text()).toContain(saved[0].id);
+    const sourceUrl = await expenseReview
+      .getByRole("link", { name: "Review records" })
+      .getAttribute("href");
+    const source = await page.request.get(
+      sourceUrl!.replace("/admin/expenses?", "/api/admin/finance?kind=expense&"),
+    );
+    await expect(expenseReview).toContainText(`$${(await source.json()).total}`);
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+    ).toBe(true);
+    await page.screenshot({ path: info.outputPath("cpa-center.png"), fullPage: true });
+    await page.goto("/admin/cpa?from=2026-02-30&to=2026-03-01");
+    await expect(page.getByRole("alert")).toContainText("Choose valid dates");
     await page.goto("/admin/expenses");
     await expect(
       page.getByRole("button", { name: "+ Expense", exact: true }),
