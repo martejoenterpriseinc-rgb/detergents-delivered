@@ -12,7 +12,12 @@ vi.mock("@/lib/commerce/runtime", () => ({
   readCommerce: vi.fn(async () => ({ accountId: "acct_synthetic", live: false })),
 }));
 
-import { prepareRefund, recordStockReturn, cancelPreparedRefund } from "./refunds";
+import {
+  prepareRefund,
+  recordStockReturn,
+  cancelPreparedRefund,
+  claimRefundSubmission,
+} from "./refunds";
 import { getOrder } from "./order-workspace";
 
 const marker = randomUUID();
@@ -325,6 +330,199 @@ describe("read-only refund review (isolated PostgreSQL, mock provider)", () => {
       reviewPaymentRefunds(admin, { orderId: order, paymentId: payment }),
     ).rejects.toThrow("Provider unavailable");
     expect(await prisma.refundRequest.count({ where: { orderId: order } })).toBe(0);
+  });
+});
+
+describe("durable refund submission claim (isolated PostgreSQL, no provider writes)", () => {
+  async function fixture() {
+    const id = randomUUID();
+    const sale = await prisma.order.create({
+      data: {
+        number: `claim-${id}`,
+        customerId: customer,
+        status: "DELIVERED",
+        subtotalCents: 3000,
+        taxCents: 240,
+        totalCents: 3240,
+        items: {
+          create: {
+            productVariantId: variant,
+            nameSnapshot: "Saved product",
+            skuSnapshot: id,
+            quantity: 3,
+            unitPriceCents: 1000,
+            taxCents: 240,
+            lineTotalCents: 3240,
+          },
+        },
+        checkoutAttempt: {
+          create: {
+            id,
+            customerId: customer,
+            state: "PAID",
+            requestKey: id,
+            requestHash: id,
+            snapshot: {},
+            expiresAt: new Date(),
+            stripeAccountId: "acct_synthetic",
+            livemode: false,
+          },
+        },
+        payments: {
+          create: {
+            provider: "STRIPE",
+            status: "CAPTURED",
+            amountCents: 3240,
+            externalId: `pi_${id.replaceAll("-", "")}`,
+            events: {
+              create: {
+                type: "checkout.session.completed",
+                externalId: `checkout:${id}:paid`,
+                verifiedAt: new Date(),
+              },
+            },
+          },
+        },
+      },
+      include: { items: true, payments: true },
+    });
+    const prepare = () =>
+      prepareRefund(admin, {
+        requestKey: randomUUID(),
+        orderId: sale.id,
+        paymentId: sale.payments[0].id,
+        reason: "Customer requested partial refund",
+        lines: [{ orderItemId: sale.items[0].id, quantity: 1 }],
+      });
+    const draft = await prepare();
+    return { sale, draft, prepare, input: { orderId: sale.id, requestId: draft.id } };
+  }
+  it("allows exactly one claim under concurrency and preserves payment and stock", async () => {
+    const f = await fixture();
+    const results = await Promise.allSettled([
+      claimRefundSubmission(admin, f.input),
+      claimRefundSubmission(admin, f.input),
+    ]);
+    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    expect(results.filter((r) => r.status === "rejected")).toHaveLength(1);
+    const saved = await prisma.refundRequest.findUniqueOrThrow({
+      where: { id: f.draft.id },
+    });
+    expect(saved.status).toBe("SUBMITTING");
+    expect(saved.submittedAt).not.toBeNull();
+    expect(
+      await prisma.refundRequestEvent.count({
+        where: { refundRequestId: saved.id, type: "refund.submission.claimed" },
+      }),
+    ).toBe(1);
+    expect(
+      await prisma.auditLog.count({
+        where: { entityId: saved.id, action: "refund.submission.claimed" },
+      }),
+    ).toBe(1);
+    expect(await prisma.refund.count({ where: { orderId: f.sale.id } })).toBe(0);
+    expect(
+      (await prisma.payment.findUniqueOrThrow({ where: { id: f.sale.payments[0].id } }))
+        .status,
+    ).toBe("CAPTURED");
+    await expect(
+      cancelPreparedRefund(admin, {
+        ...f.input,
+        reason: "Cannot cancel a submitted request",
+      }),
+    ).rejects.toMatchObject({ status: 409 });
+  });
+  it("rejects CPA/customer claims and cross-order requests", async () => {
+    const f = await fixture();
+    for (const actor of [cpa, users[2]])
+      await expect(claimRefundSubmission(actor, f.input)).rejects.toMatchObject({
+        status: 403,
+      });
+    await expect(
+      claimRefundSubmission(admin, { ...f.input, orderId: "other" }),
+    ).rejects.toMatchObject({ status: 404 });
+    expect(
+      (await prisma.refundRequest.findUniqueOrThrow({ where: { id: f.draft.id } }))
+        .submittedAt,
+    ).toBeNull();
+  });
+  it("atomically rolls back the claim when its audit fails", async () => {
+    const f = await fixture();
+    await prisma.$executeRawUnsafe(
+      "ALTER TABLE \"AuditLog\" ADD CONSTRAINT dd_refund_claim_audit CHECK (action <> 'refund.submission.claimed') NOT VALID",
+    );
+    try {
+      await expect(claimRefundSubmission(admin, f.input)).rejects.toThrow();
+      expect(
+        await prisma.refundRequest.findUniqueOrThrow({ where: { id: f.draft.id } }),
+      ).toMatchObject({ status: "PREPARED", submittedAt: null });
+      expect(
+        await prisma.refundRequestEvent.count({ where: { refundRequestId: f.draft.id } }),
+      ).toBe(1);
+    } finally {
+      await prisma.$executeRawUnsafe(
+        'ALTER TABLE "AuditLog" DROP CONSTRAINT dd_refund_claim_audit',
+      );
+    }
+  });
+  it("blocks altered allocations and payment identity before claiming", async () => {
+    const f = await fixture();
+    await prisma.refundRequest.update({
+      where: { id: f.draft.id },
+      data: { amountCents: 1081 },
+    });
+    await expect(claimRefundSubmission(admin, f.input)).rejects.toMatchObject({
+      status: 409,
+    });
+    await prisma.refundRequest.update({
+      where: { id: f.draft.id },
+      data: { amountCents: 1080, livemode: true },
+    });
+    await expect(claimRefundSubmission(admin, f.input)).rejects.toMatchObject({
+      status: 409,
+    });
+    await prisma.refundRequest.update({
+      where: { id: f.draft.id },
+      data: { livemode: false, requestHash: "changed" },
+    });
+    await expect(claimRefundSubmission(admin, f.input)).rejects.toMatchObject({
+      status: 409,
+    });
+    expect(
+      (await prisma.refundRequest.findUniqueOrThrow({ where: { id: f.draft.id } }))
+        .submittedAt,
+    ).toBeNull();
+  });
+  it("blocks a second request while a prior outcome is unknown, including delayed retries", async () => {
+    const f = await fixture();
+    const next = await f.prepare();
+    await claimRefundSubmission(admin, f.input);
+    await prisma.refundRequest.update({
+      where: { id: f.draft.id },
+      data: { status: "UNKNOWN", submittedAt: new Date("2026-01-01") },
+    });
+    await expect(claimRefundSubmission(admin, f.input)).rejects.toMatchObject({
+      status: 409,
+    });
+    await expect(
+      claimRefundSubmission(admin, { orderId: f.sale.id, requestId: next.id }),
+    ).rejects.toMatchObject({ status: 409 });
+  });
+  it("serializes draft cancellation against the submission claim", async () => {
+    const f = await fixture();
+    const results = await Promise.allSettled([
+      claimRefundSubmission(admin, f.input),
+      cancelPreparedRefund(admin, {
+        ...f.input,
+        reason: "Customer withdrew the refund request",
+      }),
+    ]);
+    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    const saved = await prisma.refundRequest.findUniqueOrThrow({
+      where: { id: f.draft.id },
+    });
+    expect(["SUBMITTING", "CANCELED"]).toContain(saved.status);
+    expect(saved.submittedAt !== null).toBe(saved.status === "SUBMITTING");
   });
 });
 

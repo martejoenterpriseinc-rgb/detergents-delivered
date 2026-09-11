@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
+import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { AccountError } from "@/lib/domain/account";
 import { hasPermission, permissionsForRoles } from "@/lib/domain/authz";
@@ -16,6 +17,12 @@ import { accountIdentity } from "@/lib/services/customer-account";
 import { persistInventoryTransaction } from "@/lib/services/inventory-ledger";
 
 type Tx = Prisma.TransactionClient;
+const submissionInput = z
+  .object({
+    orderId: z.string().min(1).max(100),
+    requestId: z.string().min(1).max(100),
+  })
+  .strict();
 const reservedRefundStates = [
   "PREPARED",
   "SUBMITTING",
@@ -30,6 +37,170 @@ async function refundAccess(tx: Tx, userId: string) {
   const permissions = permissionsForRoles(user.userRoles.map(({ role }) => role.code));
   if (!hasPermission(permissions, "orders.write"))
     throw new AccountError("Order management access required.", 403);
+}
+
+/** Internal submission boundary. No HTTP/startup caller until settlement acceptance passes. */
+export async function claimRefundSubmission(userId: string, raw: unknown) {
+  const input = submissionInput.parse(raw);
+  await refundAccess(prisma, userId);
+  const commerce = await readCommerce(true);
+  return prisma.$transaction(async (tx) => {
+    await refundAccess(tx, userId);
+    await tx.$queryRaw`SELECT id FROM "Order" WHERE id = ${input.orderId} FOR UPDATE`;
+    const request = await tx.refundRequest.findUnique({
+      where: { id: input.requestId },
+      include: {
+        lines: true,
+        payment: { include: { events: true, refunds: true } },
+        order: {
+          include: {
+            items: true,
+            checkoutAttempt: true,
+            rewardReservation: true,
+            refundRequests: { include: { lines: true } },
+          },
+        },
+      },
+    });
+    if (!request || request.orderId !== input.orderId)
+      throw new AccountError("Refund request not found.", 404);
+    // Includes failed/canceled attempts: only reconciliation may resolve a prior submission.
+    if (request.submittedAt || request.providerRefundId || request.status !== "PREPARED")
+      throw new AccountError(
+        "This refund cannot be submitted again. Review its existing outcome.",
+        409,
+      );
+    const { payment, order } = request;
+    const checkout = order.checkoutAttempt;
+    if (
+      !checkout ||
+      checkout.state !== "PAID" ||
+      request.providerAccountId !== commerce.accountId ||
+      request.livemode !== commerce.live ||
+      checkout.stripeAccountId !== request.providerAccountId ||
+      checkout.livemode !== request.livemode ||
+      payment.orderId !== order.id ||
+      payment.provider !== "STRIPE" ||
+      !["CAPTURED", "PARTIALLY_REFUNDED"].includes(payment.status) ||
+      !payment.externalId?.startsWith("pi_") ||
+      payment.amountCents !== order.totalCents ||
+      payment.currency !== order.currency ||
+      request.currency !== payment.currency ||
+      !["PAID", "FULFILLING", "OUT_FOR_DELIVERY", "DELIVERED"].includes(order.status) ||
+      order.rewardReservation?.amountCents ||
+      payment.refunds.some((r) => !r.requestId) ||
+      !payment.events.some(
+        (e) =>
+          e.verifiedAt &&
+          e.externalId === `checkout:${checkout.id}:paid` &&
+          ["checkout.session.completed", "checkout.session.reconciled"].includes(e.type),
+      )
+    )
+      throw new AccountError(
+        "Original payment and refund evidence requires review.",
+        409,
+      );
+    const originalInput = refundRequestInput.parse({
+      requestKey: request.requestKey,
+      orderId: request.orderId,
+      paymentId: request.paymentId,
+      reason: request.reason,
+      lines: request.lines
+        .map((l) => ({ orderItemId: l.orderItemId, quantity: l.quantity }))
+        .sort((a, b) => a.orderItemId.localeCompare(b.orderItemId)),
+    });
+    if (
+      fingerprint(originalInput) !== request.requestHash ||
+      request.amountCents <= 0 ||
+      request.lines.some(
+        (l) => l.rewardCents !== 0 || l.netCents < 0 || l.taxCents < 0,
+      ) ||
+      request.lines.reduce((total, l) => total + l.netCents + l.taxCents, 0) !==
+        request.amountCents
+    )
+      throw new AccountError("Saved refund allocation requires review.", 409);
+    const active = order.refundRequests.filter((r) =>
+      reservedRefundStates.includes(r.status as (typeof reservedRefundStates)[number]),
+    );
+    if (
+      active.some(
+        (r) =>
+          r.id !== request.id &&
+          ["SUBMITTING", "UNKNOWN", "PENDING", "REQUIRES_ACTION"].includes(r.status),
+      )
+    )
+      throw new AccountError(
+        "Resolve the existing refund attempt before submitting another.",
+        409,
+      );
+    for (const line of request.lines) {
+      const item = order.items.find((i) => i.id === line.orderItemId);
+      const held = active
+        .flatMap((r) => r.lines)
+        .filter((l) => l.orderItemId === line.orderItemId);
+      if (
+        !item ||
+        held.reduce((s, l) => s + l.quantity, 0) > item.quantity ||
+        held.reduce((s, l) => s + l.netCents, 0) > item.lineTotalCents - item.taxCents ||
+        held.reduce((s, l) => s + l.taxCents, 0) > item.taxCents
+      )
+        throw new AccountError("Refund exceeds the purchased item allocation.", 409);
+    }
+    assertRefundCapacity({
+      capturedCents: payment.amountCents,
+      settledCents: payment.refunds.reduce((s, r) => s + r.amountCents, 0),
+      unresolvedCents: active
+        .filter((r) => r.id !== request.id && r.status !== "SUCCEEDED")
+        .reduce((s, r) => s + r.amountCents, 0),
+      requestedCents: request.amountCents,
+    });
+    const submittedAt = new Date();
+    await tx.refundRequest.update({
+      where: { id: request.id },
+      data: {
+        status: "SUBMITTING",
+        submittedAt,
+        lastError: null,
+      },
+    });
+    await tx.refundRequestEvent.create({
+      data: {
+        refundRequestId: request.id,
+        type: "refund.submission.claimed",
+        status: "SUBMITTING",
+        evidenceJson: { actorUserId: userId },
+      },
+    });
+    await tx.auditLog.create({
+      data: {
+        actorUserId: userId,
+        action: "refund.submission.claimed",
+        entityType: "RefundRequest",
+        entityId: request.id,
+        beforeJson: { status: "PREPARED" },
+        afterJson: {
+          status: "SUBMITTING",
+          amountCents: request.amountCents,
+          currency: request.currency,
+        },
+      },
+    });
+    // Internal envelope only; never return provider bindings to a browser.
+    return {
+      requestId: request.id,
+      requestHash: request.requestHash,
+      amountCents: request.amountCents,
+      submittedAt: submittedAt.toISOString(),
+      binding: {
+        accountId: request.providerAccountId,
+        live: request.livemode,
+        checkoutId: checkout.id,
+        paymentIntentId: payment.externalId,
+        amountCents: payment.amountCents,
+        currency: payment.currency,
+      },
+    };
+  });
 }
 
 function fingerprint(value: unknown) {
