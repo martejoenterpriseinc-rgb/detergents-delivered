@@ -1,6 +1,6 @@
 # QuickBooks Online
 
-Accounting integration contract. Company authorization is implemented in `QUICKBOOKS-CONNECTION.md`; mapping and outbound posting remain unfinished and disabled. No real provider acceptance is implied.
+Accounting integration contract. Company authorization is implemented in `QUICKBOOKS-CONNECTION.md`; expense account mapping is implemented in `QUICKBOOKS-ACCOUNT-MAPPING.md`. Outbound posting remains unfinished and disabled. No real provider acceptance is implied.
 
 ## Source of truth
 

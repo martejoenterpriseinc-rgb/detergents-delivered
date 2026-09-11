@@ -4,6 +4,8 @@ import {
   exchangeQuickbooksToken,
   revokeQuickbooksToken,
   verifyQuickbooksCompany,
+  readQuickbooksAccounts,
+  readQuickbooksAccount,
 } from "./quickbooks-client";
 const config = {
   mode: "sandbox" as const,
@@ -21,6 +23,34 @@ it("builds a fixed Intuit authorization URL with exact callback, state and accou
   expect(url.searchParams.get("state")).toBe("synthetic-state");
   expect(url.searchParams.get("scope")).toBe("com.intuit.quickbooks.accounting");
   expect(url.toString()).not.toContain(config.clientSecret);
+});
+it("reads a bounded chart page and strips balances from account choices", async () => {
+  const account = {
+    Id: "1",
+    Name: "Synthetic supplies",
+    AccountType: "Expense",
+    Active: true,
+    CurrencyRef: { value: "USD" },
+    CurrentBalance: 999,
+  };
+  const call = vi
+    .fn()
+    .mockResolvedValueOnce(Response.json({ QueryResponse: { Account: [account] } }))
+    .mockResolvedValueOnce(Response.json({ Account: account }));
+  vi.stubGlobal("fetch", call);
+  const result = await readQuickbooksAccounts(config, "synthetic-access", 101);
+  expect(result.accounts[0]).not.toHaveProperty("CurrentBalance");
+  expect(result.nextStart).toBeNull();
+  expect(new URL(call.mock.calls[0][0]).searchParams.get("query")).toContain(
+    "startposition 101 maxresults 100",
+  );
+  expect(await readQuickbooksAccount(config, "synthetic-access", "1")).not.toHaveProperty(
+    "CurrentBalance",
+  );
+  await expect(
+    readQuickbooksAccount(config, "synthetic-access", "1/other"),
+  ).rejects.toThrow();
+  expect(call).toHaveBeenCalledTimes(2);
 });
 it("exchanges and refreshes tokens against the fixed endpoint without redirects", async () => {
   const token = {

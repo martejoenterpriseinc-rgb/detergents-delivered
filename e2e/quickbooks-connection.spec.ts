@@ -80,6 +80,103 @@ test("QuickBooks intended-company confirmation, failed connection and CPA isolat
       fullPage: true,
     });
     await page.unroute("**/api/admin/quickbooks");
+    const mappingRequests: Array<{ requestKey: string }> = [];
+    const mapping = {
+      version: 1,
+      mode: "sandbox",
+      realm: "123456789",
+      categoryId: "synthetic-category",
+      expenseAccount: {
+        id: "1",
+        name: "Synthetic supplies",
+        type: "Expense",
+        currency: "USD",
+      },
+      paymentAccount: { id: "2", name: "Synthetic bank", type: "Bank", currency: "USD" },
+      verifiedAt: new Date().toISOString(),
+    };
+    await page.route("**/api/admin/quickbooks/accounts*", async (route) => {
+      if (route.request().method() === "POST") {
+        mappingRequests.push(route.request().postDataJSON());
+        return route.fulfill({
+          status: mappingRequests.length === 1 ? 503 : 200,
+          contentType: "application/json",
+          body: JSON.stringify(
+            mappingRequests.length === 1
+              ? { error: "Synthetic mapping save interrupted" }
+              : mapping,
+          ),
+        });
+      }
+      const body = route.request().url().includes("kind=mappings")
+        ? {
+            canWrite: true,
+            realm: "123456789",
+            categories: [
+              {
+                id: "synthetic-category",
+                name: "Synthetic supplies category",
+                mapping: null,
+              },
+            ],
+          }
+        : {
+            realm: "123456789",
+            accounts: [
+              {
+                Id: "1",
+                Name: "Synthetic supplies",
+                AccountType: "Expense",
+                Active: true,
+                CurrencyRef: { value: "USD" },
+              },
+              {
+                Id: "2",
+                Name: "Synthetic bank",
+                AccountType: "Bank",
+                Active: true,
+                CurrencyRef: { value: "USD" },
+              },
+            ],
+            nextStart: null,
+          };
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(body),
+      });
+    });
+    await page
+      .getByRole("button", { name: "Load company accounts", exact: true })
+      .click();
+    await page
+      .getByLabel("Expense category", { exact: true })
+      .selectOption("synthetic-category");
+    await page
+      .getByLabel("QuickBooks expense account", { exact: true })
+      .selectOption("1");
+    await page.getByLabel("Paid from account", { exact: true }).selectOption("2");
+    await expect(
+      page.getByRole("button", { name: "Save account mapping", exact: true }),
+    ).toBeDisabled();
+    await page
+      .getByLabel("I reviewed these accounts for this category and company.")
+      .check();
+    await page.getByRole("button", { name: "Save account mapping", exact: true }).click();
+    await expect(
+      page.getByRole("alert").filter({ hasText: "Synthetic mapping save interrupted" }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Save account mapping", exact: true }).click();
+    await expect(
+      page.getByRole("status").filter({ hasText: "Saved mapping:" }),
+    ).toBeVisible();
+    expect(mappingRequests).toHaveLength(2);
+    expect(mappingRequests[0].requestKey).toBe(mappingRequests[1].requestKey);
+    await page.screenshot({
+      path: info.outputPath("quickbooks-account-mapping.png"),
+      fullPage: true,
+    });
+    await page.unroute("**/api/admin/quickbooks/accounts*");
     await page.context().clearCookies();
     await login("cpa");
     await page.goto("/admin/reports/quickbooks?connection=connected");

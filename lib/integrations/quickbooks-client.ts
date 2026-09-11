@@ -118,6 +118,57 @@ export async function verifyQuickbooksCompany(
     })
     .parse(response).CompanyInfo.CompanyName;
 }
+const accountSchema = z.object({
+  Id: z.string().regex(/^\d{1,30}$/),
+  Name: z.string().min(1).max(200),
+  AccountType: z.string().min(1).max(80),
+  Active: z.boolean(),
+  CurrencyRef: z.object({ value: z.string() }).optional(),
+});
+export type QuickbooksAccount = z.infer<typeof accountSchema>;
+export async function readQuickbooksAccounts(
+  config: QuickbooksConfig,
+  accessToken: string,
+  start: number,
+) {
+  const host =
+    config.mode === "sandbox"
+      ? "https://sandbox-quickbooks.api.intuit.com"
+      : "https://quickbooks.api.intuit.com";
+  const url = new URL(`${host}/v3/company/${config.realm}/query`);
+  url.searchParams.set(
+    "query",
+    `select * from Account where Active = true startposition ${start} maxresults 100`,
+  );
+  const response = await providerRequest(url.toString(), {
+    method: "GET",
+    headers: { Authorization: "Bearer " + accessToken, Accept: "application/json" },
+  });
+  const rows =
+    z
+      .object({
+        QueryResponse: z.object({ Account: z.array(accountSchema).max(100).optional() }),
+      })
+      .parse(response).QueryResponse.Account ?? [];
+  return { accounts: rows, nextStart: rows.length === 100 ? start + 100 : null };
+}
+export async function readQuickbooksAccount(
+  config: QuickbooksConfig,
+  accessToken: string,
+  id: string,
+) {
+  if (!/^\d{1,30}$/.test(id)) throw new AccountError("Choose a valid account.");
+  const host =
+    config.mode === "sandbox"
+      ? "https://sandbox-quickbooks.api.intuit.com"
+      : "https://quickbooks.api.intuit.com";
+  return z.object({ Account: accountSchema }).parse(
+    await providerRequest(`${host}/v3/company/${config.realm}/account/${id}`, {
+      method: "GET",
+      headers: { Authorization: "Bearer " + accessToken, Accept: "application/json" },
+    }),
+  ).Account;
+}
 export async function exchangeQuickbooksToken(
   config: QuickbooksConfig,
   input: { code: string } | { refreshToken: string },
