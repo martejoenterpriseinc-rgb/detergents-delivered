@@ -5,6 +5,7 @@ const refundReviewMocks = vi.hoisted(() => ({
   inspect: vi.fn(),
   submit: vi.fn(),
   verifyBalance: vi.fn(async () => undefined),
+  taxReport: vi.fn(),
 }));
 vi.mock("@/lib/commerce/refund-provider", async (original) => ({
   ...(await original<typeof import("@/lib/commerce/refund-provider")>()),
@@ -12,6 +13,10 @@ vi.mock("@/lib/commerce/refund-provider", async (original) => ({
   submitClaimedStripeRefund: refundReviewMocks.submit,
   verifyRefundBalanceEvidence: refundReviewMocks.verifyBalance,
 }));
+vi.mock("@/lib/commerce/tax-report", () => ({
+  readRefundTaxEvidence: refundReviewMocks.taxReport,
+}));
+import { matchRefundTaxEvidence } from "./refund-tax-evidence";
 import { reviewPaymentRefunds } from "./refund-review";
 
 vi.mock("@/lib/commerce/runtime", () => ({
@@ -351,6 +356,78 @@ describe("read-only refund review (isolated PostgreSQL, mock provider)", () => {
 });
 
 describe("durable refund submission claim (isolated PostgreSQL, no provider writes)", () => {
+  it("records immutable tax report evidence once with financial authorization and audit rollback", async () => {
+    const f = await rewardFixture();
+    refundReviewMocks.inspect.mockResolvedValue(f.provider);
+    await reconcileRefundSettlement(admin, f.input);
+    await prisma.checkoutAttempt.update({
+      where: { orderId: f.sale.id },
+      data: { stripeSessionId: "cs_" + randomUUID().replaceAll("-", "") },
+    });
+    const adjustment = await prisma.refundAdjustment.findFirstOrThrow({
+      where: { requestId: f.draft.id, kind: "SETTLEMENT" },
+    });
+    const input = {
+      adjustmentId: adjustment.id,
+      reportRunId: "frr_synthetic",
+      confirmed: true,
+    };
+    const suffix = randomUUID().replaceAll("-", "");
+    refundReviewMocks.taxReport.mockResolvedValue({
+      originalTaxTransactionId: "tax_sale" + suffix,
+      refundTaxTransactionId: "tax_refund" + suffix,
+      taxCents: 56,
+      reportRunId: input.reportRunId,
+      fileId: "file_synthetic",
+      reportHash: "a".repeat(64),
+    });
+    for (const actor of [cpa, users[2]])
+      await expect(matchRefundTaxEvidence(actor, input)).rejects.toMatchObject({
+        status: 403,
+      });
+    expect(refundReviewMocks.taxReport).not.toHaveBeenCalled();
+    await prisma.$executeRawUnsafe(
+      "ALTER TABLE \"AuditLog\" ADD CONSTRAINT dd_tax_audit CHECK (action <> 'refund.tax-report.matched') NOT VALID".replaceAll(
+        '\\"',
+        '"',
+      ),
+    );
+    try {
+      await expect(matchRefundTaxEvidence(admin, input)).rejects.toThrow();
+      expect(
+        await prisma.refundTaxEvidence.count({ where: { adjustmentId: adjustment.id } }),
+      ).toBe(0);
+    } finally {
+      await prisma.$executeRawUnsafe(
+        'ALTER TABLE "AuditLog" DROP CONSTRAINT dd_tax_audit',
+      );
+    }
+    const results = await Promise.all([
+      matchRefundTaxEvidence(admin, input),
+      matchRefundTaxEvidence(admin, input),
+    ]);
+    expect(results[0].id).toBe(results[1].id);
+    await expect(
+      prisma.refundTaxEvidence.update({
+        where: { id: results[0].id },
+        data: { taxCents: 55 },
+      }),
+    ).rejects.toThrow();
+    expect(
+      (await prisma.refundAdjustment.findUniqueOrThrow({ where: { id: adjustment.id } }))
+        .taxEvidenceStatus,
+    ).toBe("UNVERIFIED");
+    const review = await readTaxReview(cpa, {});
+    expect(review.rows.find((row) => row.id === adjustment.id)).toMatchObject({
+      evidence: "Stripe tax report matched",
+      canMatch: false,
+    });
+    expect(
+      await prisma.auditLog.count({
+        where: { entityId: adjustment.id, action: "refund.tax-report.matched" },
+      }),
+    ).toBe(1);
+  });
   async function deferExistingRecovery() {
     await prisma.refundRequest.updateMany({
       where: { order: { customerId: customer } },

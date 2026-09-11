@@ -1628,6 +1628,7 @@ model CheckoutProviderEvent {
 
 /// Append-only signed refund accounting. A compensation never removes the original refund.
 model RefundAdjustment {
+  taxEvidence RefundTaxEvidence?
   id String @id @default(cuid())
   requestId String
   request RefundRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
@@ -1673,4 +1674,21 @@ model SubscriptionCycle {
   attempts CheckoutAttempt[] @relation("CycleAttempts")
   @@unique([subscriptionId, cycleNumber])
   @@index([state, scheduledFor])
+}
+
+model RefundTaxEvidence {
+ id String @id @default(cuid())
+ adjustmentId String @unique
+ adjustment RefundAdjustment @relation(fields: [adjustmentId], references: [id], onDelete: Restrict)
+ providerAccountId String
+ livemode Boolean
+ reportRunId String
+ fileId String
+ reportHash String
+ originalTaxTransactionId String
+ refundTaxTransactionId String
+ taxCents Int
+ currency String
+ createdAt DateTime @default(now())
+ @@unique([providerAccountId, livemode, refundTaxTransactionId], map: "RefundTaxEvidence_provider_refund_key")
 }

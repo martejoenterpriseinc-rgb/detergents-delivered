@@ -14,7 +14,7 @@ export async function readTaxReview(userId: string, raw: unknown) {
   return prisma.$transaction(
     async (tx) => {
       await tx.$executeRawUnsafe("SET TRANSACTION READ ONLY");
-      await financeAccess(tx, userId);
+      const canMatchTax = await financeAccess(tx, userId);
       const [orders, adjustments] = await Promise.all([
         tx.order.findMany({
           where: {
@@ -32,6 +32,7 @@ export async function readTaxReview(userId: string, raw: unknown) {
         tx.refundAdjustment.findMany({
           where: { currency: "USD", createdAt: dates, kind: { not: "REWARD_ONLY" } },
           include: {
+            taxEvidence: true,
             request: { select: { orderId: true, order: { select: { number: true } } } },
           },
           take: 5001,
@@ -70,6 +71,7 @@ export async function readTaxReview(userId: string, raw: unknown) {
           kind: "SALE",
           taxCents: o.taxCents,
           evidence: "Saved paid order",
+          canMatch: false,
         })),
         ...adjustments.map((a) => ({
           id: a.id,
@@ -78,16 +80,17 @@ export async function readTaxReview(userId: string, raw: unknown) {
           date: a.createdAt.toISOString(),
           kind: a.kind,
           taxCents: a.taxCents,
-          evidence: "Provider tax matching pending",
+          evidence: a.taxEvidence
+            ? "Stripe tax report matched"
+            : "Provider tax matching pending",
+          canMatch: canMatchTax && a.kind === "SETTLEMENT" && !a.taxEvidence,
         })),
       ].sort((a, b) => b.date.localeCompare(a.date) || a.id.localeCompare(b.id));
       return {
         filter,
         saleTaxCents: trusted.reduce((n, o) => n + o.taxCents, 0),
         refundTaxCents: adjustments.reduce((n, a) => n + a.taxCents, 0),
-        unverifiedAdjustments: adjustments.filter(
-          (a) => a.taxEvidenceStatus !== "VERIFIED",
-        ).length,
+        unverifiedAdjustments: adjustments.filter((a) => !a.taxEvidence).length,
         excludedOrders: orders.length - trusted.length,
         count: rows.length,
         rows: rows.slice((filter.page - 1) * 50, filter.page * 50),
