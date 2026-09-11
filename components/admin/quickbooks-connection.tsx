@@ -1,4 +1,5 @@
 "use client";
+import { QuickbooksCosts } from "./quickbooks-costs";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { QuickbooksMapping } from "./quickbooks-mapping";
@@ -148,6 +149,7 @@ export function QuickbooksConnection({
       )}
       <QuickbooksMapping />
       <QuickbooksExpenses />
+      <QuickbooksCosts />
     </div>
   );
 }
