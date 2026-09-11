@@ -2,7 +2,11 @@ import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { integrationEnvironment } from "@/lib/integration-environment";
 
-export const jobNames = ["payment-reconciliation", "recovery-email"] as const;
+export const jobNames = [
+  "payment-reconciliation",
+  "recovery-email",
+  "subscription-cycles",
+] as const;
 export type JobName = (typeof jobNames)[number];
 export type JobResult = {
   state: "HEALTHY" | "BLOCKED" | "ATTENTION";
@@ -13,7 +17,8 @@ export type JobResult = {
     | "PROVIDER_SETUP_REQUIRED"
     | "PAYMENT_REVIEW_REQUIRED"
     | "EMAIL_RETRY_REQUIRED"
-    | "DELIVERY_DISABLED";
+    | "DELIVERY_DISABLED"
+    | "SUBSCRIPTION_REVIEW_REQUIRED";
 };
 export const leaseDuration = 300_000;
 export async function claimJob(name: JobName, now = new Date()) {

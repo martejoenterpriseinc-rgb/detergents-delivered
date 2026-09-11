@@ -11,6 +11,7 @@ import { assertSessionIdentity, createStripeCheckout, stripeClient } from "./str
 import { json, publicCheckout } from "./quote";
 import { type CheckoutSnapshot, heldStates } from "./domain";
 
+import { settleSubscriptionCycle } from "@/lib/services/subscription-cycles";
 export async function ownedCheckout(userId: string, id: string) {
   const { customer } = await customerIdentity(prisma, userId);
   const a = await prisma.checkoutAttempt.findFirst({
@@ -371,6 +372,7 @@ export async function settleVerifiedSession(
         where: { id },
         data: { state: "PAID", lastError: null },
       });
+      await settleSubscriptionCycle(tx, id, a.customerId, a.subscriptionCycleId);
       await tx.auditLog.create({
         data: {
           action: "checkout.payment.finalized",
@@ -435,13 +437,19 @@ export async function reconcileCheckout(
   );
 }
 export async function cancelCheckout(userId: string, id: string) {
-  const a = await ownedCheckout(userId, id);
+  let a = await ownedCheckout(userId, id);
   if (a.state === "QUOTED") {
-    await prisma.checkoutAttempt.updateMany({
-      where: { id, state: "QUOTED" },
-      data: { state: "EXPIRED" },
+    const canceled = await prisma.$transaction(async (tx) => {
+      await checkoutLock(tx, a.customerId);
+      await customerIdentity(tx, userId);
+      const changed = await tx.checkoutAttempt.updateMany({
+        where: { id, customerId: a.customerId, state: "QUOTED" },
+        data: { state: "EXPIRED" },
+      });
+      return changed.count === 1;
     });
-    return;
+    if (canceled) return;
+    a = await ownedCheckout(userId, id);
   }
   if (!a.stripeSessionId)
     throw new AccountError(

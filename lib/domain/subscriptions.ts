@@ -46,3 +46,5 @@ export const subscriptionChangeInput = z
     action: z.enum(["pause", "resume", "skip", "cancel"]),
   })
   .strict();
+
+export const subscriptionCycleInput = z.object({ subscriptionId: id }).strict();

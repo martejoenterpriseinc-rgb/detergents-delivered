@@ -932,6 +932,7 @@ model Subscription {
   cancelledAt       DateTime?
 
   items SubscriptionItem[]
+  cycles SubscriptionCycle[]
 
   @@index([customerId])
   @@index([status, nextOrderAt])
@@ -1562,6 +1563,9 @@ model CustomerInvite {
 /// Durable checkout state. Provider uncertainty never releases resource holds.
 model CheckoutAttempt {
   id String @id @default(cuid())
+  paidSubscriptionCycle SubscriptionCycle? @relation("CyclePayment")
+  subscriptionCycleId String?
+  subscriptionCycle SubscriptionCycle? @relation("CycleAttempts", fields: [subscriptionCycleId], references: [id], onDelete: Restrict)
   customerId String
   customer Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
   requestKey String
@@ -1591,6 +1595,7 @@ model CheckoutAttempt {
   events CheckoutProviderEvent[]
   @@unique([customerId, requestKey])
   @@index([state, updatedAt])
+  @@index([subscriptionCycleId])
   @@index([vehicleId, serviceDate, state])
 }
 
@@ -1649,4 +1654,21 @@ model SubscriptionEvent {
   evidence Json
   createdAt DateTime @default(now())
   @@index([subscriptionId, createdAt])
+}
+
+model SubscriptionCycle {
+  id String @id @default(cuid())
+  subscriptionId String
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Restrict)
+  cycleNumber Int
+  scheduledFor DateTime @db.Date
+  state String @default("READY")
+  snapshot Json
+  paidCheckoutId String? @unique
+  paidCheckout CheckoutAttempt? @relation("CyclePayment", fields: [paidCheckoutId], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  attempts CheckoutAttempt[] @relation("CycleAttempts")
+  @@unique([subscriptionId, cycleNumber])
+  @@index([state, scheduledFor])
 }

@@ -1,3 +1,5 @@
+import { businessDate } from "../lib/domain/operations";
+import { quarterDate } from "../lib/domain/subscriptions";
 import { randomUUID } from "node:crypto";
 import { test, expect } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
@@ -151,6 +153,37 @@ test("household quarterly consent, lost-save retry, pause, skip, resume and canc
       path: info.outputPath("quarterly-subscriptions.png"),
       fullPage: true,
     });
+    const sub = await db.subscription.findFirstOrThrow({
+      where: { customerId: customer.id },
+    });
+    const past = new Date(businessDate());
+    past.setUTCFullYear(past.getUTCFullYear() - 1);
+    await db.subscription.update({
+      where: { id: sub.id },
+      data: {
+        anchorDate: past,
+        nextOrderAt: new Date(
+          quarterDate(past.toISOString().slice(0, 10), sub.cycleNumber),
+        ),
+      },
+    });
+    await page.reload();
+    await page.getByRole("button", { name: "Review this quarter", exact: true }).click();
+    await expect(
+      page.getByRole("heading", { name: "Review your quarterly purchase", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByText("Ordering is not open right now.", { exact: false }),
+    ).toBeVisible();
+    await page.reload();
+    expect(await db.subscriptionCycle.count({ where: { subscriptionId: sub.id } })).toBe(
+      1,
+    );
+    await page.screenshot({
+      path: info.outputPath("quarterly-cycle-review.png"),
+      fullPage: true,
+    });
+    await page.getByRole("link", { name: "Back to subscriptions", exact: true }).click();
     await page.getByRole("button", { name: "Cancel subscription", exact: true }).click();
     await page
       .getByRole("button", { name: "Confirm cancel subscription", exact: true })

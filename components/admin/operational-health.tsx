@@ -15,6 +15,8 @@ const reasons: Record<string, string> = {
   DELIVERY_DISABLED: "Scheduled email delivery is not activated.",
   PAYMENT_REVIEW_REQUIRED: "Review protected pending payments in Payments.",
   EMAIL_RETRY_REQUIRED: "Some recovery emails need retry or a fresh customer request.",
+  SUBSCRIPTION_REVIEW_REQUIRED:
+    "Some due subscriptions need review before their next quarter can be prepared.",
   RUN_FAILED:
     "The last run failed. Retries use a delay; inspect service health if this continues.",
 };
@@ -42,7 +44,9 @@ export async function OperationalHealth() {
               <h3 className="text-sm font-semibold">
                 {job.name === "payment-reconciliation"
                   ? "Payment recovery"
-                  : "Password recovery email"}
+                  : job.name === "recovery-email"
+                    ? "Password recovery email"
+                    : "Quarterly subscription preparation"}
               </h3>
               <p className="mt-1 text-xs text-slate-500">
                 {job.heartbeatAt

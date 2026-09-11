@@ -7,9 +7,16 @@ import { LAUNCH_KEY, defaultLaunch } from "@/lib/domain/launch";
 import { businessDate } from "@/lib/domain/operations";
 import { createQuote, json } from "./quote";
 import { reserveCheckout } from "./reservations";
-import { ownedCheckout, settleVerifiedSession } from "./checkout";
+import { ownedCheckout, settleVerifiedSession, cancelCheckout } from "./checkout";
 import { saveVehicleCapacity, launchConfig, saveLaunch } from "@/lib/services/launch";
 import { saveDeliveryAddress, approveDeliveryAddress } from "./onboarding";
+import { createSubscription, changeSubscription } from "@/lib/services/subscriptions";
+import {
+  prepareSubscriptionCycle,
+  readSubscriptionCycle,
+  generateDueSubscriptionCycles,
+} from "@/lib/services/subscription-cycles";
+import { quarterDate, subscriptionConsentVersion } from "@/lib/domain/subscriptions";
 vi.mock("./stripe", async (importOriginal) => {
   const original = await importOriginal<typeof import("./stripe")>();
   return {
@@ -537,4 +544,218 @@ it("rechecks ongoing booking configuration before reserving an earlier quote", a
       })
     ).reservedQty,
   ).toBe(0);
+});
+
+async function dueQuarter() {
+  const origin = await quoteAndHold();
+  await settleVerifiedSession(session(origin), evidence(), taxLines(origin));
+  const order = await ownedCheckout(f.one.id, origin.id);
+  const subscription = await createSubscription(f.one.id, {
+    requestKey: randomUUID(),
+    originOrderId: order.orderId,
+    accepted: true,
+    consentVersion: subscriptionConsentVersion,
+  });
+  const past = new Date(businessDate());
+  past.setUTCFullYear(past.getUTCFullYear() - 1);
+  const anchor = past.toISOString().slice(0, 10);
+  await prisma.subscription.update({
+    where: { id: subscription.id },
+    data: {
+      anchorDate: past,
+      nextOrderAt: new Date(quarterDate(anchor, 1)),
+    },
+  });
+  return { subscription, origin };
+}
+async function cycleInput(id: string) {
+  const cycle = await readSubscriptionCycle(f.one.id, id);
+  return {
+    requestKey: randomUUID(),
+    subscriptionCycleId: id,
+    addressId: cycle.addresses[0].id,
+    lines: cycle.lines.map((l) => ({ variantId: l.variantId, quantity: l.quantity })),
+    useRewards: false,
+  };
+}
+it("generates one overdue quarter concurrently without orders, charges or catch-up purchases", async () => {
+  const { subscription } = await dueQuarter();
+  await expect(generateDueSubscriptionCycles(async () => false)).rejects.toThrow(/lease/);
+  const [a, b] = await Promise.all([
+    prepareSubscriptionCycle(f.one.id, { subscriptionId: subscription.id }),
+    prepareSubscriptionCycle(f.one.id, { subscriptionId: subscription.id }),
+  ]);
+  expect(a.id).toBe(b.id);
+  expect(
+    await prisma.subscriptionCycle.count({ where: { subscriptionId: subscription.id } }),
+  ).toBe(1);
+  await generateDueSubscriptionCycles(async () => true);
+  expect(await prisma.order.count({ where: { customerId: f.one.customer!.id } })).toBe(1);
+  await expect(readSubscriptionCycle(f.two.id, a.id)).rejects.toMatchObject({
+    status: 404,
+  });
+  await expect(
+    prepareSubscriptionCycle(f.two.id, { subscriptionId: subscription.id }),
+  ).rejects.toMatchObject({ status: 404 });
+  await expect(
+    prisma.subscriptionCycle.update({ where: { id: a.id }, data: { snapshot: {} } }),
+  ).rejects.toThrow();
+  await expect(generateDueSubscriptionCycles(async () => false)).resolves.toMatchObject({
+    completed: 0,
+  });
+});
+it("binds fresh prices and one checkout to a quarter, then advances once after verified payment", async () => {
+  const { subscription } = await dueQuarter();
+  const c = await prepareSubscriptionCycle(f.one.id, { subscriptionId: subscription.id });
+  await prisma.productPrice.create({
+    data: {
+      productVariantId: f.variant.id,
+      kind: "SALE",
+      amountCents: 4500,
+      startsAt: new Date(Date.now() - 1000),
+    },
+  });
+  const body = await cycleInput(c.id);
+  await expect(createQuote(f.two.id, body)).rejects.toMatchObject({ status: 404 });
+  await expect(
+    createQuote(f.one.id, { ...body, lines: [{ variantId: f.variant.id, quantity: 2 }] }),
+  ).rejects.toMatchObject({ status: 409 });
+  const competing = await Promise.allSettled([
+    createQuote(f.one.id, body),
+    createQuote(f.one.id, { ...body, requestKey: randomUUID() }),
+  ]);
+  expect(competing.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+  const q = (
+    competing.find((r) => r.status === "fulfilled") as PromiseFulfilledResult<
+      Awaited<ReturnType<typeof createQuote>>
+    >
+  ).value;
+  expect(q.subtotalCents).toBe(4500);
+  await reserveCheckout(f.one.id, q.id, true);
+  await expect(
+    changeSubscription(f.one.id, {
+      id: subscription.id,
+      version: 0,
+      action: "skip",
+      requestKey: randomUUID(),
+    }),
+  ).rejects.toMatchObject({ status: 409 });
+  await changeSubscription(f.one.id, {
+    id: subscription.id,
+    version: 0,
+    action: "pause",
+    requestKey: randomUUID(),
+  });
+  const e = evidence();
+  await Promise.all([
+    settleVerifiedSession(session(q), e, taxLines(q)),
+    settleVerifiedSession(session(q), e, taxLines(q)),
+  ]);
+  expect(
+    await prisma.subscriptionCycle.findUniqueOrThrow({ where: { id: c.id } }),
+  ).toMatchObject({ state: "PAID", paidCheckoutId: q.id });
+  const latest = await prisma.subscription.findUniqueOrThrow({
+    where: { id: subscription.id },
+  });
+  expect(latest.status).toBe("PAUSED");
+  expect(latest.nextOrderAt!.toISOString().slice(0, 10) > businessDate()).toBe(true);
+  expect(latest.version).toBe(2);
+  expect(await prisma.order.count({ where: { customerId: f.one.customer!.id } })).toBe(2);
+});
+it("invalidates an unpaid quarter on skip and allows a fresh quote only after canceling the prior quote", async () => {
+  const { subscription } = await dueQuarter();
+  const c = await prepareSubscriptionCycle(f.one.id, { subscriptionId: subscription.id });
+  const body = await cycleInput(c.id);
+  const q = await createQuote(f.one.id, body);
+  await cancelCheckout(f.one.id, q.id);
+  const replacement = await createQuote(f.one.id, { ...body, requestKey: randomUUID() });
+  await changeSubscription(f.one.id, {
+    id: subscription.id,
+    version: 0,
+    action: "skip",
+    requestKey: randomUUID(),
+  });
+  expect(
+    (await prisma.subscriptionCycle.findUniqueOrThrow({ where: { id: c.id } })).state,
+  ).toBe("SKIPPED");
+  expect((await ownedCheckout(f.one.id, replacement.id)).state).toBe("EXPIRED");
+  await expect(
+    createQuote(f.one.id, { ...body, requestKey: randomUUID() }),
+  ).rejects.toMatchObject({ status: 409 });
+  expect(await prisma.order.count({ where: { customerId: f.one.customer!.id } })).toBe(1);
+});
+it("keeps failed and uncertain cycle payments protected and reconciles after cancellation", async () => {
+  const { subscription } = await dueQuarter();
+  const c = await prepareSubscriptionCycle(f.one.id, { subscriptionId: subscription.id });
+  const body = await cycleInput(c.id);
+  const q = await createQuote(f.one.id, body);
+  await reserveCheckout(f.one.id, q.id, true);
+  await settleVerifiedSession(session(q, "unpaid"), evidence(), []);
+  expect(
+    (await prisma.subscriptionCycle.findUniqueOrThrow({ where: { id: c.id } })).state,
+  ).toBe("READY");
+  await expect(
+    createQuote(f.one.id, { ...body, requestKey: randomUUID() }),
+  ).rejects.toMatchObject({ status: 409 });
+  await changeSubscription(f.one.id, {
+    id: subscription.id,
+    version: 0,
+    action: "cancel",
+    requestKey: randomUUID(),
+  });
+  await settleVerifiedSession(session(q), evidence(), taxLines(q));
+  expect(
+    (await prisma.subscriptionCycle.findUniqueOrThrow({ where: { id: c.id } })).state,
+  ).toBe("PAID");
+  expect(
+    await prisma.subscription.findUniqueOrThrow({ where: { id: subscription.id } }),
+  ).toMatchObject({ status: "CANCELLED", nextOrderAt: null });
+});
+
+it("rolls back cycle generation and financial settlement when their audit evidence cannot persist", async () => {
+  const { subscription } = await dueQuarter();
+  await prisma.$executeRawUnsafe(
+    "ALTER TABLE \"AuditLog\" ADD CONSTRAINT dd_cycle_audit CHECK (action <> 'subscription.cycle.generated') NOT VALID",
+  );
+  try {
+    await expect(
+      prepareSubscriptionCycle(f.one.id, { subscriptionId: subscription.id }),
+    ).rejects.toThrow();
+  } finally {
+    await prisma.$executeRawUnsafe(
+      'ALTER TABLE "AuditLog" DROP CONSTRAINT dd_cycle_audit',
+    );
+  }
+  expect(
+    await prisma.subscriptionCycle.count({ where: { subscriptionId: subscription.id } }),
+  ).toBe(0);
+  const c = await prepareSubscriptionCycle(f.one.id, { subscriptionId: subscription.id });
+  const q = await createQuote(f.one.id, await cycleInput(c.id));
+  await reserveCheckout(f.one.id, q.id, true);
+  await prisma.$executeRawUnsafe(
+    "ALTER TABLE \"AuditLog\" ADD CONSTRAINT dd_cycle_paid_audit CHECK (action <> 'subscription.cycle.paid') NOT VALID",
+  );
+  try {
+    await expect(
+      settleVerifiedSession(session(q), evidence(), taxLines(q)),
+    ).rejects.toThrow();
+  } finally {
+    await prisma.$executeRawUnsafe(
+      'ALTER TABLE "AuditLog" DROP CONSTRAINT dd_cycle_paid_audit',
+    );
+  }
+  expect(
+    (await prisma.subscriptionCycle.findUniqueOrThrow({ where: { id: c.id } })).state,
+  ).toBe("READY");
+  expect(
+    (await prisma.subscription.findUniqueOrThrow({ where: { id: subscription.id } }))
+      .cycleNumber,
+  ).toBe(1);
+  const attempt = await ownedCheckout(f.one.id, q.id);
+  expect(attempt.state).toBe("PREPARING");
+  expect(await prisma.payment.count({ where: { orderId: attempt.orderId! } })).toBe(0);
+  await settleVerifiedSession(session(q), evidence(), taxLines(q));
+  expect(
+    (await prisma.subscriptionCycle.findUniqueOrThrow({ where: { id: c.id } })).state,
+  ).toBe("PAID");
 });

@@ -7,6 +7,7 @@ import {
 } from "@/lib/services/password-recovery";
 import { type JobResult, type JobName, runJob } from "./jobs";
 
+import { generateDueSubscriptionCycles } from "@/lib/services/subscription-cycles";
 const blocked = (reason: JobResult["reason"] = "PROVIDER_SETUP_REQUIRED"): JobResult => ({
   state: "BLOCKED",
   checked: 0,
@@ -104,18 +105,35 @@ export async function emailRecoveryWork(
   };
 }
 export async function runOperationalCycle() {
-  const [payments, email] = await Promise.all([
+  const [payments, email, subscriptions] = await Promise.all([
     runOperationalTask("payment-reconciliation"),
     runOperationalTask("recovery-email"),
+    runOperationalTask("subscription-cycles"),
   ]);
   return {
     payments,
     email,
+    subscriptions,
   };
 }
 export function runOperationalTask(name: JobName) {
   return runJob(
     name,
-    name === "payment-reconciliation" ? paymentRecoveryWork : emailRecoveryWork,
+    name === "payment-reconciliation"
+      ? paymentRecoveryWork
+      : name === "recovery-email"
+        ? emailRecoveryWork
+        : subscriptionCycleWork,
   );
+}
+
+export async function subscriptionCycleWork(
+  ownsLease: () => Promise<boolean>,
+): Promise<JobResult> {
+  const result = await generateDueSubscriptionCycles(ownsLease);
+  return {
+    ...result,
+    state: result.attention ? "ATTENTION" : "HEALTHY",
+    ...(result.attention ? { reason: "SUBSCRIPTION_REVIEW_REQUIRED" as const } : {}),
+  };
 }
