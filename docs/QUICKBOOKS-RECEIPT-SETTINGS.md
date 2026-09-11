@@ -1,0 +1,11 @@
+# Receipt clearing settings
+
+Authorized finance staff can save a receipt clearing account in the existing QuickBooks workspace. The selected account must be an active USD Bank account in the configured company. Saving reads that company's current financial country, home currency and sales-tax preference from fixed Intuit endpoints. This initial US receipt path requires US, USD and sales tax enabled; missing currency evidence is not assumed to mean USD.
+
+The application stores the account, observed company preferences, timestamp and version under a company/environment-scoped setting, with an atomic audit record. An actor-scoped request key recovers an interrupted save without duplicating the settings revision. Changed inputs or company, stale mapping versions, disconnected authorization, or an audit failure cannot silently save a new mapping. CPA users can review saved settings but cannot change them. Browser choices and request identity survive an interrupted save; changing the account resets confirmation.
+
+These are prerequisites, not receipt posting acceptance. The saved timestamp explicitly describes a past check. Receipt preparation/submission must check the current company, account, customer and product mappings again. The observed PartnerTaxEnabled value is retained as a fact and is not interpreted as proof that provider tax overrides or agency allocation are accepted. Missing values remain unknown. No provider settings are modified and no receipt is sent.
+
+Customer/product tax classification, durable receipt drafts and original-sale refund linkage, guarded submission, uncertain-write reconciliation and real company acceptance remain required. The stored clearing account must not be substituted for a previously posted sale's original mapping when preparing a refund.
+
+Schema references: Intuit [CompanyInfo](https://github.com/intuit/QuickBooks-V3-PHP-SDK/blob/master/src/Data/IPPCompanyInfo.php), [CurrencyPrefs](https://github.com/intuit/QuickBooks-V3-PHP-SDK/blob/master/src/Data/IPPCurrencyPrefs.php), and [TaxPrefs](https://github.com/intuit/QuickBooks-V3-PHP-SDK/blob/master/src/Data/IPPTaxPrefs.php). Native database and browser tests use synthetic provider responses; no real company acceptance is claimed.

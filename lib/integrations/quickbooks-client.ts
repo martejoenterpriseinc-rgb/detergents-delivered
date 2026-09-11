@@ -225,6 +225,46 @@ const accountSchema = z.object({
   Active: z.boolean(),
   CurrencyRef: z.object({ value: z.string() }).optional(),
 });
+export async function readQuickbooksReceiptCompany(
+  config: QuickbooksConfig,
+  accessToken: string,
+) {
+  const host =
+    config.mode === "sandbox"
+      ? "https://sandbox-quickbooks.api.intuit.com"
+      : "https://quickbooks.api.intuit.com";
+  const read = (path: string) =>
+    providerRequest(`${host}/v3/company/${config.realm}/${path}`, {
+      method: "GET",
+      headers: { Authorization: "Bearer " + accessToken, Accept: "application/json" },
+    });
+  const [companyRaw, preferencesRaw] = await Promise.all([
+    read(`companyinfo/${config.realm}`),
+    read("preferences"),
+  ]);
+  const company = z
+    .object({ CompanyInfo: z.object({ Country: z.string().min(1).max(50) }) })
+    .parse(companyRaw).CompanyInfo;
+  const preferences = z
+    .object({
+      Preferences: z.object({
+        CurrencyPrefs: z.object({
+          HomeCurrency: z.object({ value: z.string().min(1).max(10) }),
+        }),
+        TaxPrefs: z.object({
+          UsingSalesTax: z.boolean(),
+          PartnerTaxEnabled: z.boolean().optional(),
+        }),
+      }),
+    })
+    .parse(preferencesRaw).Preferences;
+  return {
+    country: company.Country,
+    homeCurrency: preferences.CurrencyPrefs.HomeCurrency.value,
+    usingSalesTax: preferences.TaxPrefs.UsingSalesTax,
+    partnerTaxEnabled: preferences.TaxPrefs.PartnerTaxEnabled ?? null,
+  };
+}
 export type QuickbooksAccount = z.infer<typeof accountSchema>;
 export async function readQuickbooksAccounts(
   config: QuickbooksConfig,
@@ -387,14 +427,12 @@ export async function readQuickbooksSalesEntities(
     "query",
     `select * from ${entity} where Active = true startposition ${start} maxresults 100`,
   );
-  const result = z
-    .object({ QueryResponse: z.record(z.string(), z.unknown()) })
-    .parse(
-      await providerRequest(url.toString(), {
-        method: "GET",
-        headers: { Authorization: "Bearer " + accessToken, Accept: "application/json" },
-      }),
-    );
+  const result = z.object({ QueryResponse: z.record(z.string(), z.unknown()) }).parse(
+    await providerRequest(url.toString(), {
+      method: "GET",
+      headers: { Authorization: "Bearer " + accessToken, Accept: "application/json" },
+    }),
+  );
   const rows = z
     .array(z.unknown())
     .max(100)
@@ -417,13 +455,11 @@ export async function readQuickbooksSalesEntity(
       config.mode === "sandbox"
         ? "https://sandbox-quickbooks.api.intuit.com"
         : "https://quickbooks.api.intuit.com";
-  const result = z
-    .record(z.string(), z.unknown())
-    .parse(
-      await providerRequest(`${host}/v3/company/${config.realm}/${kind}/${id}`, {
-        method: "GET",
-        headers: { Authorization: "Bearer " + accessToken, Accept: "application/json" },
-      }),
-    );
+  const result = z.record(z.string(), z.unknown()).parse(
+    await providerRequest(`${host}/v3/company/${config.realm}/${kind}/${id}`, {
+      method: "GET",
+      headers: { Authorization: "Bearer " + accessToken, Accept: "application/json" },
+    }),
+  );
   return salesEntity(kind, result[entity]);
 }
