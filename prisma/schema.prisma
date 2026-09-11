@@ -805,6 +805,7 @@ model RefundRequest {
   status            RefundRequestStatus @default(PREPARED)
   lastError         String?
   submittedAt       DateTime?
+  recoveryCheckedAt DateTime?
   reconciledAt      DateTime?
   createdAt         DateTime            @default(now())
   updatedAt         DateTime            @updatedAt
@@ -817,6 +818,7 @@ model RefundRequest {
   @@index([orderId, createdAt])
   @@index([paymentId, status])
   @@index([status, updatedAt])
+  @@index([livemode, providerAccountId, recoveryCheckedAt])
 }
 
 model RefundRequestLine {

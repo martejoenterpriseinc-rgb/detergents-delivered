@@ -8,7 +8,7 @@ Stripe setup is deferred until application construction is complete. Continue in
 
 Quarterly consent and lifecycle controls are implemented in PR 39; the dependent cycle increment now connects scheduled review to authoritative checkout and payment-linked advancement, pending its full CI acceptance. Ongoing delivery booking adds an opt-in lead time and horizon to the existing checkout and capacity services; see ONGOING-DELIVERY-BOOKING.md. Neither change enables checkout or substitutes for provider acceptance.
 
-Staff cash refund controls now add draft review, guarded one-time submission and separate reconciliation; see STAFF-CASH-REFUNDS.md. Submission defaults off and has not been activated. Provider tax matching and scheduled refund reconciliation remain unfinished.
+Staff cash refund controls now add draft review, guarded one-time submission and separate reconciliation; see STAFF-CASH-REFUNDS.md. Submission defaults off and has not been activated. Scheduled refund reconciliation now has a bounded, leased provider-read queue with daily late-failure checks; see SCHEDULED-REFUND-RECONCILIATION.md. Provider tax matching remains unfinished.
 
 ## Current build and provider checkpoint
 

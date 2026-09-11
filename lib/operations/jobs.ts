@@ -4,6 +4,7 @@ import { integrationEnvironment } from "@/lib/integration-environment";
 
 export const jobNames = [
   "payment-reconciliation",
+  "refund-reconciliation",
   "recovery-email",
   "subscription-cycles",
 ] as const;
@@ -16,6 +17,7 @@ export type JobResult = {
   reason?:
     | "PROVIDER_SETUP_REQUIRED"
     | "PAYMENT_REVIEW_REQUIRED"
+    | "REFUND_REVIEW_REQUIRED"
     | "EMAIL_RETRY_REQUIRED"
     | "DELIVERY_DISABLED"
     | "SUBSCRIPTION_REVIEW_REQUIRED";

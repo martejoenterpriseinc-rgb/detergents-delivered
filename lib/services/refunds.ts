@@ -25,6 +25,12 @@ import {
 import { refundRewardAmounts } from "./refund-rewards";
 import { refundTransition, effectiveRefundCents } from "@/lib/domain/refund-settlement";
 import { reviewReferralInTransaction } from "./reward-ledger";
+import {
+  refundWorkerAuthority,
+  assertRefundWorkerEnvironment,
+  refundAuditActor,
+  type RefundActor,
+} from "./refund-worker-authority";
 type Tx = Prisma.TransactionClient;
 const submissionInput = z
   .object({
@@ -58,7 +64,11 @@ const reservedRefundStates = [
   "SUCCEEDED",
 ] as const;
 
-async function refundAccess(tx: Tx, userId: string) {
+async function refundAccess(tx: Tx, userId: RefundActor) {
+  if (userId === refundWorkerAuthority) {
+    assertRefundWorkerEnvironment();
+    return;
+  }
   const user = await accountIdentity(tx, userId);
   const permissions = permissionsForRoles(user.userRoles.map(({ role }) => role.code));
   if (!hasPermission(permissions, "orders.write"))
@@ -378,7 +388,7 @@ export async function submitPreparedRefund(userId: string, raw: unknown) {
 
 async function recoverySnapshot(
   tx: Tx,
-  userId: string,
+  userId: RefundActor,
   input: z.infer<typeof submissionInput>,
   settlement = false,
 ) {
@@ -519,6 +529,12 @@ export async function recoverRefundSubmission(userId: string, raw: unknown) {
 
 /** Verified settlement boundary used by staff reconciliation. No provider writes. */
 export async function reconcileRefundSettlement(userId: string, raw: unknown) {
+  // Public staff boundary cannot opt into scheduler authority.
+  if (typeof userId !== "string")
+    throw new AccountError("Order management access required.", 403);
+  return reconcileRefundSettlementAs(userId, raw);
+}
+async function reconcileRefundSettlementAs(userId: RefundActor, raw: unknown) {
   const input = submissionInput.parse(raw);
   const before = await prisma.$transaction(
     async (tx) => {
@@ -737,13 +753,14 @@ export async function reconcileRefundSettlement(userId: string, raw: unknown) {
     if (referral) await reviewReferralInTransaction(tx, userId, referral.id);
     await tx.auditLog.create({
       data: {
-        actorUserId: userId,
+        actorUserId: refundAuditActor(userId),
         action: "refund.settlement.reconciled",
         entityType: "RefundRequest",
         entityId: request.id,
         beforeJson: { status: request.status },
         afterJson: {
           status: saved.status,
+          source: userId === refundWorkerAuthority ? "scheduled-reconciliation" : "staff",
           cashCents: net,
           rewardDeltaCents: transition.settle
             ? totals.rewards
@@ -1358,4 +1375,65 @@ export async function reconcileCashRefundOperation(userId: string, raw: unknown)
     await recoverRefundSubmission(userId, input);
   // Recovery stays available with checkout/submission disabled. It never creates money movement.
   return reconcileRefundSettlement(userId, input);
+}
+
+/** Bounded provider-read reconciliation. Never submits or retries a refund creation. */
+export async function reconcileScheduledRefunds(ownsLease: () => Promise<boolean>) {
+  assertRefundWorkerEnvironment();
+  const commerce = await readCommerce(true);
+  const now = new Date();
+  const requests = await prisma.refundRequest.findMany({
+    where: {
+      submittedAt: { not: null },
+      amountCents: { gt: 0 },
+      providerAccountId: commerce.accountId,
+      livemode: commerce.live,
+      OR: [
+        {
+          status: { in: ["SUBMITTING", "UNKNOWN", "PENDING", "REQUIRES_ACTION"] },
+          OR: [
+            { recoveryCheckedAt: null },
+            { recoveryCheckedAt: { lte: new Date(now.getTime() - 60_000) } },
+          ],
+        },
+        {
+          status: "SUCCEEDED",
+          OR: [
+            { recoveryCheckedAt: null },
+            { recoveryCheckedAt: { lte: new Date(now.getTime() - 86_400_000) } },
+          ],
+        },
+      ],
+    },
+    orderBy: [
+      { recoveryCheckedAt: { sort: "asc", nulls: "first" } },
+      { createdAt: "asc" },
+      { id: "asc" },
+    ],
+    take: 10,
+    select: { id: true, orderId: true },
+  });
+  let checked = 0,
+    completed = 0,
+    attention = 0;
+  for (const request of requests) {
+    if (!(await ownsLease())) throw new Error("Worker lease expired.");
+    // Rotate even unverifiable records so one failure cannot starve the queue.
+    await prisma.refundRequest.update({
+      where: { id: request.id },
+      data: { recoveryCheckedAt: now },
+    });
+    checked++;
+    try {
+      const result = await reconcileRefundSettlementAs(refundWorkerAuthority, {
+        orderId: request.orderId,
+        requestId: request.id,
+      });
+      if (["SUCCEEDED", "FAILED", "CANCELED"].includes(result.status)) completed++;
+      else attention++;
+    } catch {
+      attention++;
+    }
+  }
+  return { checked, completed, attention };
 }

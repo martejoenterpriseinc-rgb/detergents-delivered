@@ -32,6 +32,7 @@ import {
   cashRefundReadiness,
   submitCashRefundOperation,
   reconcileCashRefundOperation,
+  reconcileScheduledRefunds,
 } from "./refunds";
 import { getOrder } from "./order-workspace";
 import { readTaxReview } from "./tax-review";
@@ -350,6 +351,127 @@ describe("read-only refund review (isolated PostgreSQL, mock provider)", () => {
 });
 
 describe("durable refund submission claim (isolated PostgreSQL, no provider writes)", () => {
+  async function deferExistingRecovery() {
+    await prisma.refundRequest.updateMany({
+      where: { order: { customerId: customer } },
+      data: { recoveryCheckedAt: new Date() },
+    });
+    refundReviewMocks.submit.mockClear();
+  }
+  it("schedules reward settlement and later compensation without staff impersonation or provider writes", async () => {
+    await deferExistingRecovery();
+    const f = await rewardFixture();
+    refundReviewMocks.inspect.mockResolvedValue(f.provider);
+    const result = await reconcileScheduledRefunds(async () => true);
+    expect(result).toEqual({ checked: 1, completed: 1, attention: 0 });
+    expect(
+      await prisma.refundAdjustment.count({ where: { requestId: f.draft.id } }),
+    ).toBe(1);
+    expect(
+      await prisma.auditLog.findFirst({
+        where: { entityId: f.draft.id, action: "refund.settlement.reconciled" },
+      }),
+    ).toMatchObject({
+      actorUserId: null,
+      afterJson: expect.objectContaining({ source: "scheduled-reconciliation" }),
+    });
+    expect(await reconcileScheduledRefunds(async () => true)).toEqual({
+      checked: 0,
+      completed: 0,
+      attention: 0,
+    });
+    await prisma.refundRequest.update({
+      where: { id: f.draft.id },
+      data: { recoveryCheckedAt: new Date(Date.now() - 86_400_001) },
+    });
+    refundReviewMocks.inspect.mockResolvedValue({
+      ...f.provider,
+      refunds: [
+        {
+          ...f.observation,
+          status: "failed",
+          failureBalanceTransactionId: "txn_returned",
+        },
+      ],
+    });
+    expect(await reconcileScheduledRefunds(async () => true)).toEqual({
+      checked: 1,
+      completed: 1,
+      attention: 0,
+    });
+    expect(
+      await prisma.refundAdjustment.count({ where: { requestId: f.draft.id } }),
+    ).toBe(2);
+    expect(
+      await prisma.rewardEntry.aggregate({
+        where: { sourceId: f.draft.id },
+        _sum: { amountCents: true },
+      }),
+    ).toMatchObject({ _sum: { amountCents: 0 } });
+    expect(refundReviewMocks.submit).not.toHaveBeenCalled();
+  });
+  it("rotates a bounded failing batch so later requests are checked and retains uncertain reservations", async () => {
+    await deferExistingRecovery();
+    const failures = [];
+    for (let n = 0; n < 10; n++) failures.push(await claimedFixture());
+    const next = await rewardFixture();
+    refundReviewMocks.inspect.mockRejectedValue(
+      new Error("synthetic provider unavailable"),
+    );
+    expect(await reconcileScheduledRefunds(async () => true)).toEqual({
+      checked: 10,
+      completed: 0,
+      attention: 10,
+    });
+    expect(
+      await prisma.refundRequest.count({
+        where: {
+          id: { in: failures.map((f) => f.draft.id) },
+          status: "SUBMITTING",
+          recoveryCheckedAt: { not: null },
+        },
+      }),
+    ).toBe(10);
+    refundReviewMocks.inspect.mockResolvedValue(next.provider);
+    expect(await reconcileScheduledRefunds(async () => true)).toEqual({
+      checked: 1,
+      completed: 1,
+      attention: 0,
+    });
+    expect(refundReviewMocks.submit).not.toHaveBeenCalled();
+  });
+  it("respects lease loss, account isolation and the staff authorization boundary", async () => {
+    await deferExistingRecovery();
+    const f = await claimedFixture();
+    const other = await claimedFixture();
+    await prisma.refundRequest.update({
+      where: { id: other.draft.id },
+      data: { providerAccountId: "acct_other" },
+    });
+    refundReviewMocks.inspect.mockClear();
+    await expect(reconcileScheduledRefunds(async () => false)).rejects.toThrow(
+      "Worker lease expired",
+    );
+    expect(
+      (await prisma.refundRequest.findUniqueOrThrow({ where: { id: f.draft.id } }))
+        .recoveryCheckedAt,
+    ).toBeNull();
+    expect(refundReviewMocks.inspect).not.toHaveBeenCalled();
+    await expect(
+      reconcileRefundSettlement(undefined as unknown as string, f.input),
+    ).rejects.toMatchObject({ status: 403 });
+    refundReviewMocks.inspect.mockRejectedValue(new Error("unconfirmed"));
+    expect(await reconcileScheduledRefunds(async () => true)).toEqual({
+      checked: 1,
+      completed: 0,
+      attention: 1,
+    });
+    expect(
+      (await prisma.refundRequest.findUniqueOrThrow({ where: { id: other.draft.id } }))
+        .recoveryCheckedAt,
+    ).toBeNull();
+    expect(refundReviewMocks.submit).not.toHaveBeenCalled();
+  });
   async function fixture() {
     const id = randomUUID();
     const sale = await prisma.order.create({
