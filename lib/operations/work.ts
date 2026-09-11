@@ -1,6 +1,7 @@
 import { runDeliveryTexts } from "@/lib/services/sms-delivery";
 import { smsConfig } from "@/lib/integrations/twilio-client";
 import { reconcileScheduledQuickbooksCostJournals } from "@/lib/services/quickbooks-cost-journals";
+import { reconcileScheduledQuickbooksReceipts } from "@/lib/services/quickbooks-receipt-posting";
 import { reconcileScheduledQuickbooksExpenses } from "@/lib/services/quickbooks-expenses";
 import {
   authorizedQuickbooks,
@@ -188,10 +189,11 @@ export async function quickbooksRecoveryWork(
   }
   const expenses = await reconcileScheduledQuickbooksExpenses(ownsLease);
   const journals = await reconcileScheduledQuickbooksCostJournals(ownsLease);
+  const receipts = await reconcileScheduledQuickbooksReceipts(ownsLease);
   const result = {
-    checked: expenses.checked + journals.checked,
-    completed: expenses.completed + journals.completed,
-    attention: expenses.attention + journals.attention,
+    checked: expenses.checked + journals.checked + receipts.checked,
+    completed: expenses.completed + journals.completed + receipts.completed,
+    attention: expenses.attention + journals.attention + receipts.attention,
   };
   return {
     ...result,

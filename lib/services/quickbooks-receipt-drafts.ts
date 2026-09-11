@@ -101,7 +101,7 @@ export function receiptCompilerMapping(
     })),
   };
 }
-async function currentMapping(
+export async function currentReceiptMapping(
   tx: Prisma.TransactionClient,
   sale: Awaited<ReturnType<typeof recordedSaleSource>>,
   mode: string,
@@ -140,10 +140,16 @@ export async function listQuickbooksReceiptDrafts(actor: string, cursor?: string
   });
   return {
     canWrite,
-    canSubmit: false,
+    canSubmit: receiptPostingAllowed(config.mode, config.realm),
     nextCursor: rows.length > 50 ? rows[49].id : null,
     rows: rows.slice(0, 50).map(receiptExportView),
   };
+}
+export function receiptPostingAllowed(mode: string, realm: string) {
+  return (
+    process.env.DD_QBO_RECEIPT_POSTING_ENABLED === "true" &&
+    process.env.DD_QBO_RECEIPT_POSTING_COMPANY === mode + ":" + realm
+  );
 }
 export async function prepareQuickbooksReceiptDraft(actor: string, raw: unknown) {
   const input = z
@@ -232,7 +238,7 @@ export async function prepareQuickbooksReceiptDraft(actor: string, raw: unknown)
       );
     const mapping = parent
       ? receiptExportMapping.parse(parent.mapping)
-      : await currentMapping(tx, sale, config.mode, config.realm);
+      : await currentReceiptMapping(tx, sale, config.mode, config.realm);
     const compilerMapping = receiptCompilerMapping(
       mapping,
       sale,
