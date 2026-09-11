@@ -89,7 +89,6 @@ export function AccountSettingsForm({
       } else if (section === "notifications") {
         await save("/api/account/notifications", "PATCH", {
           emailNotifications: data.get("emailNotifications") === "on",
-          smsNotifications: data.get("smsNotifications") === "on",
         });
       } else {
         await save("/api/account/password", "POST", {
@@ -156,9 +155,8 @@ export function AccountSettingsForm({
       {section === "notifications" && (
         <>
           <p className="text-sm text-teal-800">
-            Choose whether you want delivery updates by email or SMS. Preferences save to
-            your account. Delivery texts also require the separate phone verification
-            below. Check your account for updates.
+            Choose whether you want delivery updates by email. Activate or stop delivery
+            texts in the delivery texts section below. Check your account for updates.
           </p>
           <label className="flex items-center justify-between gap-4 rounded-xl border border-teal-100 p-4">
             <span>Email delivery notifications</span>
@@ -169,18 +167,9 @@ export function AccountSettingsForm({
               className="h-5 w-5 accent-teal-700"
             />
           </label>
-          <label className="flex items-center justify-between gap-4 rounded-xl border border-teal-100 p-4">
-            <span>SMS delivery notifications</span>
-            <input
-              type="checkbox"
-              name="smsNotifications"
-              defaultChecked={account.smsNotifications}
-              className="h-5 w-5 accent-teal-700"
-            />
-          </label>
           <p className="text-sm text-teal-800">
             These choices do not hide order history or support replies in your account.
-            Saving an SMS preference alone does not activate texts.
+            Saving email preferences does not change delivery-text consent.
           </p>
         </>
       )}

@@ -92,10 +92,14 @@ export async function updateNotifications(userId: string, input: unknown) {
   const data = notificationSchema.parse(input);
   return prisma.$transaction(async (tx) => {
     const { customer } = await customerIdentity(tx, userId, true);
-    if (data.smsNotifications && !customer.phone)
+    const changes = {
+      emailNotifications: data.emailNotifications,
+      smsNotifications: data.smsNotifications ?? customer.smsNotifications,
+    };
+    if (changes.smsNotifications && !customer.phone)
       throw new AccountError("Save your phone number before enabling SMS notifications.");
-    if (!data.smsNotifications) await revokeCustomerSms(tx, customer.id);
-    await tx.customer.update({ where: { id: customer.id }, data });
+    if (!changes.smsNotifications) await revokeCustomerSms(tx, customer.id);
+    await tx.customer.update({ where: { id: customer.id }, data: changes });
     await tx.auditLog.create({
       data: {
         actorUserId: userId,
@@ -106,7 +110,7 @@ export async function updateNotifications(userId: string, input: unknown) {
           emailNotifications: customer.emailNotifications,
           smsNotifications: customer.smsNotifications,
         },
-        afterJson: data,
+        afterJson: changes,
       },
     });
     return { ok: true };
