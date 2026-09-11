@@ -72,7 +72,7 @@ test("catalog file review, lost-response retry, exports and CPA isolation", asyn
     expect(await db.product.count({ where: { slug } })).toBe(1);
     await page.unroute("**/api/admin/catalog-files");
     await page.getByRole("button", { name: "Import reviewed drafts" }).click();
-    await expect(page.getByRole("alert")).toContainText(
+    await expect(page.getByRole("alert").filter({ hasText: "Imported" })).toContainText(
       "Imported 1 draft products and 2 variants",
     );
     const product = await db.product.findUniqueOrThrow({
