@@ -157,8 +157,8 @@ export function AccountSettingsForm({
         <>
           <p className="text-sm text-teal-800">
             Choose whether you want delivery updates by email or SMS. Preferences save to
-            your account. Email and SMS sending are not connected in staging; check your
-            account for updates.
+            your account. Delivery texts also require the separate phone verification
+            below. Check your account for updates.
           </p>
           <label className="flex items-center justify-between gap-4 rounded-xl border border-teal-100 p-4">
             <span>Email delivery notifications</span>
@@ -180,7 +180,7 @@ export function AccountSettingsForm({
           </label>
           <p className="text-sm text-teal-800">
             These choices do not hide order history or support replies in your account.
-            SMS activation will require verified contact details and provider setup.
+            Saving an SMS preference alone does not activate texts.
           </p>
         </>
       )}

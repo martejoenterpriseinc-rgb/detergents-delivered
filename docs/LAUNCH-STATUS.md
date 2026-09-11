@@ -52,8 +52,10 @@ The existing catalog/receiving, customer access, checkout backend, delivery oper
 Catalog file exchange now adds reviewed draft imports and catalog/stock exports; see CATALOG-FILE-EXCHANGE.md.
 
 Scoped customer connections and the protocol-neutral commerce gateway now have an implementation under validation; see SCOPED-COMMERCE-GATEWAY.md. Customer review and payment remain mandatory.
-# Latest build checkpoint — company authorization and release verification
+## Latest build checkpoint — expense accounting and release verification
 
-Catalog file exchange passes CI #127 (523 checks) at 027f112fd2da115e2258e9494b5ddc423336e3a8. Scoped commerce passes CI #128 (531 checks) at c0625d433a8bc13077eb6b3cb8424cb35713b5e5. Both increments have desktop/tablet/mobile visual evidence reviewed. These revisions are not deployed.
+QuickBooks company authorization passed CI 131 (543 checks), account mapping passed CI 133 (548 checks), and expense posting passed CI 134 (555 checks). Native PostgreSQL tests cover concurrency, immutable evidence, audit rollback, uncertain provider outcomes and company isolation. Desktop, tablet and mobile screenshots were inspected. These revisions are committed but not deployed.
 
-Read-only retained-record verification is in PR #47, with support for existing non-null unique authentication keys. QuickBooks company authorization, encrypted tokens, refresh/revocation recovery and the administrator/CPA screen are implemented and under validation. Accounting mapping/posting and real provider acceptance remain unfinished. Stripe setup remains deferred to the owner after the build, and Go Live has not been claimed.
+PR 51 adds bounded scheduled QuickBooks reconciliation, token refresh and persistent review issues. Its acceptance is recorded with the exact source in BUILD-RELEASE-CANDIDATE.md. This candidate adds nine migrations without modifying retained SQL. The final hosted release still requires a current recoverable checkpoint and retained-record verification.
+
+The expense workflow does not complete all accounting integrations: sales/refund/COGS posting, compensation tax evidence and real provider acceptance remain outstanding. Stripe setup is deferred by owner instruction. See BUILD-RELEASE-CANDIDATE.md for the current verified increments and remaining release requirements; earlier sections retain historical checkpoints and must not be read as proof of deployment.

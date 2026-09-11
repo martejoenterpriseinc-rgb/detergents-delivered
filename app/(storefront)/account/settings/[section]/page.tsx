@@ -1,3 +1,4 @@
+import { SmsConsentPanel } from "@/components/account/sms-consent";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAuth } from "@/lib/authz";
@@ -23,6 +24,7 @@ export default async function Page({ params }: { params: Promise<{ section: stri
       <Card>
         <AccountSettingsForm account={account} section={section} />
       </Card>
+      {section === "notifications" && <SmsConsentPanel />}
       {section === "security" ? (
         <Link href="/sign-in" className="inline-block font-semibold underline">
           Sign in

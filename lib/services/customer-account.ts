@@ -1,3 +1,4 @@
+import { revokeCustomerSms } from "./sms-consent-revocation";
 import bcrypt from "bcryptjs";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -60,6 +61,7 @@ export async function updateCustomerProfile(userId: string, input: unknown) {
         "Turn off SMS notifications before removing your phone number.",
       );
     }
+    if ((data.phone || null) !== customer.phone) await revokeCustomerSms(tx, customer.id);
     // Contact changes do not modify address ownership, verification, historical orders, or roles.
     await tx.customer.update({
       where: { id: customer.id },
@@ -92,6 +94,7 @@ export async function updateNotifications(userId: string, input: unknown) {
     const { customer } = await customerIdentity(tx, userId, true);
     if (data.smsNotifications && !customer.phone)
       throw new AccountError("Save your phone number before enabling SMS notifications.");
+    if (!data.smsNotifications) await revokeCustomerSms(tx, customer.id);
     await tx.customer.update({ where: { id: customer.id }, data });
     await tx.auditLog.create({
       data: {
