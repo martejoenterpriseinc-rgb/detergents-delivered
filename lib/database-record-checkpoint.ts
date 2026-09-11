@@ -14,7 +14,7 @@ export const recordCheckpointSchema = z
           .object({
             name,
             columns: z.array(name).min(1).max(100),
-            primaryKey: z.array(name).min(1).max(10),
+            keyColumns: z.array(name).min(1).max(10),
             count: z.number().int().nonnegative(),
             hash: z.string().regex(/^[a-f0-9]{64}$/),
           })
@@ -52,10 +52,27 @@ export async function recordCheckpoint(
       WHERE c.table_schema='public' AND t.table_type='BASE TABLE' AND c.table_name <> '_prisma_migrations'
       ORDER BY c.table_name, c.ordinal_position`;
       const keys = await tx.$queryRaw<Array<{ table_name: string; column_name: string }>>`
-      SELECT k.table_name, k.column_name FROM information_schema.table_constraints t
-      JOIN information_schema.key_column_usage k ON k.constraint_schema=t.constraint_schema AND k.constraint_name=t.constraint_name AND k.table_name=t.table_name
-      WHERE t.table_schema='public' AND t.constraint_type='PRIMARY KEY'
-      ORDER BY k.table_name, k.ordinal_position`;
+      WITH selected AS (
+        SELECT DISTINCT ON (i.indrelid) i.indrelid, i.indkey, i.indnkeyatts
+        FROM pg_catalog.pg_index i
+        JOIN pg_catalog.pg_class t ON t.oid=i.indrelid
+        JOIN pg_catalog.pg_namespace n ON n.oid=t.relnamespace
+        JOIN pg_catalog.pg_class ix ON ix.oid=i.indexrelid
+        WHERE n.nspname='public' AND i.indisunique AND i.indisvalid
+          AND i.indpred IS NULL AND i.indexprs IS NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM unnest(i.indkey) WITH ORDINALITY k(attnum, position)
+            JOIN pg_catalog.pg_attribute a ON a.attrelid=i.indrelid AND a.attnum=k.attnum
+            WHERE k.position <= i.indnkeyatts AND NOT a.attnotnull
+          )
+        ORDER BY i.indrelid, i.indisprimary DESC, ix.relname
+      )
+      SELECT t.relname::text AS table_name, a.attname::text AS column_name
+      FROM selected i JOIN pg_catalog.pg_class t ON t.oid=i.indrelid
+      CROSS JOIN LATERAL unnest(i.indkey) WITH ORDINALITY k(attnum, position)
+      JOIN pg_catalog.pg_attribute a ON a.attrelid=i.indrelid AND a.attnum=k.attnum
+      WHERE k.position <= i.indnkeyatts
+      ORDER BY t.relname, k.position`;
       const specifications =
         baseline?.tables ??
         [...new Set(columns.map((c) => c.table_name))].map((table) => ({
@@ -63,7 +80,7 @@ export async function recordCheckpoint(
           columns: columns
             .filter((c) => c.table_name === table)
             .map((c) => c.column_name),
-          primaryKey: keys
+          keyColumns: keys
             .filter((k) => k.table_name === table)
             .map((k) => k.column_name),
         }));
@@ -76,17 +93,17 @@ export async function recordCheckpoint(
           .filter((k) => k.table_name === spec.name)
           .map((k) => k.column_name);
         if (
-          !spec.primaryKey.length ||
-          JSON.stringify(currentKey) !== JSON.stringify(spec.primaryKey) ||
+          !spec.keyColumns.length ||
+          JSON.stringify(currentKey) !== JSON.stringify(spec.keyColumns) ||
           spec.columns.some((c) => !available.includes(c))
         )
           throw new Error(
-            "A retained table, column or primary key is missing or changed.",
+            "A retained table, column or stable unique key is missing or changed.",
           );
         // Identifiers come from catalog metadata and are quoted; baseline identifiers
         // must exist in that metadata. FETCH bounds memory even for stored images.
         await tx.$executeRawUnsafe(
-          `DECLARE dd_record_cursor NO SCROLL CURSOR FOR SELECT jsonb_build_array(${spec.columns.map(quoted).join(",")})::text AS row FROM public.${quoted(spec.name)} ORDER BY ${spec.primaryKey.map(quoted).join(",")}`,
+          `DECLARE dd_record_cursor NO SCROLL CURSOR FOR SELECT jsonb_build_array(${spec.columns.map(quoted).join(",")})::text AS row FROM public.${quoted(spec.name)} ORDER BY ${spec.keyColumns.map(quoted).join(",")}`,
         );
         const hash = createHash("sha256");
         let count = 0;
@@ -105,7 +122,7 @@ export async function recordCheckpoint(
         tables.push({
           name: spec.name,
           columns: spec.columns,
-          primaryKey: spec.primaryKey,
+          keyColumns: spec.keyColumns,
           count,
           hash: hash.digest("hex"),
         });
@@ -133,7 +150,7 @@ export function compareRecordCheckpoints(
         table.count !== next.count ||
         table.hash !== next.hash ||
         JSON.stringify(table.columns) !== JSON.stringify(next.columns) ||
-        JSON.stringify(table.primaryKey) !== JSON.stringify(next.primaryKey)
+        JSON.stringify(table.keyColumns) !== JSON.stringify(next.keyColumns)
       );
     })
     .map((table) => table.name);
