@@ -19,5 +19,7 @@ export async function activateInitialOwnerAction(formData: FormData) {
   } catch {
     redirect("/account/platform-owner?error=invalid");
   }
-  redirect("/admin");
+  // The activation transaction revokes the customer session so newly granted
+  // SUPER_ADMIN authority can never be inherited by the old session.
+  redirect("/sign-in?callbackUrl=%2Fadmin&ownerActivated=1");
 }
