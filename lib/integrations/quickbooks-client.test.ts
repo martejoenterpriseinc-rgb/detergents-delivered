@@ -1,5 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import {
+  createQuickbooksCostJournal,
+  findQuickbooksCostJournal,
   quickbooksAuthorizationUrl,
   exchangeQuickbooksToken,
   revokeQuickbooksToken,
@@ -113,4 +115,29 @@ it("rejects provider errors and oversized or malformed responses without exposin
     exchangeQuickbooksToken(config, { code: "synthetic" }),
   ).rejects.toMatchObject({ status: 503 });
   await expect(exchangeQuickbooksToken(config, { code: "synthetic" })).rejects.toThrow();
+});
+
+it("uses one fixed journal POST and a bounded read-only exact-reference query", async () => {
+  const call = vi
+    .fn()
+    .mockRejectedValueOnce(new Error("synthetic lost response"))
+    .mockResolvedValueOnce(Response.json({ QueryResponse: { JournalEntry: [] } }));
+  vi.stubGlobal("fetch", call);
+  await expect(
+    createQuickbooksCostJournal(config, "synthetic-access", { synthetic: true }),
+  ).rejects.toThrow();
+  expect(call).toHaveBeenCalledTimes(1);
+  expect(call.mock.calls[0][0]).toBe(
+    "https://sandbox-quickbooks.api.intuit.com/v3/company/123/journalentry",
+  );
+  expect(call.mock.calls[0][1]).toMatchObject({ method: "POST", redirect: "error" });
+  const doc = "DC" + "a".repeat(19);
+  expect(await findQuickbooksCostJournal(config, "synthetic-access", doc)).toEqual([]);
+  expect(new URL(call.mock.calls[1][0]).searchParams.get("query")).toBe(
+    "select * from JournalEntry where DocNumber = '" + doc + "' maxresults 2",
+  );
+  await expect(
+    findQuickbooksCostJournal(config, "synthetic-access", "' or 1=1"),
+  ).rejects.toThrow();
+  expect(call).toHaveBeenCalledTimes(2);
 });

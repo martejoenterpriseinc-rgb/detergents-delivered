@@ -64,6 +64,7 @@ test("delivery texts require explicit consent and a signed phone verification; S
         await db.smsConsent.findFirst({ where: { customerId: user.customer!.id } }),
       ),
     ).not.toContain(code.slice(3));
+    await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
     await page.screenshot({
       path: info.outputPath("delivery-text-verification.png"),
       fullPage: true,
@@ -93,6 +94,7 @@ test("delivery texts require explicit consent and a signed phone verification; S
     await expect(section.getByRole("status")).toHaveText(
       "Your phone is verified for delivery texts.",
     );
+    await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
     await page.screenshot({
       path: info.outputPath("delivery-text-active.png"),
       fullPage: true,

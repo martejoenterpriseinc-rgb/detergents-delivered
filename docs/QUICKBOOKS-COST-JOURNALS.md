@@ -1,0 +1,19 @@
+# Cost journal exports
+
+Status: implementation candidate; real QuickBooks acceptance and hosted release remain pending. Journal posting defaults off and is independent of expense posting and customer checkout.
+
+Reports → QuickBooks provides source review, draft preparation, journal status, explicit submission, cancellation of unsubmitted drafts and receipt reconciliation. CPA access is read-only. Each nonzero source is recorded once across company changes; a canceled unsubmitted draft may be replaced. Draft source, payload, company and account choices remain immutable. A source with zero cost needs no journal.
+
+A sale debits its mapped Cost of Goods Sold account and credits its mapped inventory asset account. A sellable stock return requires the original sale cost to be posted in the same company, uses that sale's original accounts even after mapping changes, and reverses only the recorded sellable cost. Damaged stock does not restore the inventory asset. These journals do not post revenue, cash, refunds or tax. They do not replace separate sales/refund export work or calculate tax.
+
+The exact two-line USD payload is based on saved FIFO cents and the application's recorded business date. Active account type and currency, current staff/connection authority, source evidence and applicable mapping are rechecked before an atomic SUBMITTING claim and audit. The only provider write is one JournalEntry POST after that claim. Any timeout, rejected response, evidence mismatch or failed confirmation remains protected as UNKNOWN; it is never automatically posted again. No automatic retry is made even on a provider error. A person must investigate a missing remote receipt.
+
+Receipt reconciliation queries the exact generated document reference, requires exactly one result, and matches company, date, currency, debit/credit accounts, both amounts, descriptions and absence of tax adjustments. Reordered provider lines are supported. Remote IDs and confirmation dates cannot be replaced or deleted. Changed posted evidence remains linked and is flagged for accounting review.
+
+The existing accounting worker additionally checks up to 10 due cost journals per run, oldest checked first; uncertain submissions are eligible every minute and posted receipts daily. It honors the worker lease, performs read-only receipt checks with current authorization and marks unresolved evidence for the accounting attention view. New submissions require both DD_QBO_COST_POSTING_ENABLED=true and DD_QBO_COST_POSTING_COMPANY=mode:realm, where mode is sandbox or live and realm is the exact authorized company. Neither is enabled by this change.
+
+Migration 20260916210000_quickbooks_cost_journals adds QboCostExport with permanent history, foreign keys to existing orders/returns, one active source, unique company document/remote IDs, forward-only state transitions and a same-company/original-account return-parent constraint. It neither rewrites sale records nor sends provider traffic. Deploy only with the cumulative reviewed migration plan, current recovery checkpoint and original-record verification.
+
+Provider field definitions: Intuit's official QuickBooks-V3-PHP-SDK src/Data/IPPJournalEntry.php and src/Data/IPPJournalEntryLineDetail.php. Journal entries must balance; JournalEntryLineDetail uses PostingType Debit/Credit and AccountRef. Runtime endpoint conventions reuse the existing fixed-host QuickBooks client. Provider-computed TotalAmt is not supplied or interpreted as a tax or cost breakdown.
+
+Tests use an isolated PostgreSQL database and synthetic provider receipts. A real-company test still must confirm account choices, one accepted sale journal, a partial sellable-return reversal, reconciliation and duplicate protection before enabling production sends. Stripe setup remains owner-deferred.
