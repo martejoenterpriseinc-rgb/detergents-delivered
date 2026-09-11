@@ -1,4 +1,8 @@
 import Link from "next/link";
+import {
+  PrepareRewardRefund,
+  RestoreRewardRefund,
+} from "@/components/commerce/reward-refunds";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/authz";
 import { getOrder } from "@/lib/services/order-workspace";
@@ -165,6 +169,15 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
       </section>
       <section className="space-y-3">
         <h2 className="text-xl font-semibold">Refund requests</h2>
+        {order.canManage &&
+          order.rewardRefundPaymentId &&
+          order.rewardRefundItems.length > 0 && (
+            <PrepareRewardRefund
+              orderId={order.id}
+              paymentId={order.rewardRefundPaymentId}
+              items={order.rewardRefundItems}
+            />
+          )}
         {!order.refundRequests.length && <p>No refund requests recorded.</p>}
         {order.refundRequests.map((request) => (
           <article key={request.id} className="space-y-3 rounded-xl border bg-white p-4">
@@ -174,7 +187,20 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
                 {refundLabels[request.status] ?? request.status}
               </span>
             </div>
+            {request.rewardCents > 0 && (
+              <p>
+                {money(request.rewardCents)} reward credit{" "}
+                {request.status === "SUCCEEDED" ? "restored" : "allocated"}
+              </p>
+            )}
             <p className="break-words">{request.reason}</p>
+            {request.canRestoreCredit && (
+              <RestoreRewardRefund
+                orderId={order.id}
+                requestId={request.id}
+                amount={money(request.rewardCents)}
+              />
+            )}
             <ul className="space-y-1 text-sm">
               {request.lines.map((line) => (
                 <li key={line.orderItemId}>

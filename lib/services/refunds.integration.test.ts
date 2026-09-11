@@ -27,6 +27,8 @@ import {
   submitPreparedRefund,
   recoverRefundSubmission,
   reconcileRefundSettlement,
+  prepareRewardOnlyRefund,
+  settleRewardOnlyRefund,
 } from "./refunds";
 import { getOrder } from "./order-workspace";
 import { readTaxReview } from "./tax-review";
@@ -503,6 +505,175 @@ describe("durable refund submission claim (isolated PostgreSQL, no provider writ
     };
     return { ...f, draft, input, observation, provider };
   }
+  async function zeroRewardFixture() {
+    const f = await rewardFixture();
+    await prisma.refundRequest.update({
+      where: { id: f.draft.id },
+      data: { status: "FAILED" },
+    });
+    const original = await prisma.productVariant.findUniqueOrThrow({
+      where: { id: variant },
+    });
+    const paidVariant = await prisma.productVariant.create({
+      data: { productId: original.productId, sku: randomUUID(), name: "Cash product" },
+    });
+    await prisma.orderItem.update({
+      where: { id: f.sale.items[0].id },
+      data: { unitPriceCents: 200, discountCents: 600, taxCents: 0, lineTotalCents: 0 },
+    });
+    await prisma.orderItem.create({
+      data: {
+        orderId: f.sale.id,
+        productVariantId: paidVariant.id,
+        nameSnapshot: "Cash product",
+        skuSnapshot: paidVariant.sku,
+        quantity: 1,
+        unitPriceCents: 1000,
+        taxCents: 80,
+        lineTotalCents: 1080,
+      },
+    });
+    await prisma.order.update({
+      where: { id: f.sale.id },
+      data: { subtotalCents: 1600, discountCents: 600, taxCents: 80, totalCents: 1080 },
+    });
+    await prisma.payment.update({
+      where: { id: f.sale.payments[0].id },
+      data: { amountCents: 1080 },
+    });
+    await prisma.checkoutAttempt.update({
+      where: { orderId: f.sale.id },
+      data: {
+        snapshot: {
+          rewardsCents: 600,
+          promotionCents: 0,
+          lines: [
+            { variantId: variant, quantity: 3, discountCents: 600, netCents: 0 },
+            { variantId: paidVariant.id, quantity: 1, discountCents: 0, netCents: 1000 },
+          ],
+        },
+      },
+    });
+    const payload = {
+      requestKey: randomUUID(),
+      orderId: f.sale.id,
+      paymentId: f.sale.payments[0].id,
+      reason: "Return originally redeemed reward credit",
+      lines: [{ orderItemId: f.sale.items[0].id, quantity: 1 }],
+    };
+    const draft = await prepareRewardOnlyRefund(admin, payload);
+    return { ...f, payload, draft, input: { orderId: f.sale.id, requestId: draft.id } };
+  }
+  it("restores zero-cash credit once without provider calls, tax entries, cash refunds or stock movement", async () => {
+    const f = await zeroRewardFixture();
+    expect(f.draft.amountCents).toBe(0);
+    const stock = await prisma.inventoryBalance.findUnique({
+      where: { productVariantId: variant },
+    });
+    const providerCalls =
+      refundReviewMocks.inspect.mock.calls.length +
+      refundReviewMocks.submit.mock.calls.length;
+    const results = await Promise.all([
+      settleRewardOnlyRefund(admin, f.input),
+      settleRewardOnlyRefund(admin, f.input),
+    ]);
+    expect(results[0]).toEqual(results[1]);
+    expect(results[0].status).toBe("SUCCEEDED");
+    expect(
+      refundReviewMocks.inspect.mock.calls.length +
+        refundReviewMocks.submit.mock.calls.length,
+    ).toBe(providerCalls);
+    expect(
+      await prisma.refundAdjustment.findMany({ where: { requestId: f.draft.id } }),
+    ).toMatchObject([
+      {
+        kind: "REWARD_ONLY",
+        cashCents: 0,
+        taxCents: 0,
+        rewardCents: 200,
+        providerRefundId: null,
+        taxEvidenceStatus: "NOT_APPLICABLE",
+      },
+    ]);
+    expect(
+      await prisma.rewardEntry.count({
+        where: { sourceId: f.draft.id, amountCents: 200 },
+      }),
+    ).toBe(1);
+    expect(await prisma.refund.count({ where: { orderId: f.sale.id } })).toBe(0);
+    expect(
+      await prisma.payment.findUniqueOrThrow({ where: { id: f.sale.payments[0].id } }),
+    ).toMatchObject({ status: "CAPTURED", amountCents: 1080 });
+    expect(
+      await prisma.inventoryBalance.findUnique({ where: { productVariantId: variant } }),
+    ).toEqual(stock);
+    expect((await getOrder(admin, f.sale.id)).rewardRefundItems[0].remaining).toBe(2);
+    await expect(
+      prepareRewardOnlyRefund(admin, {
+        ...f.payload,
+        requestKey: randomUUID(),
+        lines: [{ ...f.payload.lines[0], quantity: 3 }],
+      }),
+    ).rejects.toThrow();
+    const year = new Date().getUTCFullYear();
+    const taxes = await readTaxReview(cpa, {
+      from: `${year}-01-01`,
+      to: `${year}-12-31`,
+    });
+    expect(taxes.rows.some((r) => r.kind === "REWARD_ONLY")).toBe(false);
+    await expect(claimRefundSubmission(admin, f.input)).rejects.toThrow();
+  });
+  it("rolls credit-only restoration back on audit failure and requires staff authority", async () => {
+    const f = await zeroRewardFixture();
+    for (const actor of [cpa, users[2]]) {
+      await expect(settleRewardOnlyRefund(actor, f.input)).rejects.toMatchObject({
+        status: 403,
+      });
+      await expect(
+        prepareRewardOnlyRefund(actor, { ...f.payload, requestKey: randomUUID() }),
+      ).rejects.toMatchObject({ status: 403 });
+    }
+    await prisma.$executeRawUnsafe(
+      "ALTER TABLE \"AuditLog\" ADD CONSTRAINT dd_credit_audit CHECK (action <> 'refund.reward-only.settled') NOT VALID",
+    );
+    try {
+      await expect(settleRewardOnlyRefund(admin, f.input)).rejects.toThrow();
+      expect(await prisma.rewardEntry.count({ where: { sourceId: f.draft.id } })).toBe(0);
+      expect(
+        await prisma.refundAdjustment.count({ where: { requestId: f.draft.id } }),
+      ).toBe(0);
+      expect(
+        await prisma.refundRequest.findUniqueOrThrow({ where: { id: f.draft.id } }),
+      ).toMatchObject({ status: "PREPARED" });
+    } finally {
+      await prisma.$executeRawUnsafe(
+        'ALTER TABLE "AuditLog" DROP CONSTRAINT dd_credit_audit',
+      );
+    }
+    await settleRewardOnlyRefund(admin, f.input);
+  });
+  it("rejects cash selections and wrong environment for local credit restoration", async () => {
+    const cash = await fixture();
+    await expect(settleRewardOnlyRefund(admin, cash.input)).rejects.toThrow();
+    await expect(
+      prepareRewardOnlyRefund(admin, {
+        requestKey: randomUUID(),
+        orderId: cash.sale.id,
+        paymentId: cash.sale.payments[0].id,
+        reason: "This selection includes cash",
+        lines: [{ orderItemId: cash.sale.items[0].id, quantity: 1 }],
+      }),
+    ).rejects.toMatchObject({ status: 409 });
+    const f = await zeroRewardFixture();
+    await prisma.checkoutAttempt.update({
+      where: { orderId: f.sale.id },
+      data: { livemode: true },
+    });
+    await expect(settleRewardOnlyRefund(admin, f.input)).rejects.toMatchObject({
+      status: 409,
+    });
+    expect(await prisma.rewardEntry.count({ where: { sourceId: f.draft.id } })).toBe(0);
+  });
   it("settles mixed reward purchases once and compensates cash, tax and rewards atomically", async () => {
     const f = await rewardFixture();
     refundReviewMocks.inspect.mockResolvedValue({
