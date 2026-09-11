@@ -52,3 +52,8 @@ The existing catalog/receiving, customer access, checkout backend, delivery oper
 Catalog file exchange now adds reviewed draft imports and catalog/stock exports; see CATALOG-FILE-EXCHANGE.md.
 
 Scoped customer connections and the protocol-neutral commerce gateway now have an implementation under validation; see SCOPED-COMMERCE-GATEWAY.md. Customer review and payment remain mandatory.
+# Latest build checkpoint — company authorization and release verification
+
+Catalog file exchange passes CI #127 (523 checks) at 027f112fd2da115e2258e9494b5ddc423336e3a8. Scoped commerce passes CI #128 (531 checks) at c0625d433a8bc13077eb6b3cb8424cb35713b5e5. Both increments have desktop/tablet/mobile visual evidence reviewed. These revisions are not deployed.
+
+Read-only retained-record verification is in PR #47, with support for existing non-null unique authentication keys. QuickBooks company authorization, encrypted tokens, refresh/revocation recovery and the administrator/CPA screen are implemented and under validation. Accounting mapping/posting and real provider acceptance remain unfinished. Stripe setup remains deferred to the owner after the build, and Go Live has not been claimed.

@@ -1,6 +1,6 @@
 # QuickBooks Online
 
-Phase 7 work. This document is the contract so Phase 3–6 do not paint us into a corner.
+Accounting integration contract. Company authorization is implemented in `QUICKBOOKS-CONNECTION.md`; mapping and outbound posting remain unfinished and disabled. No real provider acceptance is implied.
 
 ## Source of truth
 
@@ -41,4 +41,4 @@ Ids we will store later: `qboAccountId` already exists on `ExpenseCategory`; `qb
 
 - Use QBO as a product catalog CMS
 - Recalculate tax inside QBO and write it back onto `TaxCalculation`
-- Call QBO from this Phase 1 codebase
+- Post accounting records before mapping, duplicate protection and provider acceptance are complete
