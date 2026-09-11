@@ -6,7 +6,7 @@ Public launch is not complete. Checkout remains disabled in sandbox and isolated
 
 Stripe setup is deferred until application construction is complete. Continue independent implementation without repeatedly requesting provider setup. The reward-only return increment adds staff preparation, explicit credit confirmation, idempotent restoration and responsive browser acceptance; see REWARD-ONLY-REFUNDS.md. It does not activate cash refunds or public checkout.
 
-Quarterly consent and lifecycle controls are implemented in PR 39; due-cycle checkout is still being built. Ongoing delivery booking adds an opt-in lead time and horizon to the existing checkout and capacity services; see ONGOING-DELIVERY-BOOKING.md. Neither change enables checkout or substitutes for provider acceptance.
+Quarterly consent and lifecycle controls are implemented in PR 39; the dependent cycle increment now connects scheduled review to authoritative checkout and payment-linked advancement, pending its full CI acceptance. Ongoing delivery booking adds an opt-in lead time and horizon to the existing checkout and capacity services; see ONGOING-DELIVERY-BOOKING.md. Neither change enables checkout or substitutes for provider acceptance.
 
 ## Current build and provider checkpoint
 
@@ -35,6 +35,8 @@ PR 29 adds an explicit hosting-operator command for the first production owner. 
 A read-only September 10 check found zero production users, products, business setup records, delivery zones and orders. The API editor can save securely, but all production provider groups are unconfigured: Stripe, Google, email, SMS, QuickBooks and storage. Configuration presence alone will not establish provider acceptance. There is no production owner account to use the editor yet; first-owner onboarding must verify ownership without copying staging credentials or automatically promoting an unverified customer.
 
 ## Remaining launch workstreams
+
+Reward-only returns passed CI 118 with 471 tests. Quarterly lifecycle controls passed CI 119 with 484 tests. Both include native PostgreSQL and desktop/tablet/mobile acceptance; screenshots were inspected. Neither has been deployed to hosted databases.
 
 1. Finish Orders operations: refunds, physical returns, reward restoration/reversal and corresponding reconciliation/acceptance.
 2. Replace CPA/tax/import-export placeholders with source-backed reports and safe imports; implement idempotent QuickBooks posting and reconciliation.

@@ -14,6 +14,8 @@ const ids = [
   "sandbox:payment-reconciliation",
   "sandbox:recovery-email",
   "live:recovery-email",
+  "sandbox:subscription-cycles",
+  "live:subscription-cycles",
 ];
 beforeEach(async () => {
   expect(await prisma.operationalJob.count({ where: { id: { in: ids } } })).toBe(0);
@@ -79,8 +81,14 @@ it("keeps environment leases and status separate and reports absent providers ho
   expect(cycle.payments.state).toBe("BLOCKED");
   expect(cycle.email.state).toBe("BLOCKED");
   expect(
-    (await jobStatus()).every((j) => j.state === "BLOCKED" && j.lastSuccessAt === null),
+    (await jobStatus())
+      .filter((j) => j.name !== "subscription-cycles")
+      .every((j) => j.state === "BLOCKED" && j.lastSuccessAt === null),
   ).toBe(true);
+  expect(cycle.subscriptions.state).toBe("HEALTHY");
+  expect((await jobStatus()).find((j) => j.name === "subscription-cycles")).toMatchObject(
+    { state: "HEALTHY" },
+  );
   vi.stubEnv("APP_ENV", "production");
   expect((await jobStatus()).every((j) => j.state === "NOT_STARTED")).toBe(true);
   const live = await claimJob("recovery-email", new Date(Date.now() + 1000));

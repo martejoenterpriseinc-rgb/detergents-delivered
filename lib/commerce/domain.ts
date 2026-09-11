@@ -2,6 +2,7 @@ import { z } from "zod";
 export const checkoutInput = z
   .object({
     requestKey: z.string().uuid(),
+    subscriptionCycleId: z.string().min(1).max(100).optional(),
     addressId: z.string().min(1).max(100),
     lines: z
       .array(

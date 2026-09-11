@@ -185,7 +185,12 @@ export function SubscriptionManager({
             </p>
           )}
           {s.due && (
-            <p className="font-semibold text-teal-800">This quarter is due for review.</p>
+            <div className="space-y-2">
+              <p className="font-semibold text-teal-800">
+                This quarter is due for review.
+              </p>
+              <ReviewQuarter id={s.id} disabled={busy || uncertain} />
+            </div>
           )}
           <ul>
             {s.items.map((i, n) => (
@@ -221,6 +226,47 @@ export function SubscriptionManager({
       <Link href="/account" className="underline">
         Back to account
       </Link>
+    </div>
+  );
+}
+
+function ReviewQuarter({ id, disabled }: { id: string; disabled: boolean }) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false),
+    [error, setError] = useState("");
+  return (
+    <div className="space-y-2">
+      <Button
+        disabled={disabled || busy}
+        onClick={async () => {
+          setBusy(true);
+          setError("");
+          try {
+            const result = await adminFetch<{ id: string }>(
+              "/api/account/subscriptions/cycles",
+              {
+                method: "POST",
+                body: JSON.stringify({ subscriptionId: id }),
+              },
+            );
+            router.push(`/account/subscriptions/cycles/${result.id}`);
+          } catch (e) {
+            setError(
+              e instanceof Error
+                ? e.message
+                : "This quarter could not be opened. Retry safely.",
+            );
+            setBusy(false);
+          }
+        }}
+      >
+        {busy ? "Opening quarter…" : "Review this quarter"}
+      </Button>
+      {error && (
+        <p role="alert" className="text-red-800">
+          {error}
+        </p>
+      )}
     </div>
   );
 }

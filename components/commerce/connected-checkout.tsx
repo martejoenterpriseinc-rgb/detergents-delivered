@@ -9,10 +9,22 @@ import Link from "next/link";
 type Quote = ReturnType<typeof publicCheckout>;
 export function ConnectedCheckout({
   addresses,
+  subscription,
 }: {
   addresses: { id: string; label: string }[];
+  subscription?: {
+    id: string;
+    lines: {
+      variantId: string;
+      quantity: number;
+      productName: string;
+      unitPriceCents: number;
+    }[];
+  };
 }) {
-  const { ready, lines } = useCart();
+  const cart = useCart();
+  const ready = Boolean(subscription) || cart.ready;
+  const lines = subscription?.lines ?? cart.lines;
   const [addressId, setAddress] = useState(addresses[0]?.id ?? "");
   const [promotionCode, setPromo] = useState("");
   const [useRewards, setRewards] = useState(false);
@@ -52,6 +64,7 @@ export function ConnectedCheckout({
           method: "POST",
           body: JSON.stringify({
             requestKey,
+            ...(subscription ? { subscriptionCycleId: subscription.id } : {}),
             addressId,
             lines: lines.map((l) => ({ variantId: l.variantId, quantity: l.quantity })),
             ...(promotionCode ? { promotionCode } : {}),
@@ -184,7 +197,9 @@ export function ConnectedCheckout({
           <p key={l.variantId}>
             {l.name} × {l.quantity}{" "}
             <span className="float-right">
-              {formatCents(l.unitPriceCents * l.quantity)}
+              {subscription && !quote
+                ? "Price at review"
+                : formatCents(l.unitPriceCents * l.quantity)}
             </span>
           </p>
         ))}

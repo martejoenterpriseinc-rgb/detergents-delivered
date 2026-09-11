@@ -11,3 +11,5 @@ The additive migration preserves existing schedules. Older 28-day rows are not c
 The account page replaces disabled placeholder controls with consent, saved subscription products/dates and actionable controls. The API is household-scoped, checks origin/body limits and rejects cadence or financial overrides. Native tests cover household isolation, eligibility, concurrency, retries, immutable evidence, stale versions, rollback and legacy behavior. Browser tests cover consent, lost-response retry and all lifecycle controls across desktop/tablet/mobile.
 
 This increment implements enrollment and schedule management. Due-cycle order generation, connection to authoritative checkout, payment outcome reconciliation and rolling delivery booking are the next dependent implementation work. No provider payment is created by these controls. No hosted migration or deployment has occurred for this increment.
+
+The dependent quarterly checkout-cycle increment is described in QUARTERLY-CHECKOUT-CYCLES.md. Ongoing delivery windows are described in ONGOING-DELIVERY-BOOKING.md. Earlier next-step descriptions above are the scope boundary of the original lifecycle increment.

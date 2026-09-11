@@ -22,6 +22,10 @@ import {
 } from "./domain";
 import { readCommerce } from "./runtime";
 import { calculateCheckoutTax } from "./stripe";
+import {
+  validateSubscriptionCheckout,
+  attachSubscriptionQuote,
+} from "@/lib/services/subscription-cycles";
 export const json = (v: unknown) =>
   JSON.parse(JSON.stringify(v)) as Prisma.InputJsonValue;
 export const fingerprint = (v: unknown) =>
@@ -37,6 +41,7 @@ export async function buildSnapshot(
       "Your account needs email verification and purchase approval.",
       403,
     );
+  await validateSubscriptionCheckout(tx, customer.id, input);
   const address = await tx.address.findFirst({
     where: { id: input.addressId, customerId: customer.id, deletedAt: null },
     include: { deliveryZone: true },
@@ -233,17 +238,23 @@ export async function createQuote(userId: string, raw: unknown) {
     snapshot.taxCents;
   if (snapshot.totalCents !== expected || snapshot.taxCents < 0)
     throw new AccountError("Tax quote could not be confirmed.", 503);
-  const attempt = await prisma.checkoutAttempt.upsert({
-    where: { customerId_requestKey: key },
-    update: {},
-    create: {
-      ...key,
-      requestHash: hash,
-      snapshot: json(snapshot),
-      expiresAt: new Date(Date.now() + 5 * 60000),
-      stripeAccountId: config.accountId,
-      livemode: config.live,
-    },
+  const attempt = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "Customer" WHERE id = ${customer.id} FOR UPDATE`;
+    await customerIdentity(tx, userId);
+    await attachSubscriptionQuote(tx, customer.id, input);
+    return tx.checkoutAttempt.upsert({
+      where: { customerId_requestKey: key },
+      update: {},
+      create: {
+        ...key,
+        requestHash: hash,
+        subscriptionCycleId: input.subscriptionCycleId,
+        snapshot: json(snapshot),
+        expiresAt: new Date(Date.now() + 5 * 60000),
+        stripeAccountId: config.accountId,
+        livemode: config.live,
+      },
+    });
   });
   if (attempt.requestHash !== hash)
     throw new AccountError("Checkout request changed.", 409);

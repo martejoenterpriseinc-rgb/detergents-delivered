@@ -14,6 +14,7 @@ import {
   upcomingQuarter,
 } from "@/lib/domain/subscriptions";
 
+import { changeSubscriptionCycles } from "./subscription-cycles";
 type Tx = Prisma.TransactionClient;
 const digest = (v: unknown) =>
   createHash("sha256").update(canonicalJson(v)).digest("hex");
@@ -236,6 +237,7 @@ export async function changeSubscription(userId: string, raw: unknown) {
       );
       fields = { cycleNumber: next.cycle, nextOrderAt: new Date(next.date) };
     }
+    await changeSubscriptionCycles(tx, s, input.action);
     const saved = await tx.subscription.update({
       where: { id: s.id },
       data: { ...fields, version: { increment: 1 } },
