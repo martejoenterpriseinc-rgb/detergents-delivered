@@ -158,11 +158,11 @@ test("staff restore original reward-only credit with retry safety and CPA read-o
       .fill("Customer returned original reward-funded merchandise");
     await page.getByRole("button", { name: "Review reward credit", exact: true }).click();
     await expect(
-      page.getByText("$5.00 reward credit allocated", { exact: true }),
+      page.getByText("5.00 USD reward credit allocated", { exact: true }),
     ).toBeVisible();
     await page
       .getByRole("checkbox", {
-        name: "Restore $5.00 of original reward credit. No cash refund or stock return.",
+        name: "Restore 5.00 USD of original reward credit. No cash refund or stock return.",
         exact: true,
       })
       .check();
@@ -179,12 +179,12 @@ test("staff restore original reward-only credit with retry safety and CPA read-o
     await page
       .getByRole("button", { name: "Confirm reward restoration", exact: true })
       .click();
-    await expect(page.getByRole("alert")).toBeVisible();
+    await expect(page.getByRole("alert").filter({ hasText: /\S/ })).toBeVisible();
     await page
       .getByRole("button", { name: "Confirm reward restoration", exact: true })
       .click();
     await expect(
-      page.getByText("$5.00 reward credit restored", { exact: true }),
+      page.getByText("5.00 USD reward credit restored", { exact: true }),
     ).toBeVisible();
     await page.unroute(`**${url}`);
     expect(
@@ -210,7 +210,7 @@ test("staff restore original reward-only credit with retry safety and CPA read-o
       page.getByRole("button", { name: "Confirm reward restoration", exact: true }),
     ).toHaveCount(0);
     await expect(
-      page.getByText("$5.00 reward credit restored", { exact: true }),
+      page.getByText("5.00 USD reward credit restored", { exact: true }),
     ).toBeVisible();
   } finally {
     await db.user.updateMany({
