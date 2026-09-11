@@ -103,6 +103,7 @@ export function QuickbooksReceiptSettings() {
               <label className="block">
                 Receipt clearing account
                 <select
+                  aria-label="Receipt clearing account"
                   className="mt-1 block w-full rounded border p-2"
                   value={selected}
                   disabled={busy}
