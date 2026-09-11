@@ -63,6 +63,12 @@ function ExpenseRow({
             Company {row.export.realm} · {row.export.mapping.expenseAccount.name} · Paid
             from {row.export.mapping.paymentAccount.name}
           </p>
+          {row.export.reconciliationIssue && (
+            <p role="alert">
+              QuickBooks evidence needs review. The saved accounting link remains
+              protected.
+            </p>
+          )}
           {row.export.externalId && <p>QuickBooks transaction {row.export.externalId}</p>}
           {["SUBMITTING", "UNKNOWN"].includes(row.export.status) && (
             <p>Reconcile this export before taking further accounting action.</p>
@@ -73,76 +79,79 @@ function ExpenseRow({
       ) : (
         <p>No export prepared.</p>
       )}
-      {canWrite && !row.linked && row.currency === "USD" && (
-        <>
-          {!row.export && (
-            <label className="block">
-              Payment type
-              <select
-                className="ml-2 rounded border p-2"
-                value={paymentType}
-                onChange={(e) => {
-                  setPaymentType(e.target.value);
-                  setRequestKey("");
-                  setConfirmed(false);
-                }}
-              >
-                <option value="Cash">Bank or cash account</option>
-                <option value="CreditCard">Credit card</option>
-              </select>
-            </label>
-          )}
-          <label className="flex items-start gap-3">
-            <input
-              type="checkbox"
-              checked={confirmed}
-              onChange={(e) => setConfirmed(e.target.checked)}
-            />
-            {row.export
-              ? "I reviewed this expense and its QuickBooks accounts."
-              : "I authorize preparing this expense for review."}
-          </label>
-          <div className="flex flex-wrap gap-3">
+      {canWrite &&
+        (!row.linked || Boolean(row.export?.reconciliationIssue)) &&
+        row.currency === "USD" && (
+          <>
             {!row.export && (
-              <button
-                className="ops-button"
-                disabled={busy || !confirmed}
-                onClick={() => act("prepare")}
-              >
-                Prepare expense export
-              </button>
-            )}
-            {row.export?.status === "DRAFT" && (
-              <>
-                <button
-                  className="ops-button"
-                  disabled={busy || !confirmed || !canSubmit || attemptedSubmit}
-                  onClick={() => act("submit")}
+              <label className="block">
+                Payment type
+                <select
+                  className="ml-2 rounded border p-2"
+                  value={paymentType}
+                  onChange={(e) => {
+                    setPaymentType(e.target.value);
+                    setRequestKey("");
+                    setConfirmed(false);
+                  }}
                 >
-                  Submit to QuickBooks
-                </button>
+                  <option value="Cash">Bank or cash account</option>
+                  <option value="CreditCard">Credit card</option>
+                </select>
+              </label>
+            )}
+            <label className="flex items-start gap-3">
+              <input
+                type="checkbox"
+                checked={confirmed}
+                onChange={(e) => setConfirmed(e.target.checked)}
+              />
+              {row.export
+                ? "I reviewed this expense and its QuickBooks accounts."
+                : "I authorize preparing this expense for review."}
+            </label>
+            <div className="flex flex-wrap gap-3">
+              {!row.export && (
                 <button
                   className="ops-button"
                   disabled={busy || !confirmed}
-                  onClick={() => act("cancel")}
+                  onClick={() => act("prepare")}
                 >
-                  Cancel export draft
+                  Prepare expense export
                 </button>
-                {!canSubmit && <p>Posting is not enabled for this company.</p>}
-              </>
-            )}
-            {row.export && ["SUBMITTING", "UNKNOWN"].includes(row.export.status) && (
-              <button
-                className="ops-button"
-                disabled={busy || !confirmed}
-                onClick={() => act("reconcile")}
-              >
-                Reconcile export
-              </button>
-            )}
-          </div>
-        </>
-      )}
+              )}
+              {row.export?.status === "DRAFT" && (
+                <>
+                  <button
+                    className="ops-button"
+                    disabled={busy || !confirmed || !canSubmit || attemptedSubmit}
+                    onClick={() => act("submit")}
+                  >
+                    Submit to QuickBooks
+                  </button>
+                  <button
+                    className="ops-button"
+                    disabled={busy || !confirmed}
+                    onClick={() => act("cancel")}
+                  >
+                    Cancel export draft
+                  </button>
+                  {!canSubmit && <p>Posting is not enabled for this company.</p>}
+                </>
+              )}
+              {row.export &&
+                ["SUBMITTING", "UNKNOWN", "POSTED"].includes(row.export.status) && (
+                  <button
+                    className="ops-button"
+                    disabled={busy || !confirmed}
+                    onClick={() => act("reconcile")}
+                  >
+                    Reconcile export
+                  </button>
+                )}
+            </div>
+          </>
+        )}
       {error && <p role="alert">{error}</p>}
     </article>
   );

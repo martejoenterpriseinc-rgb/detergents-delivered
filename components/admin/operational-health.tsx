@@ -15,6 +15,8 @@ const reasons: Record<string, string> = {
   DELIVERY_DISABLED: "Scheduled email delivery is not activated.",
   REFUND_REVIEW_REQUIRED:
     "Review protected refund requests in Orders; no new refund is submitted by this job.",
+  ACCOUNTING_REVIEW_REQUIRED:
+    "Review QuickBooks expense exports; this job never submits a new expense.",
   PAYMENT_REVIEW_REQUIRED: "Review protected pending payments in Payments.",
   EMAIL_RETRY_REQUIRED: "Some recovery emails need retry or a fresh customer request.",
   SUBSCRIPTION_REVIEW_REQUIRED:
@@ -50,7 +52,9 @@ export async function OperationalHealth() {
                     ? "Password recovery email"
                     : job.name === "refund-reconciliation"
                       ? "Refund reconciliation"
-                      : "Quarterly subscription preparation"}
+                      : job.name === "quickbooks-reconciliation"
+                        ? "QuickBooks reconciliation"
+                        : "Quarterly subscription preparation"}
               </h3>
               <p className="mt-1 text-xs text-slate-500">
                 {job.heartbeatAt

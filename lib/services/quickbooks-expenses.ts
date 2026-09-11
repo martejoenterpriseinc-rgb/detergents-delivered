@@ -1,3 +1,9 @@
+import {
+  type QuickbooksActor,
+  quickbooksAccountingAccess,
+  quickbooksAuditActor,
+  quickbooksWorkerAuthority,
+} from "./quickbooks-worker-authority";
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { Prisma, type Expense, type QboExpenseExport } from "@prisma/client";
@@ -5,7 +11,11 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { AccountError } from "@/lib/domain/account";
 import { financeAccess } from "./finance";
-import { authorizedQuickbooks, assertQuickbooksSnapshot } from "./quickbooks-connection";
+import {
+  authorizedQuickbooks,
+  assertQuickbooksSnapshot,
+  refreshQuickbooksWorker,
+} from "./quickbooks-connection";
 import { quickbooksMappingSchema } from "./quickbooks-mapping";
 import {
   quickbooksConfig,
@@ -36,6 +46,8 @@ const publicExport = (e: QboExpenseExport) => ({
   source: qboExpenseSource.parse(e.source),
   mapping: quickbooksMappingSchema.parse(e.mapping),
   externalId: e.externalId,
+  reconciliationIssue: e.reconciliationIssue,
+  recoveryCheckedAt: e.recoveryCheckedAt?.toISOString() ?? null,
   submittedAt: e.submittedAt?.toISOString() ?? null,
   confirmedAt: e.confirmedAt?.toISOString() ?? null,
 });
@@ -219,7 +231,7 @@ export async function cancelQuickbooksExpense(actor: string, id: string) {
   });
 }
 async function confirm(
-  actor: string,
+  actor: QuickbooksActor,
   id: string,
   receipt: unknown,
   snapshot: Awaited<ReturnType<typeof authorizedQuickbooks>>,
@@ -254,11 +266,15 @@ async function confirm(
     });
     await tx.auditLog.create({
       data: {
-        actorUserId: actor,
+        actorUserId: quickbooksAuditActor(actor),
         action: "quickbooks.expense.confirmed",
         entityType: "QboExpenseExport",
         entityId: id,
-        afterJson: { externalId, realm: record.realm },
+        afterJson: {
+          externalId,
+          realm: record.realm,
+          source: typeof actor === "string" ? "staff" : "scheduled",
+        },
       },
     });
     return publicExport(posted);
@@ -353,8 +369,8 @@ export async function submitQuickbooksExpense(actor: string, id: string) {
     );
   }
 }
-export async function reconcileQuickbooksExpense(actor: string, id: string) {
-  await financeAccess(prisma, actor, true);
+async function reconcileAs(actor: QuickbooksActor, id: string) {
+  await quickbooksAccountingAccess(prisma, actor, true);
   const snapshot = await authorizedQuickbooks(actor),
     record = await prisma.qboExpenseExport.findUnique({ where: { id } });
   if (!record) throw new AccountError("Export not found.", 404);
@@ -372,5 +388,78 @@ export async function reconcileQuickbooksExpense(actor: string, id: string) {
       "A unique matching QuickBooks expense was not found. Keep this export blocked for accounting review.",
       409,
     );
-  return confirm(actor, id, matches[0], snapshot);
+  const result = await confirm(actor, id, matches[0], snapshot);
+  await prisma.qboExpenseExport.update({
+    where: { id },
+    data: { reconciliationIssue: null, recoveryCheckedAt: new Date() },
+  });
+  return result;
+}
+
+export function reconcileQuickbooksExpense(actor: string, id: string) {
+  return reconcileAs(actor, id);
+}
+
+export async function reconcileScheduledQuickbooksExpenses(
+  ownsLease: () => Promise<boolean>,
+) {
+  if (!(await ownsLease())) throw new Error("Worker lease expired.");
+  await refreshQuickbooksWorker();
+  const snapshot = await authorizedQuickbooks(quickbooksWorkerAuthority);
+  const company = { mode: snapshot.config.mode, realm: snapshot.config.realm };
+  const now = new Date();
+  const rows = await prisma.qboExpenseExport.findMany({
+    where: {
+      ...company,
+      OR: [
+        {
+          status: { in: ["SUBMITTING", "UNKNOWN"] },
+          OR: [
+            { recoveryCheckedAt: null },
+            { recoveryCheckedAt: { lt: new Date(now.getTime() - 60000) } },
+          ],
+        },
+        {
+          status: "POSTED",
+          OR: [
+            { recoveryCheckedAt: null },
+            { recoveryCheckedAt: { lt: new Date(now.getTime() - 86400000) } },
+          ],
+        },
+      ],
+    },
+    orderBy: [{ recoveryCheckedAt: { sort: "asc", nulls: "first" } }, { id: "asc" }],
+    take: 10,
+  });
+  let completed = 0;
+  for (const row of rows) {
+    if (!(await ownsLease())) throw new Error("Worker lease expired.");
+    await prisma.qboExpenseExport.update({
+      where: { id: row.id },
+      data: { recoveryCheckedAt: new Date() },
+    });
+    try {
+      await reconcileAs(quickbooksWorkerAuthority, row.id);
+      await prisma.qboExpenseExport.update({
+        where: { id: row.id },
+        data: { reconciliationIssue: null },
+      });
+      completed++;
+    } catch {
+      await prisma.qboExpenseExport.update({
+        where: { id: row.id },
+        data: { reconciliationIssue: "EVIDENCE_UNCONFIRMED" },
+      });
+    }
+  }
+  const attention = await prisma.qboExpenseExport.count({
+    where: {
+      ...company,
+      OR: [
+        { reconciliationIssue: { not: null } },
+        { status: { in: ["SUBMITTING", "UNKNOWN"] } },
+      ],
+    },
+  });
+  return { checked: rows.length, completed, attention };
 }
