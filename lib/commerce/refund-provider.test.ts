@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   payment: vi.fn(),
   charge: vi.fn(),
   refunds: vi.fn(),
+  createRefund: vi.fn(),
 }));
 vi.mock("./runtime", () => ({ readCommerce: mocks.config }));
 vi.mock("./stripe", () => ({
@@ -12,12 +13,13 @@ vi.mock("./stripe", () => ({
     accounts: { retrieve: mocks.account },
     paymentIntents: { retrieve: mocks.payment },
     charges: { retrieve: mocks.charge },
-    refunds: { list: mocks.refunds },
+    refunds: { list: mocks.refunds, create: mocks.createRefund },
   }),
 }));
 import {
   inspectStripeRefunds,
   matchProviderRefunds,
+  submitClaimedStripeRefund,
   type RefundPaymentObservation,
   type RefundObservation,
 } from "./refund-provider";
@@ -77,6 +79,115 @@ beforeEach(() => {
   mocks.payment.mockResolvedValue(payment);
   mocks.charge.mockResolvedValue(charge);
   mocks.refunds.mockResolvedValue({ data: [rawRefund], has_more: false });
+});
+
+describe("claimed refund submission (mock provider only)", () => {
+  const claim = () => ({
+    requestId: "request-1",
+    requestHash: "a".repeat(64),
+    amountCents: 360,
+    submittedAt: new Date().toISOString(),
+    binding,
+  });
+  const receipt = () => ({
+    ...rawRefund,
+    metadata: {
+      project: "detergents-delivered",
+      refundRequestId: "request-1",
+      requestHash: "a".repeat(64),
+    },
+  });
+  beforeEach(() => {
+    mocks.refunds.mockResolvedValue({ data: [], has_more: false });
+    mocks.createRefund.mockResolvedValue(receipt());
+  });
+  it("uses only the saved original payment, cents, metadata and stable key, with no automatic retry", async () => {
+    const input = claim();
+    expect(await submitClaimedStripeRefund(input, [])).toMatchObject({
+      id: "re_original",
+      amountCents: 360,
+    });
+    expect(mocks.createRefund).toHaveBeenCalledExactlyOnceWith(
+      {
+        payment_intent: "pi_original",
+        amount: 360,
+        metadata: {
+          project: "detergents-delivered",
+          refundRequestId: input.requestId,
+          requestHash: input.requestHash,
+        },
+      },
+      {
+        timeout: 8000,
+        maxNetworkRetries: 0,
+        idempotencyKey: `dd:refund:${input.requestId}:${input.requestHash}:v1`,
+      },
+    );
+  });
+  it("returns an exactly matched existing refund without creating another, even when failed", async () => {
+    mocks.refunds.mockResolvedValue({
+      data: [{ ...receipt(), status: "failed" }],
+      has_more: false,
+    });
+    expect(await submitClaimedStripeRefund(claim(), [])).toMatchObject({
+      status: "failed",
+    });
+    expect(mocks.createRefund).not.toHaveBeenCalled();
+  });
+  it("rejects stale or future claims before any provider access", async () => {
+    for (const offset of [-600001, 60000])
+      await expect(
+        submitClaimedStripeRefund(
+          { ...claim(), submittedAt: new Date(Date.now() + offset).toISOString() },
+          [],
+        ),
+      ).rejects.toMatchObject({ status: 409 });
+    expect(mocks.account).not.toHaveBeenCalled();
+    expect(mocks.createRefund).not.toHaveBeenCalled();
+  });
+  it("blocks disputes, over-refunds and unknown previous submissions", async () => {
+    mocks.charge.mockResolvedValueOnce({ ...charge, disputed: true });
+    await expect(submitClaimedStripeRefund(claim(), [])).rejects.toMatchObject({
+      status: 409,
+    });
+    await expect(
+      submitClaimedStripeRefund({ ...claim(), amountCents: 1084 }, []),
+    ).rejects.toMatchObject({ status: 409 });
+    await expect(
+      submitClaimedStripeRefund(claim(), [{ ...expected, id: "other" }]),
+    ).rejects.toMatchObject({ status: 409 });
+    expect(mocks.createRefund).not.toHaveBeenCalled();
+  });
+  it("blocks external refund history before any submission", async () => {
+    mocks.refunds.mockResolvedValue({ data: [rawRefund], has_more: false });
+    await expect(submitClaimedStripeRefund(claim(), [])).rejects.toMatchObject({
+      status: 409,
+    });
+    expect(mocks.createRefund).not.toHaveBeenCalled();
+  });
+  it("does not retry an uncertain create response", async () => {
+    mocks.createRefund.mockRejectedValueOnce(new Error("Synthetic timeout"));
+    await expect(submitClaimedStripeRefund(claim(), [])).rejects.toThrow(
+      "Synthetic timeout",
+    );
+    expect(mocks.createRefund).toHaveBeenCalledTimes(1);
+  });
+  it("rejects a response bound to another request or payment", async () => {
+    mocks.createRefund.mockResolvedValueOnce({
+      ...receipt(),
+      payment_intent: "pi_other",
+    });
+    await expect(submitClaimedStripeRefund(claim(), [])).rejects.toMatchObject({
+      status: 409,
+    });
+    mocks.createRefund.mockResolvedValueOnce({
+      ...receipt(),
+      metadata: { ...receipt().metadata, refundRequestId: "other" },
+    });
+    await expect(submitClaimedStripeRefund(claim(), [])).rejects.toMatchObject({
+      status: 409,
+    });
+  });
 });
 
 describe("original Stripe refund evidence (mock provider)", () => {

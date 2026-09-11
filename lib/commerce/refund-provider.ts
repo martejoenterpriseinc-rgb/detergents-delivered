@@ -213,3 +213,86 @@ export function matchProviderRefunds(
     throw fail();
   return { matched, reservedCents };
 }
+
+const submission = z
+  .object({
+    requestId: z.string().min(1).max(100),
+    requestHash: z.string().regex(/^[a-f0-9]{64}$/),
+    amountCents: z.number().int().positive().max(100_000_000),
+    submittedAt: z.string().datetime(),
+    binding: paymentBinding,
+  })
+  .strict();
+
+/** Internal adapter. The caller must first commit claimRefundSubmission exactly once.
+ * Not wired to HTTP, workers or startup until settlement/reversal acceptance is complete.
+ */
+export async function submitClaimedStripeRefund(
+  raw: z.infer<typeof submission>,
+  otherRequests: readonly ExpectedProviderRefund[],
+): Promise<RefundObservation> {
+  const input = submission.parse(raw);
+  const age = Date.now() - new Date(input.submittedAt).getTime();
+  // Do not reuse a create key after a crash/delayed retry: Stripe may prune old keys.
+  if (
+    age < 0 ||
+    age > 10 * 60 * 1000 ||
+    otherRequests.some((r) => r.id === input.requestId)
+  )
+    throw fail();
+  const observation = await inspectStripeRefunds(input.binding);
+  const current = {
+    id: input.requestId,
+    requestHash: input.requestHash,
+    providerRefundId: null,
+    submitted: true,
+    amountCents: input.amountCents,
+    currency: input.binding.currency,
+  };
+  const { matched, reservedCents } = matchProviderRefunds(observation, [
+    ...otherRequests,
+    current,
+  ]);
+  const existing = matched.get(input.requestId);
+  if (existing) return existing;
+  if (
+    observation.disputed ||
+    input.amountCents + reservedCents > observation.capturedCents ||
+    otherRequests.some(
+      (r) =>
+        r.submitted &&
+        (!matched.has(r.id) ||
+          ["pending", "requires_action"].includes(matched.get(r.id)!.status)),
+    )
+  )
+    throw fail();
+  const config = await readCommerce(true);
+  if (config.accountId !== input.binding.accountId || config.live !== input.binding.live)
+    throw fail();
+  const stripe = await stripeClient(config);
+  const result = refundObservation(
+    await stripe.refunds.create(
+      {
+        payment_intent: input.binding.paymentIntentId,
+        amount: input.amountCents,
+        metadata: {
+          project: "detergents-delivered",
+          refundRequestId: input.requestId,
+          requestHash: input.requestHash,
+        },
+      },
+      {
+        ...requestOptions,
+        idempotencyKey: `dd:refund:${input.requestId}:${input.requestHash}:v1`,
+      },
+    ),
+    input.binding,
+    observation.chargeId,
+  );
+  // A response is evidence, not settlement. Any error leaves the durable claim reserved.
+  matchProviderRefunds({ ...observation, refunds: [...observation.refunds, result] }, [
+    ...otherRequests,
+    current,
+  ]);
+  return result;
+}
