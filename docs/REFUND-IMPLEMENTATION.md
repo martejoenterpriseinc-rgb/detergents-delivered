@@ -10,7 +10,7 @@ The read-only adapter reads the original Stripe account, PaymentIntent, captured
 
 Refund allocation subtracts the actual surviving reserved net, tax and reward amounts before dividing the remaining quantities. This conserves all saved cents when an earlier partial draft is canceled while a later draft remains reserved. Quantity alone is insufficient to locate rounding remainders after cancellation.
 
-Reward-funded orders are explicitly blocked at preparation until reward restoration and compensation are implemented. Provider submission/reconciliation, tax reversal evidence, reward/referral adjustments and the payment refund staff controls remain required before enabling refunds. Physical receipts do not move money or imply a payment refund.
+Mixed reward/promotion orders are supported by the internal settlement increment described in REFUND-SETTLEMENT.md; zero-cash reward-only selections remain blocked. Provider tax reversal evidence, operational callers and real provider acceptance remain required before enabling refunds. Physical receipts do not move money or imply a payment refund.
 
 The foundation release used `node --import tsx scripts/deploy-refund-foundation.ts` to check existing database identity and complete migration history, permit only the two named additive migrations, apply them and verify history again. Both web services now use the strictly read-only `npm run db:preflight` pre-deploy command. The staff controls add no migrations.
 
@@ -36,7 +36,7 @@ Provider status is authoritative. Pending, requires_action, failed and canceled 
 
 Allocate from saved purchase amounts, never current prices or tax rates. Cumulative integer allocation must return every saved cent exactly once across successive partial quantities. Promotion discounts are not cash owed to the customer. Restore only redeemed reward credit attributable to successfully refunded merchandise; append reversals if the provider later reverses the refund. Keep referral eligibility and award reversals source-linked, idempotent and auditable. Negative reward balances must continue to block spending.
 
-The current referral reviewer treats any Refund row as disqualifying and makes reversal terminal. Before adding provider refund failures/compensations, update that consumer to use verified net refund evidence; merely inserting failed or pending requests into Refund would incorrectly reverse awards. Preserve its existing wallet lock ordering and append-only ledger protections.
+The settlement increment updates the referral reviewer to use effective refunds and preserve earned-award reversal/restoration history. Failed or pending requests are never inserted into Refund. Existing wallet lock ordering and append-only ledger protections are retained.
 
 Do not infer historical tax jurisdictions or taxable bases from today's product/customer settings. Verify Stripe Tax reversal behavior for the actual Checkout integration, and store its evidence separately from the original tax snapshot.
 

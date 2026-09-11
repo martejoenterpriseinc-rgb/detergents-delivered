@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 const refundReviewMocks = vi.hoisted(() => ({
   inspect: vi.fn(),
   submit: vi.fn(),
-  verifyBalance: vi.fn(),
+  verifyBalance: vi.fn(async () => undefined),
 }));
 vi.mock("@/lib/commerce/refund-provider", async (original) => ({
   ...(await original<typeof import("@/lib/commerce/refund-provider")>()),
