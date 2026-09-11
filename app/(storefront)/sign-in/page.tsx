@@ -11,7 +11,7 @@ import { signInWithCredentials, signInWithGoogle } from "../actions";
 export default async function SignInPage({
   searchParams,
 }: {
-  searchParams: Promise<{ callbackUrl?: string; error?: string }>;
+  searchParams: Promise<{ callbackUrl?: string; error?: string; ownerActivated?: string }>;
 }) {
   const params = await searchParams;
   const callbackUrl = safeLoginCallback(params.callbackUrl);
@@ -23,6 +23,11 @@ export default async function SignInPage({
       <p className="mt-2 text-sm text-teal-800">
         Your orders, delivery updates, and household essentials, all in one place.
       </p>
+      {params.ownerActivated === "1" ? (
+        <p className="mt-4 rounded-2xl bg-teal-50 px-4 py-3 text-sm text-teal-900">
+          Owner / Admin access is now active for this customer account. Sign in again to enter the admin workspace.
+        </p>
+      ) : null}
       {params.error ? (
         <p className="mt-4 rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-900">
           {params.error === "forbidden"
