@@ -12,7 +12,7 @@ export const profileSchema = z
   })
   .strict();
 export const notificationSchema = z
-  .object({ emailNotifications: z.boolean(), smsNotifications: z.boolean() })
+  .object({ emailNotifications: z.boolean(), smsNotifications: z.boolean().optional() })
   .strict();
 export const passwordSchema = z
   .object({

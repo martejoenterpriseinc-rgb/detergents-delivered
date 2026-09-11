@@ -97,6 +97,16 @@ test("delivery texts require explicit consent and a signed phone verification; S
       path: info.outputPath("delivery-text-active.png"),
       fullPage: true,
     });
+    await page.getByLabel("Email delivery notifications", { exact: true }).check();
+    await page.getByRole("button", { name: "Save changes", exact: true }).click();
+    await expect(
+      page
+        .getByRole("status")
+        .filter({ hasText: "Your phone is verified for delivery texts." }),
+    ).toBeVisible();
+    expect(
+      (await (await page.request.get("/api/account/sms-consent")).json()).active,
+    ).toBe(true);
     expect((await inbound("STOP")).status()).toBe(204);
     expect((await inbound(code)).status()).toBe(204);
     await page.reload();

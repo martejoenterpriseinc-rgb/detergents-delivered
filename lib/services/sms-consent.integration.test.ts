@@ -66,6 +66,8 @@ it("requires verified email and phone possession, rejects other phones, deduplic
   const valid = fields(challenge.message);
   await Promise.all([receiveSmsConsent(config, valid), receiveSmsConsent(config, valid)]);
   expect((await smsConsentStatus(userId)).active).toBe(true);
+  await updateNotifications(userId, { emailNotifications: true });
+  expect((await smsConsentStatus(userId)).active).toBe(true);
   const row = await prisma.smsConsent.findFirstOrThrow({ where: { customerId } });
   expect(row.codeHash).not.toContain(challenge.message.slice(3));
   expect(
