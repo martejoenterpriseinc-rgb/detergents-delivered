@@ -29,6 +29,9 @@ import {
   reconcileRefundSettlement,
   prepareRewardOnlyRefund,
   settleRewardOnlyRefund,
+  cashRefundReadiness,
+  submitCashRefundOperation,
+  reconcileCashRefundOperation,
 } from "./refunds";
 import { getOrder } from "./order-workspace";
 import { readTaxReview } from "./tax-review";
@@ -1161,6 +1164,78 @@ describe("durable refund submission claim (isolated PostgreSQL, no provider writ
       await prisma.$executeRawUnsafe(
         'ALTER TABLE "AuditLog" DROP CONSTRAINT dd_recovery_audit',
       );
+    }
+  });
+  it("keeps staff cash submission closed unless activation matches the exact provider environment", async () => {
+    const f = await fixture();
+    refundReviewMocks.submit.mockReset();
+    try {
+      vi.stubEnv("DD_CASH_REFUNDS_ENABLED", "false");
+      vi.stubEnv("DD_CASH_REFUNDS_ACCEPTED_ACCOUNT", "sandbox:acct_synthetic");
+      expect(await cashRefundReadiness(admin)).toEqual({ enabled: false });
+      await expect(submitCashRefundOperation(admin, f.input)).rejects.toMatchObject({
+        status: 503,
+      });
+      vi.stubEnv("DD_CASH_REFUNDS_ENABLED", "true");
+      vi.stubEnv("DD_CASH_REFUNDS_ACCEPTED_ACCOUNT", "live:acct_synthetic");
+      await expect(submitCashRefundOperation(admin, f.input)).rejects.toMatchObject({
+        status: 503,
+      });
+      vi.stubEnv("DD_CASH_REFUNDS_ACCEPTED_ACCOUNT", "sandbox:acct_other");
+      await expect(submitCashRefundOperation(admin, f.input)).rejects.toMatchObject({
+        status: 503,
+      });
+      for (const actor of [cpa, users[2]])
+        await expect(cashRefundReadiness(actor)).rejects.toMatchObject({ status: 403 });
+      expect(refundReviewMocks.submit).not.toHaveBeenCalled();
+      expect(
+        await prisma.refundRequest.findUnique({ where: { id: f.draft.id } }),
+      ).toMatchObject({ status: "PREPARED", submittedAt: null });
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+  it("claims one staff submission during concurrent retries and retains an uncertain outcome", async () => {
+    const f = await fixture();
+    refundReviewMocks.submit
+      .mockReset()
+      .mockRejectedValue(new Error("Synthetic lost provider response"));
+    try {
+      vi.stubEnv("DD_CASH_REFUNDS_ENABLED", "true");
+      vi.stubEnv("DD_CASH_REFUNDS_ACCEPTED_ACCOUNT", "sandbox:acct_synthetic");
+      const outcomes = await Promise.allSettled([
+        submitCashRefundOperation(admin, f.input),
+        submitCashRefundOperation(admin, f.input),
+      ]);
+      expect(outcomes.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+      expect(refundReviewMocks.submit).toHaveBeenCalledTimes(1);
+      expect(
+        await prisma.refundRequest.findUnique({ where: { id: f.draft.id } }),
+      ).toMatchObject({ status: "UNKNOWN", providerRefundId: null });
+      expect(await prisma.refund.count({ where: { orderId: f.sale.id } })).toBe(0);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+  it("recovers and settles a claimed cash refund while new submissions are disabled", async () => {
+    const f = await claimedFixture();
+    refundReviewMocks.inspect.mockResolvedValue(recoveryObservation(f));
+    refundReviewMocks.verifyBalance.mockResolvedValue(undefined);
+    const creates = refundReviewMocks.submit.mock.calls.length;
+    try {
+      vi.stubEnv("DD_CASH_REFUNDS_ENABLED", "false");
+      await reconcileCashRefundOperation(admin, f.input);
+      await reconcileCashRefundOperation(admin, f.input);
+      expect(
+        await prisma.refundRequest.findUnique({ where: { id: f.draft.id } }),
+      ).toMatchObject({ status: "SUCCEEDED" });
+      expect(await prisma.refund.count({ where: { orderId: f.sale.id } })).toBe(1);
+      expect(refundReviewMocks.submit.mock.calls.length).toBe(creates);
+      await expect(reconcileCashRefundOperation(cpa, f.input)).rejects.toMatchObject({
+        status: 403,
+      });
+    } finally {
+      vi.unstubAllEnvs();
     }
   });
   it("orchestrates one provider attempt after the claim commits and records its receipt", async () => {

@@ -8,8 +8,10 @@ export function PrepareRewardRefund({
   orderId,
   paymentId,
   items,
+  cash = false,
 }: {
   orderId: string;
+  cash?: boolean;
   paymentId: string;
   items: { id: string; name: string; remaining: number }[];
 }) {
@@ -20,7 +22,11 @@ export function PrepareRewardRefund({
     [uncertain, setUncertain] = useState(false),
     [error, setError] = useState("");
   if (!open)
-    return <Button onClick={() => setOpen(true)}>Prepare reward credit return</Button>;
+    return (
+      <Button onClick={() => setOpen(true)}>
+        {cash ? "Prepare payment refund" : "Prepare reward credit return"}
+      </Button>
+    );
   return (
     <form
       className="space-y-4 rounded-xl border bg-white p-4"
@@ -50,7 +56,7 @@ export function PrepareRewardRefund({
           await adminFetch(`/api/admin/orders/${orderId}/operations`, {
             method: "POST",
             body: JSON.stringify({
-              action: "prepareRewardRefund",
+              action: cash ? "prepareCashRefund" : "prepareRewardRefund",
               data: pending.current,
             }),
           });
@@ -69,14 +75,18 @@ export function PrepareRewardRefund({
         }
       }}
     >
-      <h3 className="text-lg font-semibold">Prepare reward credit return</h3>
+      <h3 className="text-lg font-semibold">
+        {cash ? "Prepare payment refund" : "Prepare reward credit return"}
+      </h3>
       <p className="text-sm">
-        Review the original reward credit before confirming. No cash or inventory moves.
+        {cash
+          ? "Select purchased units and review their saved payment, tax and reward amounts. Preparing a draft does not send a refund or return stock."
+          : "Review the original reward credit before confirming. No cash or inventory moves."}
       </p>
       <fieldset disabled={busy || uncertain} className="space-y-3">
         {items.map((i) => (
           <label key={i.id} className="grid gap-1">
-            Credit return quantity for {i.name}
+            {cash ? "Refund quantity for" : "Credit return quantity for"} {i.name}
             <input
               name={i.id}
               type="number"
@@ -90,7 +100,7 @@ export function PrepareRewardRefund({
           </label>
         ))}
         <label className="grid gap-1">
-          Credit return reason
+          {cash ? "Payment refund reason" : "Credit return reason"}
           <textarea
             name="reason"
             minLength={10}
@@ -115,8 +125,12 @@ export function PrepareRewardRefund({
         {busy
           ? "Saving…"
           : uncertain
-            ? "Retry same credit draft"
-            : "Review reward credit"}
+            ? cash
+              ? "Retry same refund draft"
+              : "Retry same credit draft"
+            : cash
+              ? "Review payment refund"
+              : "Review reward credit"}
       </Button>
     </form>
   );

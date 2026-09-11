@@ -194,7 +194,7 @@ async function validatedPreparedRefund(
   return { request, payment, order, checkout };
 }
 
-/** Internal submission boundary. No HTTP/startup caller until settlement acceptance passes. */
+/** Durable internal submission boundary; staff access is guarded by the cash operation wrapper. */
 export async function claimRefundSubmission(userId: string, raw: unknown) {
   const input = submissionInput.parse(raw);
   await refundAccess(prisma, userId);
@@ -359,7 +359,7 @@ async function persistSubmissionResult(
   return publicRefundRequest(saved);
 }
 
-/** Internal orchestration only; no HTTP or worker entry point before settlement acceptance. */
+/** Internal orchestration; the staff wrapper requires explicit account-bound activation. */
 export async function submitPreparedRefund(userId: string, raw: unknown) {
   const input = submissionInput.parse(raw);
   const { otherRequests, ...claim } = await claimRefundSubmission(userId, input);
@@ -517,7 +517,7 @@ export async function recoverRefundSubmission(userId: string, raw: unknown) {
   });
 }
 
-/** Internal verified settlement boundary. No provider writes and no public entry point. */
+/** Verified settlement boundary used by staff reconciliation. No provider writes. */
 export async function reconcileRefundSettlement(userId: string, raw: unknown) {
   const input = submissionInput.parse(raw);
   const before = await prisma.$transaction(
@@ -1314,4 +1314,48 @@ export async function recordStockReturn(userId: string, raw: unknown) {
       receivedAt: saved.receivedAt.toISOString(),
     };
   });
+}
+
+/** Staff entry point. Activation never follows merely from adding Stripe credentials. */
+export async function cashRefundReadiness(userId: string) {
+  await refundAccess(prisma, userId);
+  try {
+    const c = await readCommerce(true);
+    const expected = `${c.live ? "live" : "sandbox"}:${c.accountId}`;
+    return {
+      enabled:
+        process.env.DD_CASH_REFUNDS_ENABLED === "true" &&
+        process.env.DD_CASH_REFUNDS_ACCEPTED_ACCOUNT === expected,
+    };
+  } catch {
+    return { enabled: false };
+  }
+}
+export async function submitCashRefundOperation(userId: string, raw: unknown) {
+  const input = submissionInput.parse(raw);
+  if (!(await cashRefundReadiness(userId)).enabled)
+    throw new AccountError(
+      "Cash refund submission is not activated. The draft is preserved.",
+      503,
+    );
+  // Durable submission claims and provider idempotency remain in the existing service.
+  return submitPreparedRefund(userId, input);
+}
+export async function reconcileCashRefundOperation(userId: string, raw: unknown) {
+  const input = submissionInput.parse(raw);
+  await refundAccess(prisma, userId);
+  const current = await prisma.refundRequest.findFirst({
+    where: {
+      id: input.requestId,
+      orderId: input.orderId,
+      amountCents: { gt: 0 },
+      submittedAt: { not: null },
+    },
+    select: { status: true },
+  });
+  if (!current) throw new AccountError("A submitted cash refund was not found.", 404);
+  if (["SUBMITTING", "UNKNOWN"].includes(current.status))
+    await recoverRefundSubmission(userId, input);
+  // Recovery stays available with checkout/submission disabled. It never creates money movement.
+  return reconcileRefundSettlement(userId, input);
 }

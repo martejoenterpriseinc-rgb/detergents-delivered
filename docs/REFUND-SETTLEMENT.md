@@ -1,6 +1,6 @@
 # Refund settlement and signed adjustments
 
-`reconcileRefundSettlement` is an internal, read-only-provider reconciliation boundary. It fetches current Stripe refund history, verifies the original account, mode, payment, amount and request metadata, then rechecks authority and the local snapshot under wallet/referral/order locks. It never creates a provider refund and has no HTTP, worker, startup or UI caller.
+`reconcileRefundSettlement` is an internal, read-only-provider reconciliation boundary. It fetches current Stripe refund history, verifies the original account, mode, payment, amount and request metadata, then rechecks authority and the local snapshot under wallet/referral/order locks. It never creates a provider refund. The subsequent staff cash-refund increment adds a guarded HTTP/UI reconciliation caller; see STAFF-CASH-REFUNDS.md. Scheduled reconciliation remains separate work.
 
 A verified success atomically appends the original Refund, an immutable SETTLEMENT adjustment, restored redeemed credit, referral changes, request evidence and audit. Cash equals saved net merchandise plus saved tax. Payment totals use effective refunds. Inventory receipts and fulfillment history remain independent.
 

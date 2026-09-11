@@ -185,6 +185,18 @@ test("staff receive goods, recover a lost response and cancel only unused refund
       ).status(),
     ).toBe(403);
     await page.goto(`/admin/orders/${order.id}`);
+    await expect(
+      page.getByText(
+        "Cash refund submission is not activated. This draft can be reviewed or canceled.",
+        { exact: true },
+      ),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Submit payment refund", exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Reconcile refund status", exact: true }),
+    ).toBeVisible();
     // Browser-only simulated provider response; native tests exercise the service.
     const reviewUrl = `**/api/admin/orders/${order.id}/refund-review`;
     await page.route(reviewUrl, (route) =>
@@ -324,6 +336,13 @@ test("staff receive goods, recover a lost response and cancel only unused refund
     ).toMatchObject({ onHandQty: 1, damagedQty: 1 });
     await page.context().clearCookies();
     await login("CPA");
+    await page.goto(`/admin/orders/${order.id}`);
+    await expect(
+      page.getByRole("button", { name: "Prepare payment refund", exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Reconcile refund status", exact: true }),
+    ).toHaveCount(0);
     await page.goto(`/admin/orders/${order.id}`);
     await expect(page.getByText("Damaged stock", { exact: true })).toBeVisible();
     await expect(

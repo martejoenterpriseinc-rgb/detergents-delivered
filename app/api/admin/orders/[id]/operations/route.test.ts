@@ -5,6 +5,9 @@ const mocks = vi.hoisted(() => ({
   cancel: vi.fn(),
   prepare: vi.fn(),
   restore: vi.fn(),
+  cashPrepare: vi.fn(),
+  cashSubmit: vi.fn(),
+  cashReconcile: vi.fn(),
 }));
 vi.mock("@/auth", () => ({ auth: mocks.auth }));
 vi.mock("@/lib/services/refunds", () => ({
@@ -12,6 +15,9 @@ vi.mock("@/lib/services/refunds", () => ({
   cancelPreparedRefund: mocks.cancel,
   prepareRewardOnlyRefund: mocks.prepare,
   settleRewardOnlyRefund: mocks.restore,
+  prepareRefund: mocks.cashPrepare,
+  submitCashRefundOperation: mocks.cashSubmit,
+  reconcileCashRefundOperation: mocks.cashReconcile,
 }));
 import { POST } from "./route";
 const input = {
@@ -78,6 +84,44 @@ describe("order return operation boundary", () => {
       (await POST(request({ ...input, extra: "x".repeat(16000) }), context)).status,
     ).toBe(413);
     expect(mocks.receive).not.toHaveBeenCalled();
+  });
+  it("requires explicit cash confirmation and rejects supplied amounts or provider evidence", async () => {
+    const data = { orderId: "order", requestId: "draft" };
+    for (const action of ["submitCashRefund", "reconcileCashRefund"]) {
+      expect((await POST(request({ action, data }), context)).status).toBe(400);
+      expect(
+        (
+          await POST(
+            request({ action, confirmed: true, data: { ...data, amountCents: 1 } }),
+            context,
+          )
+        ).status,
+      ).toBe(400);
+      expect(
+        (
+          await POST(
+            request({
+              action,
+              confirmed: true,
+              data: { ...data, observation: { status: "succeeded" } },
+            }),
+            context,
+          )
+        ).status,
+      ).toBe(400);
+    }
+    expect(mocks.cashSubmit).not.toHaveBeenCalled();
+    expect(mocks.cashReconcile).not.toHaveBeenCalled();
+    mocks.cashSubmit.mockResolvedValue({ status: "UNKNOWN" });
+    expect(
+      (
+        await POST(
+          request({ action: "submitCashRefund", confirmed: true, data }),
+          context,
+        )
+      ).status,
+    ).toBe(200);
+    expect(mocks.cashSubmit).toHaveBeenCalledWith("staff", data);
   });
   it("requires explicit credit confirmation and rejects client supplied amounts", async () => {
     const data = { orderId: "order", requestId: "draft" };

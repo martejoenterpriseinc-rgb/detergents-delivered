@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { CashRefundActions } from "@/components/commerce/cash-refunds";
+import { cashRefundReadiness } from "@/lib/services/refunds";
 import {
   PrepareRewardRefund,
   RestoreRewardRefund,
@@ -37,6 +39,9 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
     if (error instanceof AccountError && error.status === 404) notFound();
     throw error;
   }
+  const cashReady = order.canManage
+    ? await cashRefundReadiness(session.user.id)
+    : { enabled: false };
   const money = (value: number) => orderMoney(value, order.currency);
   const amounts: [string, number][] = [
     ["Subtotal", order.amounts.subtotalCents],
@@ -178,6 +183,16 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
               items={order.rewardRefundItems}
             />
           )}
+        {order.canManage &&
+          order.rewardRefundPaymentId &&
+          order.cashRefundItems.length > 0 && (
+            <PrepareRewardRefund
+              cash
+              orderId={order.id}
+              paymentId={order.rewardRefundPaymentId}
+              items={order.cashRefundItems}
+            />
+          )}
         {!order.refundRequests.length && <p>No refund requests recorded.</p>}
         {order.refundRequests.map((request) => (
           <article key={request.id} className="space-y-3 rounded-xl border bg-white p-4">
@@ -187,6 +202,12 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
                 {refundLabels[request.status] ?? request.status}
               </span>
             </div>
+            {request.amountCents > 0 && (
+              <p className="text-sm">
+                Original merchandise {orderMoney(request.netCents, request.currency)} ·
+                Saved tax {orderMoney(request.taxCents, request.currency)}
+              </p>
+            )}
             {request.rewardCents > 0 && (
               <p>
                 {money(request.rewardCents)} reward credit{" "}
@@ -194,6 +215,16 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
               </p>
             )}
             <p className="break-words">{request.reason}</p>
+            {(request.canSubmitCash || request.canReconcileCash) && (
+              <CashRefundActions
+                orderId={order.id}
+                requestId={request.id}
+                amount={orderMoney(request.amountCents, request.currency)}
+                canSubmit={request.canSubmitCash}
+                canReconcile={request.canReconcileCash}
+                enabled={cashReady.enabled}
+              />
+            )}
             {request.canRestoreCredit && (
               <RestoreRewardRefund
                 orderId={order.id}
