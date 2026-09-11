@@ -177,6 +177,95 @@ test("QuickBooks intended-company confirmation, failed connection and CPA isolat
       fullPage: true,
     });
     await page.unroute("**/api/admin/quickbooks/accounts*");
+    let exportState: Record<string, unknown> | null = null;
+    let submitCalls = 0;
+    await page.route("**/api/admin/quickbooks/expenses*", async (route) => {
+      if (route.request().method() === "POST") {
+        const action = route.request().postDataJSON().action;
+        if (action === "prepare")
+          exportState = {
+            id: "qbe_" + "a".repeat(64),
+            status: "DRAFT",
+            realm: "123456789",
+            docNumber: "DD" + "a".repeat(19),
+            source: {
+              categoryId: "synthetic-category",
+              amountCents: 1234,
+              currency: "USD",
+              date: "2026-09-01",
+              memo: "Synthetic export expense",
+            },
+            mapping,
+            externalId: null,
+            submittedAt: null,
+            confirmedAt: null,
+          };
+        if (action === "submit") {
+          submitCalls++;
+          exportState = { ...exportState, status: "UNKNOWN" };
+          return route.fulfill({
+            status: 503,
+            contentType: "application/json",
+            body: JSON.stringify({ error: "Synthetic submission response lost" }),
+          });
+        }
+        if (action === "reconcile")
+          exportState = { ...exportState, status: "POSTED", externalId: "321" };
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify(exportState),
+        });
+      }
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          canWrite: true,
+          canSubmit: true,
+          nextCursor: null,
+          rows: [
+            {
+              id: "synthetic-expense",
+              date: "2026-09-01",
+              category: "Synthetic expense category",
+              memo: "Synthetic export expense",
+              amountCents: 1234,
+              currency: "USD",
+              linked: exportState?.status === "POSTED",
+              export: exportState,
+            },
+          ],
+        }),
+      });
+    });
+    await page.getByRole("button", { name: "Load expense exports", exact: true }).click();
+    await page.getByLabel("I authorize preparing this expense for review.").check();
+    await page
+      .getByRole("button", { name: "Prepare expense export", exact: true })
+      .click();
+    await expect(
+      page.getByRole("button", { name: "Submit to QuickBooks", exact: true }),
+    ).toBeDisabled();
+    await page.getByLabel("I reviewed this expense and its QuickBooks accounts.").check();
+    await page.getByRole("button", { name: "Submit to QuickBooks", exact: true }).click();
+    await expect(
+      page.getByText("Reconcile this export before taking further accounting action."),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Submit to QuickBooks", exact: true }),
+    ).toHaveCount(0);
+    await page.getByLabel("I reviewed this expense and its QuickBooks accounts.").check();
+    await page.getByRole("button", { name: "Reconcile export", exact: true }).click();
+    await expect(
+      page.getByText("QuickBooks transaction 321", { exact: true }),
+    ).toBeVisible();
+    expect(submitCalls).toBe(1);
+    await page.screenshot({
+      path: info.outputPath("quickbooks-expense-export.png"),
+      fullPage: true,
+    });
+    await page.unroute("**/api/admin/quickbooks/expenses*");
     await page.context().clearCookies();
     await login("cpa");
     await page.goto("/admin/reports/quickbooks?connection=connected");

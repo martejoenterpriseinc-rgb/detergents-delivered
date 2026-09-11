@@ -65,7 +65,14 @@ export async function saveFinance(userId: string, input: unknown) {
       );
     if (data.kind === "expense") {
       const old = before as { qboTxnId?: string | null; currency?: string } | null;
-      if (old?.qboTxnId || (old && old.currency !== "USD"))
+      if (
+        old?.qboTxnId ||
+        (old && old.currency !== "USD") ||
+        (before &&
+          (await tx.qboExpenseExport.findFirst({
+            where: { expenseId: id, status: { not: "CANCELED" } },
+          })))
+      )
         throw new AccountError(
           "This record requires accounting reconciliation before editing.",
           409,
@@ -180,7 +187,14 @@ export async function readFinance(
         const records = await tx.expense.findMany({
           where,
           ...window,
-          include: { category: true },
+          include: {
+            category: true,
+            quickbooksExports: {
+              where: { status: { not: "CANCELED" } },
+              select: { id: true },
+              take: 1,
+            },
+          },
           orderBy: [{ incurredOn: "desc" }, { id: "desc" }],
         });
         count = await tx.expense.count({ where });
@@ -202,7 +216,11 @@ export async function readFinance(
           description: r.memo ?? "",
           amount: (r.amountCents / 100).toFixed(2),
           currency: r.currency,
-          editable: canWrite && !r.qboTxnId && r.currency === "USD",
+          editable:
+            canWrite &&
+            !r.qboTxnId &&
+            !r.quickbooksExports.length &&
+            r.currency === "USD",
           version: 0,
         }));
       } else {

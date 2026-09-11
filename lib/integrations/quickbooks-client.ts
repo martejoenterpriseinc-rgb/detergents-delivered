@@ -92,6 +92,58 @@ async function providerRequest(url: string, init: RequestInit, empty = false) {
     );
   }
 }
+export async function createQuickbooksExpense(
+  config: QuickbooksConfig,
+  accessToken: string,
+  payload: unknown,
+) {
+  const host =
+    config.mode === "sandbox"
+      ? "https://sandbox-quickbooks.api.intuit.com"
+      : "https://quickbooks.api.intuit.com";
+  return z
+    .object({ Purchase: z.unknown() })
+    .parse(
+      await providerRequest(`${host}/v3/company/${config.realm}/purchase`, {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer " + accessToken,
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      }),
+    ).Purchase;
+}
+export async function findQuickbooksExpense(
+  config: QuickbooksConfig,
+  accessToken: string,
+  docNumber: string,
+) {
+  if (!/^DD[a-f0-9]{19}$/.test(docNumber))
+    throw new AccountError("Invalid export reference.");
+  const host =
+    config.mode === "sandbox"
+      ? "https://sandbox-quickbooks.api.intuit.com"
+      : "https://quickbooks.api.intuit.com";
+  const url = new URL(`${host}/v3/company/${config.realm}/query`);
+  url.searchParams.set(
+    "query",
+    `select * from Purchase where DocNumber = '${docNumber}' maxresults 2`,
+  );
+  return (
+    z
+      .object({
+        QueryResponse: z.object({ Purchase: z.array(z.unknown()).max(2).optional() }),
+      })
+      .parse(
+        await providerRequest(url.toString(), {
+          method: "GET",
+          headers: { Authorization: "Bearer " + accessToken, Accept: "application/json" },
+        }),
+      ).QueryResponse.Purchase ?? []
+  );
+}
 const basic = (c: QuickbooksConfig) =>
   "Basic " + Buffer.from(c.clientId + ":" + c.clientSecret).toString("base64");
 export async function verifyQuickbooksCompany(
