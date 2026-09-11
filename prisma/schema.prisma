@@ -812,6 +812,7 @@ model RefundRequest {
   lines  RefundRequestLine[]
   events RefundRequestEvent[]
   refund Refund?
+  adjustments RefundAdjustment[]
 
   @@index([orderId, createdAt])
   @@index([paymentId, status])
@@ -1609,4 +1610,23 @@ model CheckoutProviderEvent {
   evidence Json
   verifiedAt DateTime
   createdAt DateTime @default(now())
+}
+
+/// Append-only signed refund accounting. A compensation never removes the original refund.
+model RefundAdjustment {
+  id String @id @default(cuid())
+  requestId String
+  request RefundRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  kind String
+  cashCents Int
+  netCents Int
+  taxCents Int
+  rewardCents Int
+  currency String
+  providerRefundId String
+  balanceTransactionId String?
+  failureBalanceTransactionId String?
+  taxEvidenceStatus String @default("UNVERIFIED")
+  createdAt DateTime @default(now())
+  @@unique([requestId, kind])
 }

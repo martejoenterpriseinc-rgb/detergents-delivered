@@ -232,7 +232,15 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
         {!order.refunds.length && <p>No refunds recorded.</p>}
         {order.refunds.map((refund) => (
           <article key={refund.id} className="rounded-xl border bg-white p-4">
-            <strong>{orderMoney(refund.amountCents, refund.currency)}</strong>
+            <strong>
+              {orderMoney(refund.amountCents, refund.currency)} net refunded
+            </strong>
+            {refund.originalAmountCents !== refund.amountCents && (
+              <p className="text-sm">
+                Original refund {orderMoney(refund.originalAmountCents, refund.currency)};
+                returned funds recorded after refund failure.
+              </p>
+            )}
             <p className="break-words">{refund.reason || "No reason recorded"}</p>
             <p className="text-sm">{dateTime(refund.createdAt)}</p>
           </article>

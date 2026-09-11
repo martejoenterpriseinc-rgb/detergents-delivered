@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   charge: vi.fn(),
   refunds: vi.fn(),
   createRefund: vi.fn(),
+  balance: vi.fn(),
 }));
 vi.mock("./runtime", () => ({ readCommerce: mocks.config }));
 vi.mock("./stripe", () => ({
@@ -14,12 +15,14 @@ vi.mock("./stripe", () => ({
     paymentIntents: { retrieve: mocks.payment },
     charges: { retrieve: mocks.charge },
     refunds: { list: mocks.refunds, create: mocks.createRefund },
+    balanceTransactions: { retrieve: mocks.balance },
   }),
 }));
 import {
   inspectStripeRefunds,
   matchProviderRefunds,
   submitClaimedStripeRefund,
+  verifyRefundBalanceEvidence,
   type RefundPaymentObservation,
   type RefundObservation,
 } from "./refund-provider";
@@ -379,5 +382,55 @@ describe("refund reconciliation matching", () => {
         ["failed", "canceled"].includes(status) ? 0 : 360,
       );
     }
+  });
+});
+
+describe("verified returned-funds evidence", () => {
+  const refund = () => ({
+    id: "re_original",
+    amountCents: 360,
+    currency: "USD",
+    status: "failed" as const,
+    created: 1780000000,
+    requestId: "request-1",
+    requestHash: "a".repeat(64),
+    project: "detergents-delivered",
+    balanceTransactionId: "txn_original",
+    failureBalanceTransactionId: "txn_returned",
+  });
+  it("requires the exact positive returned amount, currency, source and transaction type", async () => {
+    const valid = {
+      id: "txn_returned",
+      source: "re_original",
+      amount: 360,
+      currency: "usd",
+      type: "refund_failure",
+    };
+    mocks.balance.mockResolvedValue(valid);
+    await verifyRefundBalanceEvidence(binding, refund(), true);
+    for (const patch of [
+      { source: "re_other" },
+      { amount: 359 },
+      { amount: -360 },
+      { currency: "eur" },
+      { type: "charge" },
+      { id: "txn_other" },
+    ]) {
+      mocks.balance.mockResolvedValue({ ...valid, ...patch });
+      await expect(
+        verifyRefundBalanceEvidence(binding, refund(), true),
+      ).rejects.toThrow();
+    }
+  });
+  it("blocks compensation without returned-funds evidence and does not read balances for initial settlement", async () => {
+    await expect(
+      verifyRefundBalanceEvidence(
+        binding,
+        { ...refund(), failureBalanceTransactionId: null },
+        true,
+      ),
+    ).rejects.toThrow();
+    await verifyRefundBalanceEvidence(binding, refund(), false);
+    expect(mocks.balance).not.toHaveBeenCalled();
   });
 });

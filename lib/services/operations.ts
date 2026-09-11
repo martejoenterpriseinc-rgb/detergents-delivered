@@ -1,3 +1,7 @@
+import {
+  effectiveRefundCents,
+  refundAccountingSelect,
+} from "@/lib/domain/refund-settlement";
 import { createHash, randomBytes } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -39,8 +43,8 @@ export const paidStatuses = [
 ] as const;
 export const countedRevenue = (o: {
   totalCents: number;
-  refunds: { amountCents: number }[];
-}) => o.totalCents - o.refunds.reduce((n, r) => n + r.amountCents, 0);
+  refunds: Parameters<typeof effectiveRefundCents>[0][];
+}) => o.totalCents - o.refunds.reduce((n, r) => n + effectiveRefundCents(r), 0);
 const customerName = (c: {
   firstName: string | null;
   lastName: string | null;
@@ -65,7 +69,7 @@ export async function customerDirectory(userId: string, input: unknown = {}) {
           status: true,
           currency: true,
           totalCents: true,
-          refunds: { select: { amountCents: true } },
+          refunds: { select: refundAccountingSelect },
         },
       },
       referredBy: {
@@ -177,7 +181,9 @@ export async function dailyQueue(
               customer: { include: { user: { select: { name: true, email: true } } } },
             },
           },
-          order: { include: { items: true, refunds: true } },
+          order: {
+            include: { items: true, refunds: { select: refundAccountingSelect } },
+          },
           deliveryAttempts: {
             where: { result: "DELIVERED" },
             orderBy: { attemptedAt: "desc" },
@@ -291,7 +297,7 @@ export async function revenueOrders(
     },
     include: {
       customer: { include: { user: { select: { name: true, email: true } } } },
-      refunds: true,
+      refunds: { select: refundAccountingSelect },
     },
     orderBy: { placedAt: "desc" },
     take: 5001,

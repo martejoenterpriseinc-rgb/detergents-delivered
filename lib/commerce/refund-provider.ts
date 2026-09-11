@@ -296,3 +296,36 @@ export async function submitClaimedStripeRefund(
   ]);
   return result;
 }
+
+/** Validate returned funds before compensating a previously successful refund.
+ * Uses the original account, never a client-supplied balance transaction.
+ */
+export async function verifyRefundBalanceEvidence(
+  binding: RefundPaymentBinding,
+  refund: RefundObservation,
+  compensation: boolean,
+) {
+  if (!compensation) return;
+  if (
+    !refund.failureBalanceTransactionId ||
+    !["failed", "canceled"].includes(refund.status)
+  )
+    throw fail();
+  const config = await readCommerce(true);
+  if (config.accountId !== binding.accountId || config.live !== binding.live)
+    throw fail();
+  const stripe = await stripeClient(config);
+  const balance = await stripe.balanceTransactions.retrieve(
+    refund.failureBalanceTransactionId,
+    {},
+    requestOptions,
+  );
+  if (
+    balance.id !== refund.failureBalanceTransactionId ||
+    reference(balance.source) !== refund.id ||
+    balance.currency !== binding.currency.toLowerCase() ||
+    balance.amount !== refund.amountCents ||
+    !["refund_failure", "payment_failure_refund"].includes(balance.type)
+  )
+    throw fail();
+}
