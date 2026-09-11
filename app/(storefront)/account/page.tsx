@@ -18,8 +18,9 @@ export default async function AccountPage() {
     getDeliveryWidget(session.user.id),
     getLoyalty(session.user.id),
   ]);
+  const isOwner = session.user.roles.includes("SUPER_ADMIN");
   const verificationAvailable =
-    account.emailVerified || (await emailVerificationAvailable());
+    !isOwner && (account.emailVerified || (await emailVerificationAvailable()));
 
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-12">
@@ -47,10 +48,12 @@ export default async function AccountPage() {
         </div>
       </div>
       <div className="mt-8">
-        <EmailVerification
-          verified={account.emailVerified}
-          available={verificationAvailable}
-        />
+        {!isOwner && (
+          <EmailVerification
+            verified={account.emailVerified}
+            available={verificationAvailable}
+          />
+        )}
         <AccountDashboard
           account={account}
           orders={orders}

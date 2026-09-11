@@ -558,9 +558,9 @@ export function ApiConnections({ initial }: { initial: ApiEditorData }) {
                   </a>
                 </div>
                 <p>
-                  Owner access uses the same customer login. After the intended owner
-                  verifies their email, the separate owner setup must be completed before
-                  Admin / Owner appears.
+                  Owner access uses the same customer login. An authenticated hosting
+                  owner can authorize the first-owner setup without email verification.
+                  Email delivery setup is separate from owner permissions.
                 </p>
               </div>
             </details>

@@ -8,6 +8,7 @@ export const initialOwnerInput = z
     email: z.string().trim().toLowerCase().email().max(320),
     userId: z.string().min(1).max(100),
     approvalReference: z.string().trim().min(10).max(500),
+    hostingOwnerApproval: z.string().trim().min(20).max(500).optional(),
     apply: z.boolean(),
   })
   .strict();
@@ -15,7 +16,8 @@ export const initialOwnerInput = z
 /**
  * Hosting-operator command only; never import into an HTTP route or startup hook.
  * The CLI validates production runtime pins before constructing this DB client.
- * This transaction independently checks retained DB identity and verified ownership.
+ * Ownership is established by verified email or explicit authenticated hosting-owner
+ * approval. Neither method changes inbox verification or credentials.
  */
 export async function establishInitialOwner(
   db: PrismaClient,
@@ -45,8 +47,8 @@ export async function establishInitialOwner(
         !user ||
         user.email !== data.email ||
         user.deletedAt ||
-        !user.emailVerified ||
-        user.emailVerified > new Date() ||
+        (!user.emailVerified && !data.hostingOwnerApproval) ||
+        (user.emailVerified && user.emailVerified > new Date()) ||
         user.mustChangeCredentials ||
         (!user.passwordHash &&
           !user.accounts.some(
@@ -54,7 +56,7 @@ export async function establishInitialOwner(
           ))
       )
         throw new Error(
-          "The exact active production account must verify its email and complete credential setup first.",
+          "The exact active account needs completed credentials and verified email or explicit hosting-owner approval.",
         );
       const prior = await tx.setting.findUnique({ where: { key: INITIAL_OWNER_KEY } });
       if (prior) {
@@ -109,6 +111,12 @@ export async function establishInitialOwner(
             email: user.email,
             establishedAt: new Date().toISOString(),
             approvalReference: data.approvalReference,
+            ownershipBasis: data.hostingOwnerApproval
+              ? "authenticated-hosting-owner"
+              : "verified-email",
+            ...(data.hostingOwnerApproval
+              ? { hostingOwnerApproval: data.hostingOwnerApproval }
+              : {}),
           },
         },
       });
@@ -122,6 +130,13 @@ export async function establishInitialOwner(
             role: "SUPER_ADMIN",
             source: "explicit-hosting-operator-command",
             approvalReference: data.approvalReference,
+            ownershipBasis: data.hostingOwnerApproval
+              ? "authenticated-hosting-owner"
+              : "verified-email",
+            ...(data.hostingOwnerApproval
+              ? { hostingOwnerApproval: data.hostingOwnerApproval }
+              : {}),
+            emailVerificationChanged: false,
             sessionsRevoked: true,
           },
         },
