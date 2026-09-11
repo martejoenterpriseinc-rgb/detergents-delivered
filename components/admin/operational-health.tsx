@@ -13,6 +13,8 @@ const labels: Record<string, string> = {
 const reasons: Record<string, string> = {
   PROVIDER_SETUP_REQUIRED: "Complete the provider fields above.",
   DELIVERY_DISABLED: "Scheduled email delivery is not activated.",
+  REFUND_REVIEW_REQUIRED:
+    "Review protected refund requests in Orders; no new refund is submitted by this job.",
   PAYMENT_REVIEW_REQUIRED: "Review protected pending payments in Payments.",
   EMAIL_RETRY_REQUIRED: "Some recovery emails need retry or a fresh customer request.",
   SUBSCRIPTION_REVIEW_REQUIRED:
@@ -46,7 +48,9 @@ export async function OperationalHealth() {
                   ? "Payment recovery"
                   : job.name === "recovery-email"
                     ? "Password recovery email"
-                    : "Quarterly subscription preparation"}
+                    : job.name === "refund-reconciliation"
+                      ? "Refund reconciliation"
+                      : "Quarterly subscription preparation"}
               </h3>
               <p className="mt-1 text-xs text-slate-500">
                 {job.heartbeatAt

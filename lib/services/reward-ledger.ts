@@ -7,6 +7,12 @@ import { rewardAllocation } from "@/lib/domain/loyalty";
 import { customerIdentity } from "./customer-account";
 import { loyaltyAdmin, programConfig, rewardBalance } from "./loyalty";
 
+import {
+  refundWorkerAuthority,
+  assertRefundWorkerEnvironment,
+  refundAuditActor,
+  type RefundActor,
+} from "./refund-worker-authority";
 type Tx = Prisma.TransactionClient;
 async function lockWallet(tx: Tx, customerId: string) {
   await tx.$queryRaw`SELECT id FROM "Customer" WHERE id = ${customerId} FOR UPDATE`;
@@ -60,10 +66,11 @@ export async function reviewReferral(userId: string, referralId: string) {
 
 export async function reviewReferralInTransaction(
   tx: Tx,
-  userId: string,
+  userId: RefundActor,
   referralId: string,
 ) {
-  await loyaltyAdmin(tx, userId);
+  if (userId === refundWorkerAuthority) assertRefundWorkerEnvironment();
+  else await loyaltyAdmin(tx, userId);
   const original = await tx.referral.findUnique({ where: { id: referralId } });
   if (!original?.linkId)
     throw new AccountError("This referral has no supported program snapshot.", 409);
@@ -164,7 +171,7 @@ export async function reviewReferralInTransaction(
             orderId: order.id,
             description: "Referral reward restored after verified refund compensation",
           },
-          userId,
+          refundAuditActor(userId),
         );
     }
     await tx.referral.update({
@@ -192,7 +199,7 @@ export async function reviewReferralInTransaction(
             orderId: order.id,
             description: "Referral reward reversed after refund or cancellation",
           },
-          userId,
+          refundAuditActor(userId),
         );
     }
     await tx.referral.update({
@@ -246,7 +253,7 @@ export async function reviewReferralInTransaction(
               ? "First-purchase referral reward"
               : "Reward for a qualifying referral purchase",
         },
-        userId,
+        refundAuditActor(userId),
       );
   }
   await tx.referral.update({

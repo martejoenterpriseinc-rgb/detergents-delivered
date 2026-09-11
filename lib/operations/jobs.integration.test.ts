@@ -15,6 +15,8 @@ const ids = [
   "sandbox:recovery-email",
   "live:recovery-email",
   "sandbox:subscription-cycles",
+  "sandbox:refund-reconciliation",
+  "live:refund-reconciliation",
   "live:subscription-cycles",
 ];
 beforeEach(async () => {
@@ -79,6 +81,7 @@ it("keeps environment leases and status separate and reports absent providers ho
     vi.stubEnv(key, "");
   const cycle = await runOperationalCycle();
   expect(cycle.payments.state).toBe("BLOCKED");
+  expect(cycle.refunds.state).toBe("BLOCKED");
   expect(cycle.email.state).toBe("BLOCKED");
   expect(
     (await jobStatus())

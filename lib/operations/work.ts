@@ -1,3 +1,4 @@
+import { reconcileScheduledRefunds } from "@/lib/services/refunds";
 import { prisma } from "@/lib/prisma";
 import { readCommerce } from "@/lib/commerce/runtime";
 import { reconcileCheckout } from "@/lib/commerce/checkout";
@@ -105,15 +106,17 @@ export async function emailRecoveryWork(
   };
 }
 export async function runOperationalCycle() {
-  const [payments, email, subscriptions] = await Promise.all([
+  const [payments, email, subscriptions, refunds] = await Promise.all([
     runOperationalTask("payment-reconciliation"),
     runOperationalTask("recovery-email"),
     runOperationalTask("subscription-cycles"),
+    runOperationalTask("refund-reconciliation"),
   ]);
   return {
     payments,
     email,
     subscriptions,
+    refunds,
   };
 }
 export function runOperationalTask(name: JobName) {
@@ -123,7 +126,9 @@ export function runOperationalTask(name: JobName) {
       ? paymentRecoveryWork
       : name === "recovery-email"
         ? emailRecoveryWork
-        : subscriptionCycleWork,
+        : name === "refund-reconciliation"
+          ? refundRecoveryWork
+          : subscriptionCycleWork,
   );
 }
 
@@ -135,5 +140,21 @@ export async function subscriptionCycleWork(
     ...result,
     state: result.attention ? "ATTENTION" : "HEALTHY",
     ...(result.attention ? { reason: "SUBSCRIPTION_REVIEW_REQUIRED" as const } : {}),
+  };
+}
+
+export async function refundRecoveryWork(
+  ownsLease: () => Promise<boolean>,
+): Promise<JobResult> {
+  try {
+    await readCommerce(true);
+  } catch {
+    return blocked();
+  }
+  const result = await reconcileScheduledRefunds(ownsLease);
+  return {
+    ...result,
+    state: result.attention ? "ATTENTION" : "HEALTHY",
+    ...(result.attention ? { reason: "REFUND_REVIEW_REQUIRED" as const } : {}),
   };
 }
