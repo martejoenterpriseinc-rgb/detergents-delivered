@@ -1,4 +1,5 @@
 "use client";
+import { PrepareCostJournal } from "./quickbooks-journals";
 import { useState } from "react";
 import type { QuickbooksAccount } from "@/lib/integrations/quickbooks-client";
 import type { costMappingData } from "@/lib/services/quickbooks-cost-mapping";
@@ -336,6 +337,9 @@ export function QuickbooksCosts() {
             <p>Damaged goods do not restore the inventory asset balance.</p>
           )}
         </div>
+      )}
+      {source && data?.canWrite && (
+        <PrepareCostJournal key={source.kind + ":" + source.sourceId} source={source} />
       )}
       {error && <p role="alert">{error}</p>}
     </section>

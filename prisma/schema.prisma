@@ -661,6 +661,7 @@ enum PaymentProvider {
 }
 
 model Order {
+  costExports QboCostExport[]
   smsDeliveries SmsDelivery[]
   id              String      @id @default(cuid())
   number          String      @unique
@@ -862,6 +863,7 @@ enum StockReturnCondition {
 
 /// Receiving merchandise is explicit and independent from returning payment funds.
 model StockReturn {
+  costExports QboCostExport[]
   id          String   @id @default(cuid())
   orderId     String
   order       Order    @relation(fields: [orderId], references: [id], onDelete: Restrict)
@@ -1805,4 +1807,35 @@ model SmsDeliveryEvent {
  providerSid String
  status String
  createdAt DateTime @default(now())
+}
+
+model QboCostExport {
+  id String @id
+  orderId String
+  order Order @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  returnId String?
+  stockReturn StockReturn? @relation(fields: [returnId], references: [id], onDelete: Restrict)
+  parentSaleId String?
+  parentSale QboCostExport? @relation("CostReturnSale", fields: [parentSaleId], references: [id], onDelete: Restrict)
+  returns QboCostExport[] @relation("CostReturnSale")
+  sourceKey String
+  mode String
+  realm String
+  status String @default("DRAFT")
+  docNumber String
+  requestHash String
+  source Json
+  mapping Json
+  payload Json
+  externalId String?
+  submittedAt DateTime?
+  confirmedAt DateTime?
+  recoveryCheckedAt DateTime?
+  reconciliationIssue String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([mode, realm, docNumber])
+  @@unique([mode, realm, externalId])
+  @@index([sourceKey, status])
+  @@index([mode, realm, status, recoveryCheckedAt])
 }

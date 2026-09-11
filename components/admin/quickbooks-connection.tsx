@@ -1,4 +1,5 @@
 "use client";
+import { QuickbooksJournals } from "./quickbooks-journals";
 import { QuickbooksCosts } from "./quickbooks-costs";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -150,6 +151,7 @@ export function QuickbooksConnection({
       <QuickbooksMapping />
       <QuickbooksExpenses />
       <QuickbooksCosts />
+      <QuickbooksJournals />
     </div>
   );
 }

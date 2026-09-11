@@ -1,5 +1,6 @@
 import { runDeliveryTexts } from "@/lib/services/sms-delivery";
 import { smsConfig } from "@/lib/integrations/twilio-client";
+import { reconcileScheduledQuickbooksCostJournals } from "@/lib/services/quickbooks-cost-journals";
 import { reconcileScheduledQuickbooksExpenses } from "@/lib/services/quickbooks-expenses";
 import {
   authorizedQuickbooks,
@@ -185,7 +186,13 @@ export async function quickbooksRecoveryWork(
   } catch {
     return blocked();
   }
-  const result = await reconcileScheduledQuickbooksExpenses(ownsLease);
+  const expenses = await reconcileScheduledQuickbooksExpenses(ownsLease);
+  const journals = await reconcileScheduledQuickbooksCostJournals(ownsLease);
+  const result = {
+    checked: expenses.checked + journals.checked,
+    completed: expenses.completed + journals.completed,
+    attention: expenses.attention + journals.attention,
+  };
   return {
     ...result,
     state: result.attention ? "ATTENTION" : "HEALTHY",

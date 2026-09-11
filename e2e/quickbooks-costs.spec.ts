@@ -168,8 +168,111 @@ test("cost accounting preserves failed choices and distinguishes original sale f
         () => document.documentElement.scrollWidth <= window.innerWidth,
       ),
     ).toBe(true);
+    await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
     await page.screenshot({
       path: info.outputPath("quickbooks-cost-review.png"),
+      fullPage: true,
+    });
+
+    let journalStatus = "DRAFT",
+      prepared = false,
+      sends = 0;
+    const journalId = "qbc_" + "a".repeat(64),
+      docNumber = "DC" + "a".repeat(19);
+    await page.route("**/api/admin/quickbooks/journals*", (route) => {
+      const r = route.request();
+      const journal = () => ({
+        id: journalId,
+        status: journalStatus,
+        realm: mapping.realm,
+        docNumber,
+        mapping,
+        source: {
+          kind: "RETURN",
+          orderId: "order-fixture",
+          number: "Synthetic cost order",
+          sourceId: "return-fixture",
+          date: "2026-02-02",
+          currency: "USD",
+          amountCents: 400,
+          pieces: [
+            {
+              allocationId: "synthetic",
+              costLayerId: "synthetic",
+              quantity: 1,
+              unitCostCents: 400,
+            },
+          ],
+        },
+        externalId: journalStatus === "POSTED" ? "567" : null,
+        reconciliationIssue: null,
+        recoveryCheckedAt: null,
+        submittedAt: null,
+        confirmedAt: null,
+      });
+      if (r.method() === "POST") {
+        const input = r.postDataJSON();
+        if (input.action === "prepare") {
+          prepared = true;
+          return route.fulfill({ json: journal() });
+        }
+        if (input.action === "submit") {
+          sends++;
+          journalStatus = "UNKNOWN";
+          return route.fulfill({
+            status: 503,
+            json: { error: "Synthetic journal response lost" },
+          });
+        }
+        if (input.action === "reconcile") {
+          journalStatus = "POSTED";
+          return route.fulfill({ json: journal() });
+        }
+      }
+      return route.fulfill({
+        json: {
+          canWrite: true,
+          canSubmit: true,
+          nextCursor: null,
+          rows: prepared ? [journal()] : [],
+        },
+      });
+    });
+    await page
+      .getByLabel("I reviewed this cost source and want to prepare its journal draft.")
+      .check();
+    await page.getByRole("button", { name: "Prepare cost journal", exact: true }).click();
+    await expect(
+      page.getByText(
+        "Cost journal draft " +
+          docNumber +
+          " saved. Load cost journals below to review it.",
+        { exact: true },
+      ),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Load cost journals", exact: true }).click();
+    await page.getByLabel("I reviewed this journal and its company.").check();
+    await page.getByRole("button", { name: "Submit cost journal", exact: true }).click();
+    await expect(
+      page.getByText("Journal: unknown · Reference " + docNumber, { exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Submit cost journal", exact: true }),
+    ).toHaveCount(0);
+    await page.getByLabel("I reviewed this journal and its company.").check();
+    await page
+      .getByRole("button", { name: "Reconcile cost journal", exact: true })
+      .click();
+    await expect(page.getByText("QuickBooks journal 567", { exact: true })).toBeVisible();
+    expect(sends).toBe(1);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
+    await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
+    await page.screenshot({
+      path: info.outputPath("quickbooks-cost-journal.png"),
       fullPage: true,
     });
   } finally {
