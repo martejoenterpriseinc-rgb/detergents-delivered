@@ -27,6 +27,10 @@ Status: build advances are committed; hosted deployment and Go Live acceptance r
 | Guarded cost journals and read-only reconciliation | 56 | 141 | 600 |
 | Company customer and product links | 57 | 142 | 607 |
 | Original sale, refund-tax and reward source review | 58 | 143 | 610 |
+| Receipt compiler and provider evidence matcher | 59 | 144 | 647 |
+| Receipt clearing settings, item tax review and accessibility | 60–62 | 147 | 654 |
+| Immutable sale and refund receipt drafts | 63 | 148 | 658 |
+| Guarded receipt posting and read-only recovery | 64 | 149 | 668 |
 
 Counts are cumulative tests for each source revision, not separate tests to add together. Each full CI includes lint, typecheck, schema validation, migration replay, production build, native PostgreSQL and browser checks. Synthetic provider responses prove application behavior and are not real provider acceptance. The latest reviewed mapping and expense-export browser screenshots cover desktop, tablet and mobile.
 
@@ -34,13 +38,15 @@ Expense posting revision: `de7ade81b2a6e6693d1a613386ac1893f2be2f71`, tree `bf34
 
 PR 51 adds scheduled QuickBooks reconciliation and system-audited token refresh at `279a2831f1a56fadc81a871a71b8e443bf5958da`, tree `dc488e6028c71d2210e2c4ba937d8cc7c08de0df`. CI 135, run `34647478435`, passed 305 unit, 197 PostgreSQL and 56 browser checks (558 total), plus lint, typecheck, migration replay and production build. Hosted deployment is still pending.
 
-Latest fully verified candidate in this checkpoint: PR 58, source `cf8810a5f7094e5aecca3dc883d34c7a30b98b5b`, tree `8c468c2fbda4053a909931e245668076224b69da`. CI 143, run `34654068247`, job `103442521470`, passed 318 unit, 227 native PostgreSQL and 65 browser tests, lint, typecheck, migration replay and production build. Source-review screenshots were inspected at desktop, tablet and mobile widths. PR 53's initial browser selector failure was fixed in PR 54 and verified in CI 139; no failed run is counted as acceptance. Later CI also covers SMS on tablet.
+Prior verified receipt-draft candidate: PR 63, source `8cdf717b501c3ec3a487aa6c2226b58e9590bac5`, tree `a72ee1b0c581e74952f191c96c1d3bee8e236cae`. CI 148, run `34657167058`, job `103451969814`, passed 356 unit, 237 native PostgreSQL and 65 browser tests (658 total), plus the full build gates. Receipt draft screenshots were inspected at desktop, tablet and mobile widths. Initial receipt-settings browser label failures were fixed in PR 62 and the combined work passed CI 147.
 
-The receipt compiler/evidence matcher is subsequent construction, documented in `QUICKBOOKS-RECEIPT-EVIDENCE.md`; it does not establish an operating receipt-posting workflow.
+PR 64 adds guarded receipt submission and read-only reconciliation at source `80b7fcbbb4c18bd9b06d9b44cb05d5221d27fc39`, tree `8ff83522be21a529be145812bd8b0efd4b28d6bb`. This is the latest fully tested application candidate. CI 149, run `34659259238`, job `103458150155`, passed 360 unit, 243 native PostgreSQL integration and 65 browser checks (668 total), plus lint, typecheck, schema validation, migration replay and production build. All three receipt-recovery screenshots were inspected. Evidence artifact: `10285769887`. It adds no migration. Provider responses in these checks are synthetic; hosted release and real provider acceptance remain pending.
 
 ## Migration review
 
-The last recorded hosted revision is `a2495c4afa459a9c258804841fa37b038ecdd828`. The candidate adds the twelve migrations below; no previously retained migration SQL is modified. These add accounting/consent/cycle evidence and scheduling metadata, and extend refund constraints to support reward-only returns. Legacy subscription rows are preserved and are not silently converted into consented quarterly subscriptions.
+Render deployment metadata was rechecked on September 11, 2026: staging deployment `dep-dai20mpijrss738bbmlg` and production deployment `dep-dai22sp594qs73e32pig` both report live at the older source. This is deployment metadata, not end-to-end health or provider acceptance. Direct health retrieval was unavailable from this environment.
+
+The last recorded hosted revision is `a2495c4afa459a9c258804841fa37b038ecdd828`. The candidate adds the thirteen migrations below; no previously retained migration SQL is modified. These add accounting/consent/cycle evidence and scheduling metadata, and extend refund constraints to support reward-only returns. Legacy subscription rows are preserved and are not silently converted into consented quarterly subscriptions.
 
 | Migration | SHA-256 of SQL |
 | --- | --- |
@@ -56,14 +62,15 @@ The last recorded hosted revision is `a2495c4afa459a9c258804841fa37b038ecdd828`.
 | `20260916190000_delivery_sms_consent` | `4d8454908782d9a8be3e2ba21bf322dc121f0ff5ab105d6cbdd21576970646d8` |
 | `20260916200000_delivery_sms_outbox` | `5b92e549bf80e10783a1649383b028dc58a9f6ab9388be9e466ab58d2e3934a5` |
 | `20260916210000_quickbooks_cost_journals` | `14f6f7e557baa737caa05f41e9a1e17743ba473357c2287ac7ec7a29d508133e` |
+| `20260916220000_quickbooks_receipt_exports` | `f5f16ba864f928ab6afc34dd42be32b20f411b068159b39b1852fe794cc6d08e` |
 
 The existing two-migration refund-foundation deployment gate remains unchanged. Do not run it as authority for this larger release. Before deployment, retain a current recoverable backup and encryption keys, quiesce web writes/workers, record the exact candidate source and migration checksums, capture the retained-record checkpoint, apply the reviewed migrations, and verify the original records before restoring traffic. The fingerprint checkpoint is comparison evidence, not a database backup. Keep Render auto-deploy off and deploy only an exact accepted revision; the service's configured main branch is older.
 
 ## Remaining build and acceptance scope
 
-- QuickBooks cost journal posting and recovery are implemented and verified with isolated provider fixtures. Sales/refund receipt submission and compensation accounting remain implementation work; the expense and cost workflows must not be described as all accounting posting complete.
+- QuickBooks cost journal posting and recovery are implemented and verified with isolated provider fixtures. Sales/refund receipt submission and recovery passed full CI in PR 64. Compensation accounting remains incomplete; the expense and cost workflows must not be described as all accounting posting complete.
 - Refund settlement tax evidence supports exact completed provider report matching. Compensation tax evidence remains unverified until an appropriate provider evidence path is implemented and accepted.
 - Real payment/tax, company OAuth, email, Google login, storage and notification acceptance must use the intended configured providers. Neither mock fixtures nor saved configuration alone satisfy that requirement.
 - Hosted migration/deployment, current restore proof, production owner/business setup, reviewed catalog/stock, delivery capacity, approved domain, worker health and a controlled end-to-end acceptance order are still required.
 
-Checkout, cash-refund submission, SMS delivery, and QuickBooks expense/cost posting remain governed by their existing explicit server controls. No production account, inventory, order, reward, accounting evidence or provider acceptance is fabricated to complete launch status.
+Checkout, cash-refund submission, SMS delivery, and QuickBooks expense/cost/receipt posting remain governed by their existing explicit server controls. No production account, inventory, order, reward, accounting evidence or provider acceptance is fabricated to complete launch status.

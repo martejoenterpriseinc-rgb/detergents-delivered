@@ -10,15 +10,21 @@ Later phases stay unchecked until implemented.
 
 The older phase boxes below are not a current launch verdict. Source and acceptance evidence in the following documents supersede stale descriptions such as “tax stub” or “local-only uploads.” Broad phase completion remains unchecked where related workflows or provider acceptance are missing.
 
-| Area                                                            | Implemented evidence                                        | Remaining acceptance or scope                                                        |
-| --------------------------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| Checkout, tax, immutable sale snapshots, reservations           | `CONNECTED-CHECKOUT.md`, `CONNECTED-CHECKOUT-ACCEPTANCE.md` | Actual provider/live tax acceptance; refunds and stock/reward reversals              |
-| Customer account, support, access recovery                      | `ACCOUNT_SUPPORT.md`, `CUSTOMER-ACCESS.md`                  | Google and email provider acceptance; production owner onboarding                    |
-| Delivery capacity, driver operations, attempts and proof access | `DELIVERY-COMMAND-CENTER.md`, `LAUNCH-DATE-ACCEPTANCE.md`   | Real route/provider/notification acceptance                                          |
-| Loyalty, referral and promotion administration                  | `LOYALTY_DELIVERY.md`, `LAUNCH-OFFERS.md`                   | Refund reversals and full provider-backed lifecycle                                  |
-| Shared storefront/Website Builder and current API row editor    | `STOREFRONT-BUILDER.md`, `API-ROW-EDITOR-RELEASE.md`        | Durable marketing uploads are implemented; actual hosted photo/redeploy acceptance remains |
-| Durable operational photos and scheduled recovery               | `PRODUCTION-OPERATIONS.md`                                  | Exact CI/deployment and staging restore evidence recorded there; hosted photo/redeploy and production key recovery remain |
-| Subscriptions, expenses, mileage, CPA, QBO and agent gateway    | Contract and phase definitions below                        | Substantial implementation remains                                                   |
+| Area | Implemented evidence | Remaining acceptance or scope |
+| --- | --- | --- |
+| Checkout and original financial records | `CONNECTED-CHECKOUT.md`, `SALES-REFUND-SOURCE-REVIEW.md` | Intended payment/tax provider acceptance and controlled production order |
+| Refund settlement, stock returns and rewards | `REFUND-SETTLEMENT.md`, `REWARD-ONLY-REFUNDS.md`, `REFUND-SUBMISSION.md`, `REFUND-TAX-EVIDENCE.md` | Real provider lifecycle; compensation tax evidence and downstream compensation accounting |
+| Customer account and access recovery | `ACCOUNT_SUPPORT.md`, `CUSTOMER-ACCESS.md` | Google/email acceptance and production owner onboarding |
+| Delivery capacity, driver operations and SMS | `DELIVERY-COMMAND-CENTER.md`, `ONGOING-DELIVERY-BOOKING.md`, `DELIVERY-TEXT-CONSENT.md`, `DELIVERY-TEXT-DISPATCH.md` | Real route, consent, provider callback and notification acceptance |
+| Loyalty, referral and promotions | `LOYALTY_DELIVERY.md`, `LAUNCH-OFFERS.md`, `REFUND-SETTLEMENT.md` | Provider-backed lifecycle acceptance |
+| Shared storefront and Website Builder | `STOREFRONT-BUILDER.md`, `API-ROW-EDITOR-RELEASE.md` | Hosted durable photo and redeploy acceptance |
+| Quarterly subscriptions | `QUARTERLY-SUBSCRIPTIONS.md`, `QUARTERLY-CHECKOUT-CYCLES.md` | Customer-reviewed payment acceptance; no automatic off-session charging is asserted |
+| Expenses, mileage and CPA reports | `FINANCE-RECORDS.md` | Intended operating records and provider reconciliation acceptance |
+| Catalog exchange and scoped commerce gateway | `CATALOG-FILE-EXCHANGE.md`, `SCOPED-COMMERCE-GATEWAY.md` | Real catalog/stock review and scoped client acceptance |
+| QuickBooks expense, cost and receipt exports | `QUICKBOOKS-EXPENSE-POSTING.md`, `QUICKBOOKS-COST-JOURNALS.md`, `QUICKBOOKS-RECEIPT-DRAFTS.md`, `QUICKBOOKS-RECEIPT-POSTING.md` | Receipt posting passed full CI 149; real company acceptance and compensation accounting remain |
+| Hosted operations and retained records | `PRODUCTION-OPERATIONS.md`, `BUILD-RELEASE-CANDIDATE.md` | Exact release integration, current backup/restore proof, retained-record verification and production health |
+
+The historical phase boxes below remain an archive of the initial plan, not a current feature inventory. Use `BUILD-RELEASE-CANDIDATE.md` for cumulative tested revisions and outstanding launch gates. The accounting, notification and payment providers used in automated tests are synthetic fixtures; these tests do not establish external acceptance.
 
 ## Phase 1 — Foundation
 
