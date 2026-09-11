@@ -1,6 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { prisma } from "@/lib/prisma";
+const refundReviewMocks = vi.hoisted(() => ({ inspect: vi.fn() }));
+vi.mock("@/lib/commerce/refund-provider", async (original) => ({
+  ...(await original<typeof import("@/lib/commerce/refund-provider")>()),
+  inspectStripeRefunds: refundReviewMocks.inspect,
+}));
+import { reviewPaymentRefunds } from "./refund-review";
 
 vi.mock("@/lib/commerce/runtime", () => ({
   readCommerce: vi.fn(async () => ({ accountId: "acct_synthetic", live: false })),
@@ -155,6 +161,171 @@ afterAll(async () => {
     data: { deletedAt: new Date() },
   });
   await prisma.$disconnect();
+});
+
+describe("read-only refund review (isolated PostgreSQL, mock provider)", () => {
+  const observed = () => ({
+    paymentIntentId: `pi_${marker}`,
+    chargeId: "ch_synthetic",
+    accountId: "acct_synthetic",
+    live: false,
+    capturedCents: 3240,
+    currency: "USD",
+    disputed: false,
+    refunds: [],
+  });
+  it("allows admin and CPA inspection without changing payment, stock or audit records", async () => {
+    refundReviewMocks.inspect.mockResolvedValue(observed());
+    const before = await prisma.payment.findUnique({
+      where: { id: payment },
+      include: { refunds: true },
+    });
+    const stock = await prisma.inventoryBalance.findUnique({
+      where: { productVariantId: variant },
+    });
+    const audits = await prisma.auditLog.count();
+    for (const actor of [admin, cpa]) {
+      const result = await reviewPaymentRefunds(actor, {
+        orderId: order,
+        paymentId: payment,
+      });
+      expect(result).toMatchObject({
+        providerRefundCount: 0,
+        succeededCents: 0,
+        pendingCents: 0,
+        unresolvedRequests: 0,
+      });
+      expect(JSON.stringify(result)).not.toContain("acct_");
+      expect(JSON.stringify(result)).not.toContain("pi_");
+    }
+    expect(
+      await prisma.payment.findUnique({
+        where: { id: payment },
+        include: { refunds: true },
+      }),
+    ).toEqual(before);
+    expect(
+      await prisma.inventoryBalance.findUnique({ where: { productVariantId: variant } }),
+    ).toEqual(stock);
+    expect(await prisma.auditLog.count()).toBe(audits);
+  });
+  it("rejects customers and cross-order payments before provider calls", async () => {
+    refundReviewMocks.inspect.mockClear();
+    await expect(
+      reviewPaymentRefunds(users[2], { orderId: order, paymentId: payment }),
+    ).rejects.toMatchObject({ status: 403 });
+    await expect(
+      reviewPaymentRefunds(admin, { orderId: "other", paymentId: payment }),
+    ).rejects.toMatchObject({ status: 404 });
+    expect(refundReviewMocks.inspect).not.toHaveBeenCalled();
+  });
+  it("reports changed provider status and uncertain submissions without releasing them", async () => {
+    const saved = await Promise.all(
+      [1, 2].map((index) =>
+        prisma.refundRequest.create({
+          data: {
+            orderId: order,
+            paymentId: payment,
+            actorUserId: admin,
+            requestKey: randomUUID(),
+            requestHash: `review-${index}-${marker}`,
+            amountCents: 100,
+            currency: "USD",
+            reason: "Synthetic provider evidence review",
+            providerAccountId: "acct_synthetic",
+            livemode: false,
+            status: "UNKNOWN",
+            submittedAt: new Date(),
+          },
+        }),
+      ),
+    );
+    try {
+      refundReviewMocks.inspect.mockResolvedValueOnce({
+        ...observed(),
+        disputed: true,
+        refunds: [
+          {
+            id: "re_synthetic",
+            amountCents: 100,
+            currency: "USD",
+            status: "pending",
+            created: 1780000000,
+            requestId: saved[0].id,
+            requestHash: saved[0].requestHash,
+            project: "detergents-delivered",
+            balanceTransactionId: null,
+            failureBalanceTransactionId: null,
+          },
+        ],
+      });
+      const result = await reviewPaymentRefunds(admin, {
+        orderId: order,
+        paymentId: payment,
+      });
+      expect(result).toMatchObject({
+        pendingCents: 100,
+        succeededCents: 0,
+        changedRequests: 1,
+        unresolvedRequests: 1,
+        disputed: true,
+      });
+      for (const request of saved)
+        expect(
+          await prisma.refundRequest.findUnique({ where: { id: request.id } }),
+        ).toEqual(request);
+    } finally {
+      await prisma.refundRequest.deleteMany({
+        where: { id: { in: saved.map((r) => r.id) } },
+      });
+    }
+  });
+  it("rejects changed payment records while the provider request is running", async () => {
+    refundReviewMocks.inspect.mockImplementationOnce(async () => {
+      await prisma.payment.update({
+        where: { id: payment },
+        data: { status: "PARTIALLY_REFUNDED" },
+      });
+      return observed();
+    });
+    try {
+      await expect(
+        reviewPaymentRefunds(admin, { orderId: order, paymentId: payment }),
+      ).rejects.toMatchObject({ status: 409 });
+    } finally {
+      await prisma.payment.update({
+        where: { id: payment },
+        data: { status: "CAPTURED" },
+      });
+    }
+  });
+  it("rechecks access after the provider read", async () => {
+    refundReviewMocks.inspect.mockImplementationOnce(async () => {
+      await prisma.user.update({ where: { id: cpa }, data: { deletedAt: new Date() } });
+      return observed();
+    });
+    try {
+      await expect(
+        reviewPaymentRefunds(cpa, { orderId: order, paymentId: payment }),
+      ).rejects.toThrow();
+    } finally {
+      await prisma.user.update({ where: { id: cpa }, data: { deletedAt: null } });
+    }
+  });
+  it("rejects external refunds and propagates provider failure without writes", async () => {
+    refundReviewMocks.inspect.mockResolvedValueOnce({
+      ...observed(),
+      refunds: [{ id: "re_external" }],
+    });
+    await expect(
+      reviewPaymentRefunds(admin, { orderId: order, paymentId: payment }),
+    ).rejects.toMatchObject({ status: 409 });
+    refundReviewMocks.inspect.mockRejectedValueOnce(new Error("Provider unavailable"));
+    await expect(
+      reviewPaymentRefunds(admin, { orderId: order, paymentId: payment }),
+    ).rejects.toThrow("Provider unavailable");
+    expect(await prisma.refundRequest.count({ where: { orderId: order } })).toBe(0);
+  });
 });
 
 describe("refund reservations and physical returns (isolated PostgreSQL)", () => {
