@@ -27,13 +27,13 @@ If QBO and the app disagree on stock, **the app wins**. If they disagree on a ba
 | Mileage | (usually not pushed; report in-app) |
 | Vendor + PO/Receipt | Bill / Item receipt (if we enable QBO purchasing) |
 
-Ids we will store later: `qboAccountId` already exists on `ExpenseCategory`; `qboTxnId` on `Expense`. Other external ids should be unique columns, never overwritten when QBO returns a new id.
+Expense exports now retain immutable external IDs in `QboExpenseExport`, scoped to environment and company, with a protected `Expense.qboTxnId` link. Legacy `ExpenseCategory.qboAccountId` values are preserved; reviewed mappings use the company-scoped mapping store. Other entity mappings remain planned.
 
 ## Idempotent sync plan
 
 1. Every outbound payload gets an idempotency key: `{entityType}:{entityId}:{version}` or the payment `idempotencyKey`.
 2. Persist `externalId` before treating sync as done.
-3. Workers retry on network failure; they must not create a second QBO sales receipt for the same order.
+3. An uncertain provider write remains protected for read-only reconciliation. Workers must not retry a fresh create request or create a second accounting transaction. The implemented expense worker reads evidence and refreshes tokens using durable claims; see `QUICKBOOKS-SCHEDULED-RECONCILIATION.md`.
 4. Inbound QBO webhooks (if enabled) verify `QBO_WEBHOOK_VERIFIER_TOKEN` and only update sync status — they do not mutate inventory.
 5. Sandbox (`QBO_ENVIRONMENT=sandbox`) is mandatory in development and staging. Production company id is a production-only secret.
 

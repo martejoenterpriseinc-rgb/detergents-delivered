@@ -184,6 +184,7 @@ model UserRole {
 // ---------------------------------------------------------------------------
 
 model Customer {
+  smsConsents SmsConsent[]
   commerceGrants CommerceGrant[]
   purchaseApprovedAt DateTime?
   id        String    @id @default(cuid())
@@ -1741,4 +1742,31 @@ model CommerceGrant {
  requestCount Int @default(0)
  createdAt DateTime @default(now())
  @@index([customerId, createdAt])
+}
+
+model SmsConsent {
+  id String @id @default(cuid())
+  customerId String
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  environment String
+  accountSid String
+  sender String
+  phone String
+  timezone String
+  consentVersion String
+  codeHash String @unique
+  state String @default("PENDING")
+  expiresAt DateTime
+  activatedAt DateTime?
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+  @@index([customerId, environment, createdAt])
+  @@index([environment, accountSid, phone, state])
+}
+
+model SmsInboundEvent {
+  id String @id
+  eventHash String
+  kind String
+  createdAt DateTime @default(now())
 }

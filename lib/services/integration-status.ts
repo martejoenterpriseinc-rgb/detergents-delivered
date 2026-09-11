@@ -156,7 +156,8 @@ export function integrationStatus(env: Record<string, string | undefined> = proc
       id: "sms",
       name: "Customer text messages",
       state: "implementation-needed",
-      summary: "Customer SMS delivery and its consent workflow are not implemented.",
+      summary:
+        "Phone-bound delivery-text consent, signed inbound verification and opt-out handling are implemented. Outbound delivery and real sender acceptance remain unfinished.",
       nextSteps: [
         "Finish the approved sender, customer consent, delivery notifications and retry handling before sending messages.",
       ],
