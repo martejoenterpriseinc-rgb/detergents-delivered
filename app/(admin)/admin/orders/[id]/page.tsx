@@ -5,6 +5,7 @@ import { getOrder } from "@/lib/services/order-workspace";
 import { AccountError } from "@/lib/domain/account";
 import { orderMoney, orderStatusLabels } from "@/lib/domain/order-workspace";
 import { ReconcileButton } from "@/components/commerce/admin-actions";
+import { RefundReview } from "@/components/commerce/refund-review";
 import {
   ReceiveOrderReturn,
   CancelRefundDraft,
@@ -156,6 +157,9 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
                 </li>
               ))}
             </ul>
+            {payment.provider === "STRIPE" && payment.verified && (
+              <RefundReview orderId={order.id} paymentId={payment.id} />
+            )}
           </article>
         ))}
       </section>

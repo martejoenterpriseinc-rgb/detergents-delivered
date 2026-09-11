@@ -95,7 +95,7 @@ test("staff receive goods, recover a lost response and cancel only unused refund
           },
         },
       },
-      include: { items: true },
+      include: { items: true, checkoutAttempt: true },
     });
     const payment = await db.payment.create({
       data: {
@@ -103,6 +103,14 @@ test("staff receive goods, recover a lost response and cancel only unused refund
         provider: "STRIPE",
         status: "CAPTURED",
         amountCents: 3240,
+        externalId: `pi_${marker.replaceAll("-", "")}`,
+        events: {
+          create: {
+            type: "checkout.session.completed",
+            externalId: `checkout:${order.checkoutAttempt!.id}:paid`,
+            verifiedAt: new Date(),
+          },
+        },
       },
     });
     const draft = await db.refundRequest.create({
@@ -177,6 +185,54 @@ test("staff receive goods, recover a lost response and cancel only unused refund
       ).status(),
     ).toBe(403);
     await page.goto(`/admin/orders/${order.id}`);
+    // Browser-only simulated provider response; native tests exercise the service.
+    const reviewUrl = `**/api/admin/orders/${order.id}/refund-review`;
+    await page.route(reviewUrl, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          checkedAt: new Date().toISOString(),
+          currency: "USD",
+          providerRefundCount: 1,
+          succeededCents: 0,
+          pendingCents: 100,
+          failedOrCanceledCents: 0,
+          disputed: true,
+          unresolvedRequests: 1,
+          changedRequests: 1,
+        }),
+      }),
+    );
+    await page
+      .getByRole("button", { name: "Check refunds with Stripe", exact: true })
+      .click();
+    await expect(
+      page.getByText(
+        "1 submitted requests remain unconfirmed. Do not submit them again.",
+      ),
+    ).toBeVisible();
+    await expect(
+      page.getByText("Payment disputed. Review the dispute before any refund."),
+    ).toBeVisible();
+    await page.unroute(reviewUrl);
+    await page.route(reviewUrl, (route) =>
+      route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "Refund review unavailable." }),
+      }),
+    );
+    await page
+      .getByRole("button", { name: "Check refunds with Stripe", exact: true })
+      .click();
+    await expect(
+      page.getByText("Refund review unavailable.", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByText("Payment disputed. Review the dispute before any refund."),
+    ).toHaveCount(0);
+    await page.unroute(reviewUrl);
     await expect(page.getByText("Needs reconciliation", { exact: true })).toBeVisible();
     await expect(
       page.getByRole("button", { name: "Cancel refund draft", exact: true }),
