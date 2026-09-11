@@ -81,7 +81,7 @@ export const integrationCatalog = [
   {
     id: "quickbooks",
     name: "QuickBooks",
-    description: "Accounting sync · connector still to be built",
+    description: "Company authorization · accounting posting still pending",
     ready: false,
     fields: [
       {

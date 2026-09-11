@@ -146,10 +146,11 @@ export function integrationStatus(env: Record<string, string | undefined> = proc
       name: "QuickBooks accounting",
       state: "implementation-needed",
       summary:
-        "QuickBooks connection and retry-safe accounting sync are not implemented.",
+        "Company authorization is available. Account mapping and retry-safe accounting posting still need completion and acceptance.",
       nextSteps: [
-        "Finish the accounting connector, account mapping, exports and duplicate-posting protection before connecting financial records.",
+        "Confirm the intended company, finish account mapping and duplicate-posting protection, and verify sandbox posting before enabling financial sync.",
       ],
+      action: { label: "QuickBooks connection", href: "/admin/reports/quickbooks" },
     },
     {
       id: "sms",
