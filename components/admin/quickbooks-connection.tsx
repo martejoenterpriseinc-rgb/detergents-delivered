@@ -1,4 +1,5 @@
 "use client";
+import { SalesRefundSource } from "./sales-refund-source";
 import { QuickbooksSalesMapping } from "./quickbooks-sales-mapping";
 import { QuickbooksJournals } from "./quickbooks-journals";
 import { QuickbooksCosts } from "./quickbooks-costs";
@@ -154,6 +155,7 @@ export function QuickbooksConnection({
       <QuickbooksCosts />
       <QuickbooksJournals />
       <QuickbooksSalesMapping />
+      <SalesRefundSource />
     </div>
   );
 }

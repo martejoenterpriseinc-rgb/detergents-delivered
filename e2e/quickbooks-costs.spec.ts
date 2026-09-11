@@ -409,6 +409,98 @@ test("cost accounting preserves failed choices and distinguishes original sale f
       path: info.outputPath("quickbooks-sales-links.png"),
       fullPage: true,
     });
+
+    await page.route("**/api/admin/quickbooks/sale-sources*", (route) => {
+      const q = new URL(route.request().url()).searchParams;
+      if (!q.has("orderId"))
+        return route.fulfill({
+          json: {
+            nextCursor: null,
+            rows: [
+              {
+                id: "financial-order",
+                number: "Synthetic financial order",
+                moreRefunds: false,
+                adjustments: [
+                  {
+                    id: "refund-adjustment",
+                    kind: "SETTLEMENT",
+                    date: "2026-02-02T18:00:00Z",
+                  },
+                ],
+              },
+            ],
+          },
+        });
+      return route.fulfill({
+        json: q.has("adjustmentId")
+          ? {
+              kind: "SETTLEMENT",
+              orderId: "financial-order",
+              sourceId: "refund-adjustment",
+              number: "Synthetic financial order",
+              date: "2026-02-02",
+              currency: "USD",
+              cashCents: 756,
+              netCents: 700,
+              taxCents: 56,
+              rewardCents: 200,
+              lines: [],
+              taxEvidenceStatus: "UNVERIFIED",
+              requiresCashReceipt: true,
+            }
+          : {
+              kind: "SALE",
+              orderId: "financial-order",
+              sourceId: "financial-order",
+              number: "Synthetic financial order",
+              date: "2026-02-01",
+              currency: "USD",
+              cashCents: 2268,
+              netCents: 2100,
+              taxCents: 168,
+              promotionCents: 300,
+              rewardsCents: 600,
+              lines: [],
+            },
+      });
+    });
+    await page
+      .getByRole("button", { name: "Load sales and refunds", exact: true })
+      .click();
+    await page
+      .getByLabel("Accounting order", { exact: true })
+      .selectOption("financial-order");
+    await page
+      .getByRole("button", { name: "Review accounting evidence", exact: true })
+      .click();
+    await expect(page.getByText("$22.68", { exact: true })).toBeVisible();
+    await page
+      .getByLabel("Accounting entry", { exact: true })
+      .selectOption("refund-adjustment");
+    await expect(page.getByText("$22.68", { exact: true })).toHaveCount(0);
+    await page
+      .getByRole("button", { name: "Review accounting evidence", exact: true })
+      .click();
+    await expect(
+      page
+        .getByRole("alert")
+        .filter({
+          hasText:
+            "Tax evidence is not matched. This entry is not ready for receipt export.",
+        }),
+    ).toBeVisible();
+    await expect(page.getByText("$7.56", { exact: true })).toBeVisible();
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
+    await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
+    await page.screenshot({
+      path: info.outputPath("sales-refund-source-review.png"),
+      fullPage: true,
+    });
   } finally {
     await db.user.update({ where: { id: user.id }, data: { deletedAt: new Date() } });
     await db.$disconnect();
