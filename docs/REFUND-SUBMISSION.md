@@ -1,6 +1,6 @@
 # Durable refund submission boundary
 
-This increment implements internal claim and provider submission primitives. They have no HTTP, worker, startup or UI caller. Refund submission remains unavailable until settlement, compensation, rewards, tax evidence and provider acceptance are complete. No real refund was submitted during development or validation.
+This increment implements internal claim and provider submission primitives. The follow-up in REFUND-OUTCOMES.md connects them through internal orchestration and receipt persistence. They have no HTTP, worker, startup or UI caller. Refund submission remains unavailable until settlement, compensation, rewards, tax evidence and provider acceptance are complete. No real refund was submitted during development or validation.
 
 `claimRefundSubmission` requires current order-management authority and an exact saved draft. It serializes against the order lock used by cancellation, verifies the saved request fingerprint, original payment and checkout identity, amount/currency, remaining item quantities/net/tax allocations and payment capacity. Reward-funded orders and unresolved previous submissions remain blocked.
 
@@ -10,7 +10,7 @@ Before any provider call, the claim atomically records SUBMITTING, the submissio
 
 Creation uses a stable request-bound idempotency key, an eight-second timeout and zero SDK retries. The adapter rejects stale/future claims. Any timeout or unconfirmed outcome leaves the durable SUBMITTING reservation for reconciliation; it never resets the request to PREPARED or releases funds. The returned minimal provider observation is not itself a ledger settlement.
 
-The orchestration and durable settlement/compensation stage must persist the returned receipt and reconcile uncertain outcomes before exposing refund controls. It must recheck authorization immediately before initiating a claim, keep provider I/O outside database transactions and never retry an old create after provider idempotency retention. Physical goods receipt remains independent of money movement.
+Internal orchestration now persists the returned receipt and keeps uncertain outcomes reserved (see REFUND-OUTCOMES.md). Durable settlement/compensation remains required before exposing refund controls. Authorization is rechecked before provider I/O; provider I/O remains outside database transactions and old creation attempts are not retried. Physical goods receipt remains independent of money movement.
 
 Validation: mocked-provider tests cover original payment binding, exact existing-refund recovery, stale claims, disputes, excessive amounts, external refunds, unknown attempts, timeouts and mismatched responses. Native PostgreSQL tests cover concurrent claims, role restrictions, audit rollback, changed allocations, delayed retries, another unresolved request and cancellation races. These tests do not establish real Stripe acceptance.
 
