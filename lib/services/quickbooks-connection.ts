@@ -1,3 +1,9 @@
+import {
+  type QuickbooksActor,
+  quickbooksAccountingAccess,
+  quickbooksAuditActor,
+  quickbooksWorkerAuthority,
+} from "./quickbooks-worker-authority";
 import { createHash, randomBytes } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
@@ -57,18 +63,18 @@ async function lock(tx: Prisma.TransactionClient, key: string) {
 }
 async function audit(
   tx: Prisma.TransactionClient,
-  actor: string,
+  actor: QuickbooksActor,
   action: string,
   key: string,
   realm: string,
 ) {
   await tx.auditLog.create({
     data: {
-      actorUserId: actor,
+      actorUserId: quickbooksAuditActor(actor),
       action,
       entityType: "QuickBooksConnection",
       entityId: key,
-      afterJson: { realm },
+      afterJson: { realm, source: typeof actor === "string" ? "staff" : "scheduled" },
     },
   });
 }
@@ -99,8 +105,8 @@ export async function quickbooksConnectionStatus(actor: string) {
   };
 }
 // Server-only capability snapshot. Never serialize this object into an API response.
-export async function authorizedQuickbooks(actor: string) {
-  await financeAccess(prisma, actor);
+export async function authorizedQuickbooks(actor: QuickbooksActor) {
+  await quickbooksAccountingAccess(prisma, actor);
   const config = await quickbooksConfig(),
     key = connectionKey(),
     row = await saved(prisma, key);
@@ -122,12 +128,12 @@ export async function authorizedQuickbooks(actor: string) {
 }
 export async function assertQuickbooksSnapshot(
   tx: Prisma.TransactionClient,
-  actor: string,
+  actor: QuickbooksActor,
   snapshot: Awaited<ReturnType<typeof authorizedQuickbooks>>,
   write = false,
 ) {
   await lock(tx, snapshot.key);
-  await financeAccess(tx, actor, write);
+  await quickbooksAccountingAccess(tx, actor, write);
   const current = await saved(tx, snapshot.key);
   if (
     !current ||
@@ -253,16 +259,13 @@ export async function completeQuickbooksConnection(actor: string, raw: unknown) 
   });
   return { connected: true };
 }
-export async function maintainQuickbooksConnection(
-  actor: string,
-  action: "refresh" | "disconnect",
-) {
-  await financeAccess(prisma, actor, true);
+async function maintainAs(actor: QuickbooksActor, action: "refresh" | "disconnect") {
+  await quickbooksAccountingAccess(prisma, actor, true);
   const config = await quickbooksConfig(),
     key = connectionKey();
   const claim = await prisma.$transaction(async (tx) => {
     await lock(tx, key);
-    await financeAccess(tx, actor, true);
+    await quickbooksAccountingAccess(tx, actor, true);
     const current = await saved(tx, key);
     if (!current || current.status === "DISCONNECTED") return null;
     if (current.fingerprint !== config.fingerprint || !current.secret)
@@ -318,7 +321,7 @@ export async function maintainQuickbooksConnection(
       throw new AccountError("QuickBooks settings changed.", 409);
     await prisma.$transaction(async (tx) => {
       await lock(tx, key);
-      await financeAccess(tx, actor, true);
+      await quickbooksAccountingAccess(tx, actor, true);
       const current = await saved(tx, key);
       if (current?.version !== claim.version)
         throw new AccountError("Connection changed. Reload it.", 409);
@@ -359,4 +362,14 @@ export async function maintainQuickbooksConnection(
       503,
     );
   }
+}
+
+export function maintainQuickbooksConnection(
+  actor: string,
+  action: "refresh" | "disconnect",
+) {
+  return maintainAs(actor, action);
+}
+export function refreshQuickbooksWorker() {
+  return maintainAs(quickbooksWorkerAuthority, "refresh");
 }

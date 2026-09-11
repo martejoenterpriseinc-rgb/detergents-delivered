@@ -10,6 +10,7 @@ import {
   cancelQuickbooksExpense,
   submitQuickbooksExpense,
   reconcileQuickbooksExpense,
+  reconcileScheduledQuickbooksExpenses,
 } from "./quickbooks-expenses";
 const key = "quickbooks:connection:v1:sandbox",
   config = {
@@ -273,4 +274,83 @@ it("rejects wrong-company, ambiguous and mismatched provider evidence without cr
     status: 409,
   });
   expect(create).toHaveBeenCalledTimes(1);
+});
+
+it("scheduled reconciliation uses read-only evidence with posting disabled and records a system audit", async () => {
+  const draft = await prepareQuickbooksExpense(admin, input());
+  const create = vi
+    .spyOn(provider, "createQuickbooksExpense")
+    .mockRejectedValue(new Error("synthetic lost response"));
+  await expect(submitQuickbooksExpense(admin, draft.id)).rejects.toThrow();
+  vi.stubEnv("DD_QBO_EXPENSE_POSTING_ENABLED", "false");
+  const find = vi
+    .spyOn(provider, "findQuickbooksExpense")
+    .mockImplementation(async (_c, _t, doc) =>
+      doc === draft.docNumber ? [await receipt(draft.id, "201")] : [],
+    );
+  await reconcileScheduledQuickbooksExpenses(async () => true);
+  expect(create).toHaveBeenCalledTimes(1);
+  expect(find).toHaveBeenCalled();
+  expect(
+    await prisma.qboExpenseExport.findUniqueOrThrow({ where: { id: draft.id } }),
+  ).toMatchObject({
+    status: "POSTED",
+    externalId: "201",
+    reconciliationIssue: null,
+    recoveryCheckedAt: expect.any(Date),
+  });
+  expect(
+    await prisma.auditLog.findFirst({
+      where: { entityId: draft.id, action: "quickbooks.expense.confirmed" },
+    }),
+  ).toMatchObject({
+    actorUserId: null,
+    afterJson: { externalId: "201", realm: config.realm, source: "scheduled" },
+  });
+  const calls = find.mock.calls.length;
+  await reconcileScheduledQuickbooksExpenses(async () => true);
+  expect(find).toHaveBeenCalledTimes(calls);
+});
+it("a lost worker lease prevents token and expense requests", async () => {
+  const find = vi.spyOn(provider, "findQuickbooksExpense").mockResolvedValue([]);
+  const refresh = vi.spyOn(provider, "exchangeQuickbooksToken");
+  await expect(reconcileScheduledQuickbooksExpenses(async () => false)).rejects.toThrow(
+    "lease expired",
+  );
+  expect(find).not.toHaveBeenCalled();
+  expect(refresh).not.toHaveBeenCalled();
+});
+it("scheduled token rotation is audited without impersonating staff and does not submit expenses", async () => {
+  const saved = await prisma.setting.findUniqueOrThrow({ where: { key } });
+  await prisma.setting.update({
+    where: { key },
+    data: {
+      valueJson: {
+        ...(saved.valueJson as Prisma.JsonObject),
+        expiresAt: new Date(Date.now() - 1000).toISOString(),
+      },
+    },
+  });
+  const refresh = vi
+    .spyOn(provider, "exchangeQuickbooksToken")
+    .mockResolvedValue({
+      access_token: "rotated-access",
+      refresh_token: "rotated-refresh",
+      token_type: "bearer",
+      expires_in: 3600,
+    });
+  const create = vi.spyOn(provider, "createQuickbooksExpense");
+  vi.spyOn(provider, "findQuickbooksExpense").mockResolvedValue([]);
+  await reconcileScheduledQuickbooksExpenses(async () => true);
+  await reconcileScheduledQuickbooksExpenses(async () => true);
+  expect(refresh).toHaveBeenCalledTimes(1);
+  expect(create).not.toHaveBeenCalled();
+  expect(
+    (await prisma.setting.findUniqueOrThrow({ where: { key } })).valueJson,
+  ).toMatchObject({ status: "CONNECTED", version: 3 });
+  expect(
+    await prisma.auditLog.findFirst({
+      where: { entityId: key, action: "quickbooks.refresh.confirmed", actorUserId: null },
+    }),
+  ).toMatchObject({ afterJson: { realm: config.realm, source: "scheduled" } });
 });

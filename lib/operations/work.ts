@@ -1,3 +1,9 @@
+import { reconcileScheduledQuickbooksExpenses } from "@/lib/services/quickbooks-expenses";
+import {
+  authorizedQuickbooks,
+  refreshQuickbooksWorker,
+} from "@/lib/services/quickbooks-connection";
+import { quickbooksWorkerAuthority } from "@/lib/services/quickbooks-worker-authority";
 import { reconcileScheduledRefunds } from "@/lib/services/refunds";
 import { prisma } from "@/lib/prisma";
 import { readCommerce } from "@/lib/commerce/runtime";
@@ -106,17 +112,19 @@ export async function emailRecoveryWork(
   };
 }
 export async function runOperationalCycle() {
-  const [payments, email, subscriptions, refunds] = await Promise.all([
+  const [payments, email, subscriptions, refunds, quickbooks] = await Promise.all([
     runOperationalTask("payment-reconciliation"),
     runOperationalTask("recovery-email"),
     runOperationalTask("subscription-cycles"),
     runOperationalTask("refund-reconciliation"),
+    runOperationalTask("quickbooks-reconciliation"),
   ]);
   return {
     payments,
     email,
     subscriptions,
     refunds,
+    quickbooks,
   };
 }
 export function runOperationalTask(name: JobName) {
@@ -128,7 +136,9 @@ export function runOperationalTask(name: JobName) {
         ? emailRecoveryWork
         : name === "refund-reconciliation"
           ? refundRecoveryWork
-          : subscriptionCycleWork,
+          : name === "quickbooks-reconciliation"
+            ? quickbooksRecoveryWork
+            : subscriptionCycleWork,
   );
 }
 
@@ -156,5 +166,23 @@ export async function refundRecoveryWork(
     ...result,
     state: result.attention ? "ATTENTION" : "HEALTHY",
     ...(result.attention ? { reason: "REFUND_REVIEW_REQUIRED" as const } : {}),
+  };
+}
+
+export async function quickbooksRecoveryWork(
+  ownsLease: () => Promise<boolean>,
+): Promise<JobResult> {
+  if (!(await ownsLease())) throw new Error("Worker lease expired.");
+  try {
+    await refreshQuickbooksWorker();
+    await authorizedQuickbooks(quickbooksWorkerAuthority);
+  } catch {
+    return blocked();
+  }
+  const result = await reconcileScheduledQuickbooksExpenses(ownsLease);
+  return {
+    ...result,
+    state: result.attention ? "ATTENTION" : "HEALTHY",
+    ...(result.attention ? { reason: "ACCOUNTING_REVIEW_REQUIRED" as const } : {}),
   };
 }

@@ -16,6 +16,8 @@ const ids = [
   "live:recovery-email",
   "sandbox:subscription-cycles",
   "sandbox:refund-reconciliation",
+  "sandbox:quickbooks-reconciliation",
+  "live:quickbooks-reconciliation",
   "live:refund-reconciliation",
   "live:subscription-cycles",
 ];

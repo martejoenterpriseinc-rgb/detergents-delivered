@@ -1299,6 +1299,9 @@ model Expense {
 }
 
 model QboExpenseExport {
+  @@index([mode, realm, status, recoveryCheckedAt], map: "QboExpenseExport_recovery_idx")
+  recoveryCheckedAt DateTime?
+  reconciliationIssue String?
   id String @id
   expenseId String
   expense Expense @relation(fields: [expenseId], references: [id], onDelete: Restrict)
