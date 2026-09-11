@@ -6,16 +6,24 @@ import { signOutAction } from "../actions";
 import Link from "next/link";
 import { getCustomerAccount, getCustomerOrders } from "@/lib/services/customer-account";
 import { ADMIN_SHELL_ROLES, hasRole } from "@/lib/domain/authz";
+import { prisma } from "@/lib/prisma";
 import { Button } from "@/components/ui/button";
 
 export default async function AccountPage() {
   const session = await requireAuth();
-  const [account, orders, delivery, loyalty] = await Promise.all([
+  const [account, orders, delivery, loyalty, initialOwnerMarker] = await Promise.all([
     getCustomerAccount(session.user.id),
     getCustomerOrders(session.user.id),
     getDeliveryWidget(session.user.id),
     getLoyalty(session.user.id),
+    prisma.setting.findUnique({ where: { key: "system.initialProductionOwner" } }),
   ]);
+  const configuredOwnerEmail = process.env.DD_INITIAL_OWNER_EMAIL?.trim().toLowerCase();
+  const ownerSetupAvailable =
+    !hasRole(session.user.roles, ADMIN_SHELL_ROLES) &&
+    Boolean(configuredOwnerEmail) &&
+    session.user.email?.trim().toLowerCase() === configuredOwnerEmail &&
+    !initialOwnerMarker;
 
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-12">
@@ -42,6 +50,17 @@ export default async function AccountPage() {
           </form>
         </div>
       </div>
+      {ownerSetupAvailable && (
+        <Link
+          href="/account/platform-owner"
+          className="mt-6 block rounded-2xl border border-teal-200 bg-teal-50 p-5 focus-visible:outline-2 focus-visible:outline-teal-700"
+        >
+          <p className="font-semibold text-teal-950">Platform Owner / Admin setup</p>
+          <p className="mt-1 text-sm text-teal-800">
+            This customer account is designated for the one-time platform owner activation.
+          </p>
+        </Link>
+      )}
       <div className="mt-8">
         <AccountDashboard
           account={account}
