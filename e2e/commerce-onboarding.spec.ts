@@ -112,10 +112,10 @@ test("address review saves with customer isolation and closed payment gate", asy
     ).toBe("STAFF_REVIEW");
     await page.goto("/admin/payments");
     await expect(
-      page.getByRole("heading", { name: "Payments & checkout recovery" }),
+      page.getByRole("heading", { name: "Payments", exact: true }),
     ).toBeVisible();
     await expect(
-      page.getByText("Sandbox checkout: closed.", { exact: true }),
+      page.getByText("Sandbox · Checkout closed", { exact: true }),
     ).toBeVisible();
     await page.screenshot({
       path: info.outputPath("payment-recovery-closed.png"),
