@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { flagRefundAccountingCorrections } from "./refund-accounting-corrections";
 import { AccountError } from "@/lib/domain/account";
 import { hasPermission, permissionsForRoles } from "@/lib/domain/authz";
 import {
@@ -650,8 +651,14 @@ async function reconcileRefundSettlementAs(userId: RefundActor, raw: unknown) {
       (transition.compensate && (!settled || compensated))
     )
       throw new AccountError("Refund accounting history requires reconciliation.", 409);
-    if (request.status === transition.target && request.providerRefundId === observed.id)
+    if (
+      request.status === transition.target &&
+      request.providerRefundId === observed.id
+    ) {
+      if (compensated && settled)
+        await flagRefundAccountingCorrections(tx, settled.id, refundAuditActor(userId));
       return publicRefundRequest(request);
+    }
     if (transition.settle || transition.compensate) {
       const sign = transition.compensate ? -1 : 1;
       if (
@@ -715,6 +722,8 @@ async function reconcileRefundSettlementAs(userId: RefundActor, raw: unknown) {
         lastError: null,
       },
     });
+    if (transition.compensate && settled)
+      await flagRefundAccountingCorrections(tx, settled.id, refundAuditActor(userId));
     await tx.refundRequestEvent.create({
       data: {
         refundRequestId: request.id,

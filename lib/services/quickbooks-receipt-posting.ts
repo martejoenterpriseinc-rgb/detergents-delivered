@@ -35,6 +35,27 @@ import {
 } from "./quickbooks-receipt-drafts";
 import { recordedSaleSource, recordedRefundSource } from "./sales-refund-source";
 const idSchema = z.string().min(1).max(100);
+async function retainReceiptReadFailure(id: string, checked = true) {
+  // A transient read error cannot erase a known failed-refund correction obligation.
+  await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "QboReceiptExport" WHERE id=${id} FOR UPDATE`;
+    if (checked)
+      await tx.qboReceiptExport.update({
+        where: { id },
+        data: { recoveryCheckedAt: new Date() },
+      });
+    await tx.qboReceiptExport.updateMany({
+      where: {
+        id,
+        OR: [
+          { reconciliationIssue: null },
+          { reconciliationIssue: { not: "REFUND_COMPENSATION_REVIEW" } },
+        ],
+      },
+      data: { reconciliationIssue: "EVIDENCE_UNCONFIRMED" },
+    });
+  });
+}
 async function sourceEvidence(tx: Prisma.TransactionClient, e: QboReceiptExport) {
   const sale = await recordedSaleSource(tx, e.orderId),
     refund = e.adjustmentId
@@ -269,8 +290,10 @@ export async function submitQuickbooksReceipt(actor: string, id: string) {
   } catch {
     await prisma.qboReceiptExport.updateMany({
       where: { id, status: "SUBMITTING" },
-      data: { status: "UNKNOWN", reconciliationIssue: "EVIDENCE_UNCONFIRMED" },
+      data: { status: "UNKNOWN" },
     });
+    // Submission is not a recovery read. Keep the first worker check immediately due.
+    await retainReceiptReadFailure(id, false);
     throw new AccountError(
       "Receipt submission was not confirmed. Reconcile this export before any further accounting action.",
       503,
@@ -305,13 +328,7 @@ async function reconcileAs(actor: QuickbooksActor, id: string) {
       );
     return await confirm(actor, id, matches[0], snapshot);
   } catch (e) {
-    await prisma.qboReceiptExport.update({
-      where: { id },
-      data: {
-        recoveryCheckedAt: new Date(),
-        reconciliationIssue: "EVIDENCE_UNCONFIRMED",
-      },
-    });
+    await retainReceiptReadFailure(id);
     throw e;
   }
 }
@@ -360,10 +377,7 @@ export async function reconcileScheduledQuickbooksReceipts(
       await reconcileAs(quickbooksWorkerAuthority, row.id);
       completed++;
     } catch {
-      await prisma.qboReceiptExport.update({
-        where: { id: row.id },
-        data: { reconciliationIssue: "EVIDENCE_UNCONFIRMED" },
-      });
+      await retainReceiptReadFailure(row.id);
     }
   }
   const attention = await prisma.qboReceiptExport.count({

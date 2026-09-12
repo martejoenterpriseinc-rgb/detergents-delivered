@@ -571,6 +571,17 @@ it("blocks a refund that failed before posting and keeps a later refund failure 
     (await reconcileQuickbooksReceipt(admin, second.draft.id)).reconciliationIssue,
   ).toBe("REFUND_COMPENSATION_REVIEW");
   expect(create).toHaveBeenCalledTimes(2);
+  vi.spyOn(provider, "findQuickbooksCashReceipt").mockRejectedValue(
+    new Error("Synthetic provider read outage"),
+  );
+  await expect(reconcileQuickbooksReceipt(admin, second.draft.id)).rejects.toThrow(
+    /outage/,
+  );
+  expect(
+    (await prisma.qboReceiptExport.findUniqueOrThrow({ where: { id: second.draft.id } }))
+      .reconciliationIssue,
+  ).toBe("REFUND_COMPENSATION_REVIEW");
+  expect(create).toHaveBeenCalledTimes(2);
 });
 it("prepares one immutable receipt across retries, keeps cancellation history and prevents duplicate active sources", async () => {
   const raw = input(),
