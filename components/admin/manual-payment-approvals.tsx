@@ -85,7 +85,13 @@ function ApprovalForm({
         </p>
       ) : (
         data.canWrite && (
-          <form action={save} className="space-y-4">
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              void save(new FormData(event.currentTarget));
+            }}
+            className="space-y-4"
+          >
             <fieldset disabled={busy || uncertain} className="space-y-4">
               <label className="block">
                 {label} decision
