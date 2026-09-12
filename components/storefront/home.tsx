@@ -143,6 +143,18 @@ export function StorefrontHome({
             </section>
           );
         })}
+      <section className="sf-section">
+        <div className="sf-container">
+          <h2 className="text-2xl font-semibold">How can we help?</h2>
+          <p className="sf-body">
+            Questions about an order, delivery, or your account? Submit a support ticket
+            and follow replies in your account.
+          </p>
+          <Link className="sf-button" href="/contact">
+            Contact us
+          </Link>
+        </div>
+      </section>
     </div>
   );
 }

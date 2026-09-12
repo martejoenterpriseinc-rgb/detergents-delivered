@@ -9,7 +9,14 @@ type Health = {
   availableCents: number | null;
   pendingCents: number | null;
 };
-export function PaymentOverviewLive({ balances = false }: { balances?: boolean }) {
+export function PaymentOverviewLive({
+  balances = false,
+  provider = "stripe",
+}: {
+  balances?: boolean;
+  provider?: "stripe" | "quickbooks";
+}) {
+  const providerName = provider === "stripe" ? "Stripe" : "QuickBooks";
   const router = useRouter();
   const [health, setHealth] = useState<Health | null>(null);
   const [busy, setBusy] = useState(false);
@@ -25,10 +32,15 @@ export function PaymentOverviewLive({ balances = false }: { balances?: boolean }
       controller = new AbortController();
       const timeout = setTimeout(() => controller?.abort(), 12000);
       try {
-        const r = await fetch("/api/admin/payments/connection", {
-          cache: "no-store",
-          signal: controller.signal,
-        });
+        const r = await fetch(
+          provider === "stripe"
+            ? "/api/admin/payments/connection"
+            : "/api/admin/quickbooks/health",
+          {
+            cache: "no-store",
+            signal: controller.signal,
+          },
+        );
         if (!r.ok) throw Error();
         const next: Health = await r.json();
         if (!stopped) setHealth(next);
@@ -57,11 +69,11 @@ export function PaymentOverviewLive({ balances = false }: { balances?: boolean }
       controller?.abort();
       document.removeEventListener("visibilitychange", check);
     };
-  }, [router, revision]);
+  }, [router, revision, provider]);
   return (
     <section
       className="space-y-3 rounded-2xl border bg-white p-5"
-      aria-label="Stripe API connection"
+      aria-label={`${providerName} API connection`}
     >
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div role="status">
@@ -77,7 +89,7 @@ export function PaymentOverviewLive({ balances = false }: { balances?: boolean }
                 : "Checking connection…"}
           </strong>
           <p className="mt-1 text-sm">
-            {health?.message ?? "Verifying the Stripe API for this environment."}
+            {health?.message ?? `Verifying the ${providerName} API for this environment.`}
           </p>
           {health && (
             <p className="mt-1 text-xs">

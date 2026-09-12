@@ -21,6 +21,14 @@ export default async function ContactPage() {
         >
           {session?.user ? "Contact support" : "Sign in to contact support"}
         </Link>
+        {!session?.user && (
+          <Link
+            href="/register?callbackUrl=%2Faccount%2Fsupport%2Fnew"
+            className="inline-flex min-h-11 items-center px-5 font-semibold text-teal-800 underline"
+          >
+            Create an account to contact support
+          </Link>
+        )}
       </Card>
     </div>
   );

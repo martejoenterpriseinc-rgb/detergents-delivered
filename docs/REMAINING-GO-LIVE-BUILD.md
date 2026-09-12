@@ -1,6 +1,6 @@
 # Remaining Go Live work — September 12, 2026
 
-Owner direction: finish application construction first. Add and connect all external APIs at the end. Missing provider credentials are not a reason to pause independent application work. No checkout or outbound provider activity is enabled by this instruction.
+Latest owner direction authorizes completing application construction, API connections and production acceptance. Use the intended accounts and real provider evidence; missing credentials do not block independent application work. Do not enable checkout or claim acceptance until the documented release gates pass. Outbound acceptance messages still require authorized recipients.
 
 The latest combined source in PR 73 / CI 170 passed 716 tests, including the four finance workflow increments described below. PR 66 / CI 152 passed 674 tests, including private original customer receipts, browser printing/PDF and original-address/item/tax/reward checks. The release audit in PR 67 also passed CI 153. PR 68 / CI 156 passed 687 tests with the source-verified CPA financial ledger, private CSV and desktop/tablet/mobile acceptance. A published PR alone is not acceptance. Recent work remains ahead of the deployed revision recorded in `BUILD-RELEASE-CANDIDATE.md`.
 
@@ -29,3 +29,11 @@ Production also needs a verified owner account, completed business/legal setup, 
 Connect the intended payment/tax, QuickBooks, Google sign-in, email and SMS accounts; verify the existing storage, document scanning, map and monitoring dependencies. Keep sandbox/live credentials and callbacks separate. Confirm provider behavior using controlled test identities and authorized recipient messages, then the approved production configuration. A saved key is configuration evidence only.
 
 Exercise a complete controlled order through account approval, tax, payment, inventory, rewards, delivery, private proof, receipt, refund and accounting reconciliation. Verify scheduled jobs, failure recovery, alerts, retained photos after redeploy and current backup restore. Go Live requires the intended production deployment to pass these checks; passing local or CI fixtures is not equivalent.
+
+## Contact entry and QuickBooks dashboard checkpoint
+
+The homepage now links to Contact us, offering sign-in and account creation before the existing support ticket workflow. Registration and sign-in preserve the validated local ticket destination, including registration errors. No new ticket backend or outbound notification channel was created.
+
+The QuickBooks overview adds large day/week/month/year controls and company/environment-scoped export-count KPIs with linked record details. Confirmed exports use confirmation dates; pending reconciliation and accounting issues include all periods. Counts cover sales receipts, refund receipts, expense exports and inventory cost journals. Unconfigured metrics remain unavailable. Export counts refresh from the database each minute while visible. A separate green/red indicator verifies the intended Intuit company API and unchanged authorization; a saved token alone never turns it green. This is not a company financial statement. Existing connection, mapping, preparation, posting and reconciliation controls remain accessible.
+
+Still outstanding: manual cash/Zelle order settlement and related tax/refund integration; tip refunds and driver payout accounting; provider tax compensation and actual QuickBooks correcting entries; company-wide financial reports; intended API authorization; migration/release and controlled production acceptance. This checkpoint does not close those launch blockers.
