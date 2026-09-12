@@ -52,6 +52,7 @@ test("household reprints its original receipt and saves a private PDF without ch
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
     ).toBe(true);
+    await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
     await page.screenshot({
       path: info.outputPath("original-receipt.png"),
       fullPage: true,

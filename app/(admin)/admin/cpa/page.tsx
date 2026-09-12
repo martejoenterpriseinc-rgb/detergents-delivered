@@ -39,6 +39,9 @@ export default async function Page({
           records.
         </p>
       </header>
+      <a className="ops-button inline-block" href="/admin/cpa/ledger">
+        Sales, refunds & cost ledger
+      </a>
       <form action="/admin/cpa" method="get" className="flex flex-wrap items-end gap-3">
         <label className="grid gap-1 text-sm">
           From
@@ -137,8 +140,9 @@ export default async function Page({
           per file.
         </p>
         <p>
-          QuickBooks reconciliation, complete financial statements and tax filing reports
-          are still in development.
+          The financial event ledger covers recorded sales, refunds, rewards used or
+          restored, and stock costs. Complete financial statements and tax filing reports
+          remain unfinished; real QuickBooks acceptance is still pending.
         </p>
       </section>
     </div>

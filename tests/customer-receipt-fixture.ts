@@ -5,6 +5,7 @@ export async function receiptFixture(
   db: PrismaClient,
   options: {
     passwordHash?: string;
+    financialEvidence?: boolean;
     zero?: boolean;
     pending?: boolean;
     badTotal?: boolean;
@@ -71,6 +72,7 @@ export async function receiptFixture(
           expiresAt: new Date(),
           livemode: false,
           stripeAccountId: "acct_synthetic_receipt",
+          stripeSessionId: "cs_" + marker,
           snapshot: {
             address: {
               line1: "1 Synthetic Street",
@@ -98,10 +100,12 @@ export async function receiptFixture(
                 unitPriceCents: 1000,
                 discountCents: 300 + rewards,
                 netCents: net,
+                taxCode: "txcd_synthetic",
               },
             ],
             email: "private-snapshot@example.test",
             taxCalculationId: "private-tax-id",
+            taxBreakdown: [{ amount: tax }],
             dates: ["2026-02-01"],
             vehicleId: "private-vehicle",
           },
@@ -127,6 +131,82 @@ export async function receiptFixture(
       },
     },
   });
+  if (options.financialEvidence) {
+    await db.taxCalculation.create({
+      data: {
+        orderId: order.id,
+        provider: "STRIPE_QUOTE",
+        taxableCents: net,
+        taxCents: tax,
+        externalId: "private-tax-id",
+        breakdownJson: [{ amount: tax }],
+        destinationJson: {
+          line1: "1 Synthetic Street",
+          line2: "Unit 2",
+          city: "Synthetic",
+          region: "IL",
+          postalCode: "60000",
+          country: "US",
+        },
+      },
+    });
+    const hold = await db.rewardReservation.create({
+      data: {
+        orderId: order.id,
+        customerId: user.customer!.id,
+        amountCents: rewards,
+        orderTotalCents: total + rewards,
+        requestKey: randomUUID(),
+        state: "USED",
+      },
+    });
+    await db.rewardEntry.create({
+      data: {
+        customerId: user.customer!.id,
+        orderId: order.id,
+        sourceId: hold.id,
+        kind: "REDEMPTION",
+        amountCents: -rewards,
+        description: "Synthetic ledger fixture",
+        entryKey: `order:${order.id}:use`,
+      },
+    });
+    await db.auditLog.create({
+      data: {
+        entityType: "Order",
+        entityId: order.id,
+        action: "checkout.payment.finalized",
+        afterJson: {
+          sessionId: "cs_" + marker,
+          amount: total,
+          currency: "usd",
+          livemode: false,
+          paymentStatus: "paid",
+          status: "complete",
+          rewardsUsedCents: rewards,
+          taxLines: [{ variantId: variant.id, netCents: net, taxCents: tax }],
+        },
+      },
+    });
+    const layer = await db.inventoryCostLayer.create({
+      data: {
+        productVariantId: variant.id,
+        quantityOriginal: 3,
+        quantityRemaining: 0,
+        landedUnitCostCents: 400,
+        receivedAt: new Date("2026-01-01T00:00:00Z"),
+      },
+    });
+    await db.checkoutCostAllocation.create({
+      data: {
+        checkoutId,
+        costLayerId: layer.id,
+        quantity: 3,
+        unitCostCents: 400,
+        state: "CONSUMED",
+      },
+    });
+  }
   return {
     userId: user.id,
     email: user.email,

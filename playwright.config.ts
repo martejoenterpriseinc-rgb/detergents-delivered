@@ -19,7 +19,7 @@ export default defineConfig({
       name: "tablet",
       use: { ...devices["Desktop Chrome"], viewport: { width: 768, height: 1024 } },
       testMatch:
-        /(customer-receipt|customer-access|website-builder|environment-settings|operating-media|finance|catalog-files|commerce-connections|quickbooks-connection|quickbooks-costs|delivery-sms|delivery-text-monitor|order-workspace|order-returns|reward-refunds|subscriptions|launch-offers)\.spec\.ts/,
+        /(cpa-ledger|customer-receipt|customer-access|website-builder|environment-settings|operating-media|finance|catalog-files|commerce-connections|quickbooks-connection|quickbooks-costs|delivery-sms|delivery-text-monitor|order-workspace|order-returns|reward-refunds|subscriptions|launch-offers)\.spec\.ts/,
     },
     { name: "mobile", use: { ...devices["Pixel 5"] } },
   ],
