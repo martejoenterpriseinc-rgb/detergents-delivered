@@ -28,9 +28,10 @@ export default async function Page({
   const report = parsed.data,
     period = paymentPeriod(params.period),
     basis = params.basis === "Cash" ? "Cash" : "Accrual";
-  const href = (changes: Record<string, string>) =>
-    "/admin/reports/quickbooks/financial?" +
-    new URLSearchParams({ report, period: period.period, basis, ...changes });
+  const href = (changes: Record<string, string>) => ({
+    pathname: "/admin/reports/quickbooks/financial",
+    query: { report, period: period.period, basis, ...changes },
+  });
   let data,
     error = "";
   try {
