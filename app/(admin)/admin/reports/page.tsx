@@ -4,6 +4,9 @@ export default function ReportsPage() {
     <div className="space-y-6">
       <h1 className="text-3xl font-semibold text-teal-950">Reports</h1>
       <p>Open your financial and operational tools above.</p>
+      <Link className="ops-button" href={{ pathname: "/admin/reports/tips" }}>
+        Delivery tips
+      </Link>
       <Link className="ops-button" href="/admin/reports/quickbooks">
         QuickBooks connection
       </Link>

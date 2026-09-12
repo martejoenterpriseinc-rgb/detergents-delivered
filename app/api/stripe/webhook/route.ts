@@ -2,6 +2,7 @@ import { stripeClient } from "@/lib/commerce/stripe";
 import { readCommerce } from "@/lib/commerce/runtime";
 import { reconcileCheckout } from "@/lib/commerce/checkout";
 import { prisma } from "@/lib/prisma";
+import { reconcileDeliveryTip } from "@/lib/services/delivery-tips";
 import type Stripe from "stripe";
 export const runtime = "nodejs";
 export async function POST(request: Request) {
@@ -54,6 +55,12 @@ export async function POST(request: Request) {
   )
     return Response.json({ received: true });
   try {
+    if (session.metadata?.tipId) {
+      if (session.metadata.tipId !== session.client_reference_id)
+        return new Response("Tip identity mismatch", { status: 409 });
+      await reconcileDeliveryTip(session.metadata.tipId, session.id);
+      return Response.json({ received: true });
+    }
     const a = await prisma.checkoutAttempt.findUnique({
       where: { id: session.client_reference_id },
     });
