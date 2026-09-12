@@ -97,6 +97,7 @@ function ApprovalForm({
                 {label} decision
                 <select
                   name="enabled"
+                  aria-label={`${label} decision`}
                   defaultValue={data.eligible ? "true" : "false"}
                   className="mt-1 block w-full rounded-lg border p-3"
                 >
@@ -120,6 +121,7 @@ function ApprovalForm({
                 {label} approval duration
                 <select
                   name="days"
+                  aria-label={`${label} approval duration`}
                   defaultValue="30"
                   className="mt-1 block w-full rounded-lg border p-3"
                 >
