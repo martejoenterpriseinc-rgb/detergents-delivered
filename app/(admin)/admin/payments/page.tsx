@@ -15,6 +15,12 @@ export default async function Page({
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
+          <Link
+            href="/admin/payments/manual"
+            className="inline-flex min-h-12 items-center rounded-xl border px-5 font-semibold"
+          >
+            Cash / Zelle settlements
+          </Link>
           <h1 className="text-3xl font-semibold">Payments</h1>
           <p className="mt-2">
             {data.live ? "Live" : "Sandbox"} · Checkout{" "}

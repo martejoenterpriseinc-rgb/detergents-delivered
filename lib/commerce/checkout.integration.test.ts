@@ -33,6 +33,15 @@ vi.mock("./stripe", async (importOriginal) => {
     })),
   };
 });
+const manualTaxMock = vi.hoisted(() => vi.fn());
+vi.mock("./manual-tax", () => ({ confirmManualTax: manualTaxMock }));
+import {
+  beginManualCheckout,
+  recordManualReceipt,
+  reconcileManualCheckout,
+  cancelManualCheckout,
+} from "@/lib/services/manual-checkout";
+import { customerReceipt } from "@/lib/services/customer-receipt";
 let prior: unknown;
 let f: Awaited<ReturnType<typeof fixture>>;
 async function fixture() {
@@ -809,4 +818,129 @@ it("prepares scoped agent quotes through shared checkout and blocks consent revo
     }),
   ).toBe(0);
   expect(await prisma.order.count({ where: { customerId: f.one.customer!.id } })).toBe(0);
+});
+
+it("settles approved manual funds once through shared stock, rewards, route and receipt accounting", async () => {
+  vi.stubEnv("DD_MANUAL_PAYMENTS_ENABLED", "true");
+  await prisma.manualPaymentApproval.create({
+    data: {
+      customerId: f.one.customer!.id,
+      method: "CASH",
+      enabled: true,
+      maxOrderCents: 100000,
+      expiresAt: new Date(Date.now() + 86400000),
+    },
+  });
+  const q = await createQuote(f.one.id, input());
+  await beginManualCheckout(f.one.id, {
+    checkoutId: q.id,
+    method: "CASH",
+    acceptedWindow: true,
+  });
+  await expect(reserveCheckout(f.one.id, q.id, true)).rejects.toMatchObject({
+    status: 409,
+  });
+  const d = {
+    checkoutId: q.id,
+    requestKey: randomUUID(),
+    amountCents: q.totalCents,
+    reference: "synthetic-cash-" + randomUUID(),
+    reason: "Synthetic cash receipt confirmed",
+    receivedAt: new Date().toISOString(),
+    confirmed: true,
+  };
+  await expect(recordManualReceipt(f.one.id, d)).rejects.toMatchObject({ status: 403 });
+  const [r1, r2] = await Promise.all([
+    recordManualReceipt(f.admin.id, d),
+    recordManualReceipt(f.admin.id, d),
+  ]);
+  expect(r1.id).toBe(r2.id);
+  await expect(cancelManualCheckout(f.one.id, q.id)).rejects.toMatchObject({
+    status: 409,
+  });
+  const before = await prisma.checkoutAttempt.findUniqueOrThrow({ where: { id: q.id } });
+  expect(before.state).toBe("PROCESSING");
+  manualTaxMock.mockResolvedValue({
+    taxTransactionId: "tax_syntheticmanual",
+    taxLines: [
+      {
+        variantId: f.variant.id,
+        netCents: q.totalCents - q.taxCents,
+        taxCents: q.taxCents,
+      },
+    ],
+    accountId: "acct_synthetic",
+    livemode: false,
+  });
+  await reconcileManualCheckout(f.admin.id, r1.id);
+  await reconcileManualCheckout(f.admin.id, r1.id);
+  expect(
+    await prisma.payment.count({
+      where: { orderId: before.orderId!, provider: "MANUAL" },
+    }),
+  ).toBe(1);
+  expect(await prisma.routeStop.count({ where: { orderId: before.orderId! } })).toBe(1);
+  expect((await customerReceipt(f.one.id, q.id)).totalCents).toBe(q.totalCents);
+  expect(
+    (await prisma.checkoutCostAllocation.findMany({ where: { checkoutId: q.id } })).every(
+      (c) => c.state === "CONSUMED",
+    ),
+  ).toBe(true);
+});
+it("retains money through uncertain tax posting and releases only unpaid manual reservations", async () => {
+  vi.stubEnv("DD_MANUAL_PAYMENTS_ENABLED", "true");
+  await prisma.manualPaymentApproval.create({
+    data: {
+      customerId: f.one.customer!.id,
+      method: "ZELLE",
+      enabled: true,
+      maxOrderCents: 100000,
+      expiresAt: new Date(Date.now() + 86400000),
+    },
+  });
+  const q = await createQuote(f.one.id, input());
+  await beginManualCheckout(f.one.id, {
+    checkoutId: q.id,
+    method: "ZELLE",
+    acceptedWindow: true,
+  });
+  await cancelManualCheckout(f.one.id, q.id);
+  await cancelManualCheckout(f.one.id, q.id);
+  expect((await ownedCheckout(f.one.id, q.id)).state).toBe("EXPIRED");
+  expect(
+    (await prisma.checkoutCostAllocation.findMany({ where: { checkoutId: q.id } })).every(
+      (c) => c.state === "RELEASED",
+    ),
+  ).toBe(true);
+  const q2 = await createQuote(f.one.id, input());
+  await beginManualCheckout(f.one.id, {
+    checkoutId: q2.id,
+    method: "ZELLE",
+    acceptedWindow: true,
+  });
+  const d = {
+    checkoutId: q2.id,
+    requestKey: randomUUID(),
+    amountCents: q2.totalCents,
+    reference: "synthetic-zelle-" + randomUUID(),
+    reason: "Synthetic bank receipt confirmed",
+    receivedAt: new Date().toISOString(),
+    confirmed: true,
+  };
+  const r = await recordManualReceipt(f.admin.id, d);
+  manualTaxMock.mockRejectedValue(new Error("synthetic interruption"));
+  await expect(reconcileManualCheckout(f.admin.id, r.id)).rejects.toThrow();
+  expect(
+    (await prisma.manualCheckoutSettlement.findUniqueOrThrow({ where: { id: r.id } }))
+      .state,
+  ).toBe("UNKNOWN");
+  expect((await ownedCheckout(f.one.id, q2.id)).state).toBe("PROCESSING");
+  expect(
+    await prisma.payment.count({
+      where: { orderId: (await ownedCheckout(f.one.id, q2.id)).orderId! },
+    }),
+  ).toBe(0);
+  await expect(cancelManualCheckout(f.one.id, q2.id)).rejects.toMatchObject({
+    status: 409,
+  });
 });

@@ -47,7 +47,8 @@ export async function POST(
     if (input.action === "pay")
       return accountJson(await beginCheckout(userId, id, input.acceptedWindow === true));
     if (input.action === "cancel") await cancelCheckout(userId, id);
-    else await reconcileCheckout(id);
+    else if ((await ownedCheckout(userId, id)).paymentMethod === "STRIPE")
+      await reconcileCheckout(id);
     return accountJson(publicCheckout(await ownedCheckout(userId, id)));
   } catch (e) {
     return accountFailure(e);

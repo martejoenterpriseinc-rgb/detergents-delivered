@@ -7,6 +7,7 @@ async function main() {
   await readCommerce(true);
   const attempts = await prisma.checkoutAttempt.findMany({
     where: {
+      paymentMethod: "STRIPE",
       state: { in: ["OPEN", "PROCESSING", "REVIEW"] },
       stripeSessionId: { not: null },
     },

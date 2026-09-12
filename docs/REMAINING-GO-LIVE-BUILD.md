@@ -41,3 +41,7 @@ Still outstanding: manual cash/Zelle order settlement and related tax/refund int
 ## Tip accounting construction increment
 
 `TIP-PAYOUT-ACCOUNTING.md` describes the new dedicated-tip refund inspection and immutable driver-transfer/reversal records. This adds payable/recoverable reporting and prevents paying collected tax or unresolved refund capacity. Actual refund initiation, partial tax allocation, QuickBooks tip posting and production acceptance remain open. A hosted migration is required before this increment can be used.
+
+## Manual settlement construction increment
+
+`MANUAL-CHECKOUT-SETTLEMENT.md` describes approved manual reservations, staff received-money recording, recoverable Stripe Tax posting, shared order finalization and customer receipts. Both manual-payment activation flags stay off. Exception handling, manual refunds/tax reversals, CPA/QuickBooks export support and provider/browser acceptance are still required before activating the method. The original card settlement remains covered by the full existing checkout suite.

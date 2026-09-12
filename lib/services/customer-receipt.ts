@@ -48,6 +48,7 @@ export async function customerReceipt(userId: string, checkoutId: string) {
       const a = await tx.checkoutAttempt.findFirst({
         where: { id: checkoutId, customerId: customer.id },
         include: {
+          manualSettlement: true,
           order: { include: { items: true, payments: { include: { events: true } } } },
         },
       });
@@ -65,9 +66,26 @@ export async function customerReceipt(userId: string, checkoutId: string) {
       const parsed = snapshotSchema.safeParse(a.snapshot);
       if (!parsed.success) throw unavailable();
       const s = parsed.data;
+      const manual = a.paymentMethod !== "STRIPE";
+      const r = a.manualSettlement;
+      if (
+        manual &&
+        (!r ||
+          r.state !== "SETTLED" ||
+          r.method !== a.paymentMethod ||
+          r.amountCents !== s.totalCents ||
+          r.accountId !== a.stripeAccountId ||
+          r.livemode !== a.livemode ||
+          !r.taxTransactionId ||
+          !r.taxEvidence)
+      )
+        throw unavailable();
       const payments = o.payments.filter(
         (p) =>
-          p.provider === "STRIPE" &&
+          p.provider === (manual ? "MANUAL" : "STRIPE") &&
+          (!manual ||
+            (p.externalId === r!.id &&
+              p.events.some((e) => e.type === "manual.payment.settled"))) &&
           ["CAPTURED", "PARTIALLY_REFUNDED", "REFUNDED"].includes(p.status) &&
           p.currency === "USD" &&
           p.amountCents === s.totalCents &&

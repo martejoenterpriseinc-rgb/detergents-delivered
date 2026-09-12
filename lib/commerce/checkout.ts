@@ -1,3 +1,4 @@
+import { cancelManualCheckout } from "@/lib/services/manual-checkout";
 import type Stripe from "stripe";
 import { prisma } from "@/lib/prisma";
 import { AccountError } from "@/lib/domain/account";
@@ -11,7 +12,7 @@ import { assertSessionIdentity, createStripeCheckout, stripeClient } from "./str
 import { json, publicCheckout } from "./quote";
 import { type CheckoutSnapshot, heldStates } from "./domain";
 
-import { settleSubscriptionCycle } from "@/lib/services/subscription-cycles";
+import { finalizeReservedCheckout } from "./finalize-checkout";
 export async function ownedCheckout(userId: string, id: string) {
   const { customer } = await customerIdentity(prisma, userId);
   const a = await prisma.checkoutAttempt.findFirst({
@@ -78,6 +79,8 @@ export async function settleVerifiedSession(
   if (!id) return;
   const original = await prisma.checkoutAttempt.findUnique({ where: { id } });
   if (!original) return;
+  if (original.paymentMethod !== "STRIPE")
+    throw new AccountError("This checkout requires manual settlement.", 409);
   const config = await readCommerce(true);
   if (original.stripeAccountId !== config.accountId || original.livemode !== config.live)
     throw new AccountError("Payment environment mismatch.", 409);
@@ -216,178 +219,17 @@ export async function settleVerifiedSession(
         });
         return;
       }
-      // Preserve a historical address even if the household changes its default later.
-      const address = await tx.address.create({
-        data: {
-          customerId: a.customerId,
-          line1: s.address.line1,
-          line2: s.address.line2 || null,
-          city: s.address.city,
-          region: s.address.region,
-          postalCode: s.address.postalCode,
-          country: s.address.country,
-          lat: s.address.lat,
-          lng: s.address.lng,
-          deliveryZoneId: a.zoneId,
-          label: "Order delivery snapshot",
-          isDefault: false,
-          validatedAt: new Date(),
-          validationSource: `CHECKOUT_SNAPSHOT:${s.address.id}`,
-        },
-      });
-      const allocations = await tx.checkoutCostAllocation.findMany({
-        where: { checkoutId: id, state: "HELD" },
-      });
-      const costs: Record<string, number> = {};
-      for (const line of s.lines) {
-        await tx.$queryRaw`SELECT id FROM "ProductVariant" WHERE id = ${line.variantId} FOR UPDATE`;
-        const layers = await tx.inventoryCostLayer.findMany({
-          where: { productVariantId: line.variantId },
-        });
-        const chosen = allocations.filter((c) =>
-          layers.some((l) => l.id === c.costLayerId),
-        );
-        if (chosen.reduce((n, c) => n + c.quantity, 0) !== line.quantity)
-          throw new Error("Cost reservations do not match");
-        costs[line.variantId] = chosen.reduce(
-          (n, c) => n + c.quantity * c.unitCostCents,
-          0,
-        );
-        for (const c of chosen) {
-          const applied = await tx.inventoryCostLayer.updateMany({
-            where: { id: c.costLayerId, quantityRemaining: { gte: c.quantity } },
-            data: { quantityRemaining: { decrement: c.quantity } },
-          });
-          if (applied.count !== 1) throw new Error("Cost layer unavailable");
-        }
-        await persistInventoryTransaction(tx, {
-          productVariantId: line.variantId,
-          type: "SALE",
-          quantity: line.quantity,
-          referenceType: "Order",
-          referenceId: a.orderId,
-        });
-        const tax = taxLines.find((t) => t.variantId === line.variantId)!.taxCents;
-        await tx.orderItem.updateMany({
-          where: { orderId: a.orderId, productVariantId: line.variantId },
-          data: {
-            taxCents: tax,
-            lineTotalCents: line.netCents + tax,
-            landedUnitCostCents: Math.round(costs[line.variantId] / line.quantity),
-          },
-        });
-      }
-      await tx.checkoutCostAllocation.updateMany({
-        where: { checkoutId: id, state: "HELD" },
-        data: { state: "CONSUMED" },
-      });
-      if (s.rewardsCents) {
-        const hold = await tx.rewardReservation.findUnique({
-          where: { orderId: a.orderId },
-        });
-        if (!hold || hold.state !== "HELD" || hold.amountCents !== s.rewardsCents)
-          throw new Error("Reward hold missing");
-        await tx.rewardEntry.create({
-          data: {
-            customerId: a.customerId,
-            orderId: a.orderId,
-            kind: "REDEMPTION",
-            amountCents: -s.rewardsCents,
-            entryKey: `order:${a.orderId}:use`,
-            sourceId: hold.id,
-            description: "Reward credit applied to purchase",
-          },
-        });
-        await tx.rewardReservation.update({
-          where: { id: hold.id },
-          data: { state: "USED" },
-        });
-      }
-      const externalId =
-        typeof session.payment_intent === "string"
-          ? session.payment_intent
-          : (session.payment_intent?.id ?? session.id);
-      const payment = await tx.payment.create({
-        data: {
-          orderId: a.orderId,
-          provider: "STRIPE",
-          status: "CAPTURED",
-          amountCents: s.totalCents,
-          externalId,
-          idempotencyKey: `checkout:${id}`,
-        },
-      });
-      await tx.paymentEvent.create({
-        data: {
-          paymentId: payment.id,
-          type:
-            evidence.source === "webhook"
-              ? "checkout.session.completed"
-              : "checkout.session.reconciled",
-          externalId: `checkout:${id}:paid`,
-          payload: json(record),
-          verifiedAt: new Date(),
-        },
-      });
-      await tx.$queryRaw`SELECT id FROM "Vehicle" WHERE id = ${a.vehicleId} FOR UPDATE`;
-      let route = await tx.route.findFirst({
-        where: {
-          vehicleId: a.vehicleId,
-          deliveryZoneId: a.zoneId,
-          serviceDate: new Date(a.serviceDate!),
-          status: "SCHEDULED",
-        },
-      });
-      if (!route)
-        route = await tx.route.create({
-          data: {
-            number: `DD-${a.vehicleId}-${a.zoneId}-${a.serviceDate}`,
-            vehicleId: a.vehicleId,
-            deliveryZoneId: a.zoneId,
-            serviceDate: new Date(a.serviceDate!),
-            status: "SCHEDULED",
-          },
-        });
-      const sequence =
-        (
-          await tx.routeStop.aggregate({
-            where: { routeId: route.id },
-            _max: { sequence: true },
-          })
-        )._max.sequence ?? 0;
-      await tx.routeStop.create({
-        data: {
-          routeId: route.id,
-          orderId: a.orderId,
-          addressId: address.id,
-          sequence: sequence + 1,
-        },
-      });
-      await tx.order.update({
-        where: { id: a.orderId },
-        data: { status: "PAID", placedAt: new Date(), addressId: address.id },
-      });
-      const wallet = await rewardBalance(tx, a.customerId);
-      await tx.checkoutAttempt.update({
-        where: { id },
-        data: { state: "PAID", lastError: null },
-      });
-      await settleSubscriptionCycle(tx, id, a.customerId, a.subscriptionCycleId);
-      await tx.auditLog.create({
-        data: {
-          action: "checkout.payment.finalized",
-          entityType: "Order",
-          entityId: a.orderId,
-          afterJson: json({
-            ...record,
-            rewardsUsedCents: s.rewardsCents,
-            remainingRewardsCents: wallet.availableCents,
-            exactCostCents: costs,
-            taxLines,
-            address: s.address,
-            promisedWindow: [s.launchDate, s.firstDeliveryBy],
-          }),
-        },
+      await finalizeReservedCheckout(tx, a, s, taxLines, {
+        provider: "STRIPE",
+        externalId:
+          typeof session.payment_intent === "string"
+            ? session.payment_intent
+            : (session.payment_intent?.id ?? session.id),
+        eventType:
+          evidence.source === "webhook"
+            ? "checkout.session.completed"
+            : "checkout.session.reconciled",
+        record,
       });
     },
     { timeout: 20000, maxWait: 10000 },
@@ -438,6 +280,7 @@ export async function reconcileCheckout(
 }
 export async function cancelCheckout(userId: string, id: string) {
   let a = await ownedCheckout(userId, id);
+  if (a.paymentMethod !== "STRIPE") return cancelManualCheckout(userId, id);
   if (a.state === "QUOTED") {
     const canceled = await prisma.$transaction(async (tx) => {
       await checkoutLock(tx, a.customerId);

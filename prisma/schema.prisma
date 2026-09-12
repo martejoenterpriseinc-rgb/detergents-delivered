@@ -1621,6 +1621,8 @@ model CustomerInvite {
 
 /// Durable checkout state. Provider uncertainty never releases resource holds.
 model CheckoutAttempt {
+  paymentMethod String @default("STRIPE")
+  manualSettlement ManualCheckoutSettlement?
   id String @id @default(cuid())
   paidSubscriptionCycle SubscriptionCycle? @relation("CyclePayment")
   subscriptionCycleId String?
@@ -1951,4 +1953,32 @@ model TipPayoutEntry {
   createdAt DateTime @default(now())
   @@unique([tipId, reference])
   @@index([driverUserId, paidOn])
+}
+
+model ManualCheckoutSettlement {
+  id String @id
+  checkoutId String @unique
+  checkout CheckoutAttempt @relation(fields: [checkoutId], references: [id], onDelete: Restrict)
+  method String
+  reference String
+  amountCents Int
+  currency String @default("USD")
+  receivedAt DateTime
+  actorUserId String
+  reason String
+  approvalId String
+  approvalVersion Int
+  requestHash String
+  accountId String
+  livemode Boolean
+  state String @default("RECEIVED")
+  submittedAt DateTime?
+  claimedAt DateTime?
+  taxTransactionId String? @unique
+  taxEvidence Json?
+  lastError String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([livemode, accountId, method, reference], map: "ManualSettlement_receipt_reference_key")
+  @@index([state, claimedAt])
 }
