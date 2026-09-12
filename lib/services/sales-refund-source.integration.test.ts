@@ -2,6 +2,8 @@ import "@/tests/integration-guard";
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { prisma } from "@/lib/prisma";
+import { readCpaLedger } from "./cpa-ledger";
+import { businessDate } from "@/lib/domain/operations";
 import { reviewSalesRefundSource } from "./sales-refund-source";
 let admin: string,
   cpa: string,
@@ -352,4 +354,41 @@ it("rejects missing historical source and adjustments belonging to another order
   await expect(
     reviewSalesRefundSource(cpa, { orderId, adjustmentId: randomUUID() }),
   ).rejects.toMatchObject({ status: 404 });
+});
+
+it("reports cross-period refund and compensation signs without rewriting sale or audit", async () => {
+  const before = await prisma.auditLog.count({ where: { entityId: orderId } });
+  const data = await readCpaLedger(cpa, {
+    orderId,
+    from: "2026-02-01",
+    to: businessDate(),
+  });
+  expect(data.count).toBe(3);
+  expect(data.totals).toMatchObject({
+    cashCents: 2268,
+    netCents: 2100,
+    taxCents: 168,
+    rewardCents: -600,
+  });
+  expect(data.rows.find((r) => r.kind === "SETTLEMENT")).toMatchObject({
+    cashCents: -756,
+    rewardCents: 200,
+    taxEvidence: "MATCHED",
+  });
+  expect(data.rows.find((r) => r.kind === "COMPENSATION")).toMatchObject({
+    cashCents: 756,
+    rewardCents: -200,
+    taxEvidence: "UNVERIFIED",
+  });
+  expect(data.missingCost).toBe(1);
+  expect(data.merchandiseLessCostCents).toBeNull();
+  const later = await readCpaLedger(
+    admin,
+    { orderId, from: businessDate(), to: businessDate() },
+    true,
+  );
+  expect(later.count).toBe(2);
+  expect(later.totals.cashCents).toBe(0);
+  expect(later.totals.rewardCents).toBe(0);
+  expect(await prisma.auditLog.count({ where: { entityId: orderId } })).toBe(before);
 });
