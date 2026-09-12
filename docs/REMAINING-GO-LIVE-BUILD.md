@@ -54,3 +54,13 @@ cash/Zelle receipt account mappings. Customer receipt validation shares the same
 This supersedes the earlier statement that all manual CPA/QuickBooks export support is
 absent. Manual refunds, exception settlement, tax correction, complete financial reports,
 API authorization and production acceptance remain open. No live activation is implied.
+
+## Provider financial-report and tip-allocation checkpoint
+
+The next increments add matched partial tip/tax allocations with immutable provider-report
+evidence and correct driver payable/recoverable balances, plus a QuickBooks financial-report
+workspace for profit/loss, balances, cash flow, aging, inventory valuation and trial balance.
+Report summary KPIs drill into provider rows; missing authorization never produces invented
+zero balances. Refer to TIP-PAYOUT-ACCOUNTING.md and QUICKBOOKS-FINANCIAL-REPORTS.md for
+remaining report acceptance, scale/export and tax-specific gaps. Actual refund initiation,
+provider corrections and QuickBooks correcting/tip postings remain open before activation.

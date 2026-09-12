@@ -520,3 +520,39 @@ export async function readQuickbooksSalesEntity(
   );
   return salesEntity(kind, result[entity]);
 }
+
+/** Fixed report allowlist, bounded response, read-only provider call. */
+export async function readQuickbooksFinancialReportData(
+  config: QuickbooksConfig,
+  accessToken: string,
+  request: {
+    name: import("@/lib/domain/quickbooks-financial-report").FinancialReportName;
+    from: string;
+    to: string;
+    basis: "Cash" | "Accrual";
+  },
+) {
+  const { financialReportName, reportUsesRange, reportUsesBasis } =
+    await import("@/lib/domain/quickbooks-financial-report");
+  financialReportName.parse(request.name);
+  const dates = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+  dates.parse(request.from);
+  dates.parse(request.to);
+  z.enum(["Cash", "Accrual"]).parse(request.basis);
+  const query = new URLSearchParams({ end_date: request.to });
+  if (reportUsesRange(request.name)) query.set("start_date", request.from);
+  if (reportUsesBasis(request.name)) query.set("accounting_method", request.basis);
+  if (["ProfitAndLoss", "BalanceSheet", "CashFlow"].includes(request.name))
+    query.set("summarize_column_by", "Total");
+  const host =
+    config.mode === "sandbox"
+      ? "https://sandbox-quickbooks.api.intuit.com"
+      : "https://quickbooks.api.intuit.com";
+  return providerRequest(
+    `${host}/v3/company/${config.realm}/reports/${request.name}?${query}`,
+    {
+      method: "GET",
+      headers: { Authorization: "Bearer " + accessToken, Accept: "application/json" },
+    },
+  );
+}
