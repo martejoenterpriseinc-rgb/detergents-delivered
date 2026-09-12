@@ -51,11 +51,13 @@ export function CheckoutReceipt({ initial }: { initial: Receipt }) {
       <h1 className="text-2xl font-semibold">
         {paid
           ? "Order confirmed"
-          : data.state === "EXPIRED"
-            ? "Checkout cancelled or expired"
-            : data.state === "REVIEW"
-              ? "Payment needs staff review"
-              : "Checking payment status"}
+          : data.state === "REFUNDED"
+            ? "Order refunded"
+            : data.state === "EXPIRED"
+              ? "Checkout cancelled or expired"
+              : data.state === "REVIEW"
+                ? "Payment needs staff review"
+                : "Checking payment status"}
       </h1>
       <p
         className={`rounded-xl p-3 ${paid ? "bg-teal-50 text-teal-900" : "bg-amber-50 text-amber-950"}`}
@@ -63,8 +65,18 @@ export function CheckoutReceipt({ initial }: { initial: Receipt }) {
       >
         {paid
           ? `Your order is saved. Payment total: ${formatCents(data.totalCents)}.`
-          : "Only a verified payment confirms an order. Do not pay again while confirmation is pending."}
+          : data.state === "REFUNDED"
+            ? "This order is marked refunded. Its original purchase receipt remains available."
+            : "Only a verified payment confirms an order. Do not pay again while confirmation is pending."}
       </p>
+      {["PAID", "REFUNDED"].includes(data.state) && data.orderId && (
+        <Link
+          className="inline-block font-semibold text-teal-800 underline"
+          href={`/receipts/${data.id}`}
+        >
+          Print or save your original receipt
+        </Link>
+      )}
       {paid && data.rewardsCents > 0 && (
         <p role="status" className="rounded-xl bg-teal-50 p-3">
           {formatCents(data.rewardsCents)} rewards used on this order.{" "}
