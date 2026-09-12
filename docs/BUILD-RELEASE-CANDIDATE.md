@@ -1,6 +1,6 @@
-# Build and release candidate — September 11, 2026
+# Build and release candidate — September 12, 2026
 
-Status: build advances are committed; hosted deployment and Go Live acceptance remain incomplete. Stripe setup is explicitly deferred by the owner until application construction is complete. No provider configuration, transaction, or live activation is asserted by this checkpoint.
+Status: build advances are committed; hosted deployment and Go Live acceptance remain incomplete. All external API setup and connections are explicitly deferred by the owner until application construction is complete. No provider configuration, transaction, or live activation is asserted by this checkpoint.
 
 ## Verified application increments
 
@@ -31,6 +31,8 @@ Status: build advances are committed; hosted deployment and Go Live acceptance r
 | Receipt clearing settings, item tax review and accessibility | 60–62 | 147 | 654 |
 | Immutable sale and refund receipt drafts | 63 | 148 | 658 |
 | Guarded receipt posting and read-only recovery | 64 | 149 | 668 |
+| Private printable original customer receipts | 66 | 152 | 674 |
+| Source-verified CPA financial event ledger | 68 | 156 | 687 |
 
 Counts are cumulative tests for each source revision, not separate tests to add together. Each full CI includes lint, typecheck, schema validation, migration replay, production build, native PostgreSQL and browser checks. Synthetic provider responses prove application behavior and are not real provider acceptance. The latest reviewed mapping and expense-export browser screenshots cover desktop, tablet and mobile.
 
@@ -40,7 +42,11 @@ PR 51 adds scheduled QuickBooks reconciliation and system-audited token refresh 
 
 Prior verified receipt-draft candidate: PR 63, source `8cdf717b501c3ec3a487aa6c2226b58e9590bac5`, tree `a72ee1b0c581e74952f191c96c1d3bee8e236cae`. CI 148, run `34657167058`, job `103451969814`, passed 356 unit, 237 native PostgreSQL and 65 browser tests (658 total), plus the full build gates. Receipt draft screenshots were inspected at desktop, tablet and mobile widths. Initial receipt-settings browser label failures were fixed in PR 62 and the combined work passed CI 147.
 
-PR 64 adds guarded receipt submission and read-only reconciliation at source `80b7fcbbb4c18bd9b06d9b44cb05d5221d27fc39`, tree `8ff83522be21a529be145812bd8b0efd4b28d6bb`. This is the latest fully tested application candidate. CI 149, run `34659259238`, job `103458150155`, passed 360 unit, 243 native PostgreSQL integration and 65 browser checks (668 total), plus lint, typecheck, schema validation, migration replay and production build. All three receipt-recovery screenshots were inspected. Evidence artifact: `10285769887`. It adds no migration. Provider responses in these checks are synthetic; hosted release and real provider acceptance remain pending.
+PR 64 adds guarded receipt submission and read-only reconciliation at source `80b7fcbbb4c18bd9b06d9b44cb05d5221d27fc39`, tree `8ff83522be21a529be145812bd8b0efd4b28d6bb`. This is a prior verified application candidate. CI 149, run `34659259238`, job `103458150155`, passed 360 unit, 243 native PostgreSQL integration and 65 browser checks (668 total), plus lint, typecheck, schema validation, migration replay and production build. All three receipt-recovery screenshots were inspected. Evidence artifact: `10285769887`. It adds no migration. Provider responses in these checks are synthetic; hosted release and real provider acceptance remain pending.
+
+PR 66 adds household-protected original receipt reprints and browser PDF output at source `27b493295bfb7f6e23d31fb3294a1351f43b6b10`, tree `4977d97a8339adc2f42128220736edb3a73d81c9`. CI 152, run `34661435628`, job `103464580648`, passed 360 unit, 246 native PostgreSQL and 68 browser checks (674 total). Screen and print views were inspected at all three widths; the Chromium PDF is one A4 page and retains the test-purchase label. Artifact: `10287139700`. The later CPA increment also corrects the desktop screenshot's restored scroll position. No migration or provider connection is required for receipts.
+
+PR 68 adds the read-only CPA financial event report and private CSV at source `a6ff05f353b4808c5f6d7088fb822211be718c2b`, tree `8cce9faf3d89b2e722f04545647bf00d40cc0513`. This is the latest fully tested application candidate. CI 156, run `34663809041`, job `103471563797`, passed 366 unit, 250 native PostgreSQL and 71 browser checks (687 total), with lint, typecheck, schema validation, migration replay and production build. Evidence artifact: `10288585609`. Final-revision CPA screenshots were inspected at desktop, tablet and mobile widths, along with the corrected desktop receipt capture. The report verifies original sale/refund/reward/tax/FIFO source records, keeps missing evidence unknown, separates sellable/damaged return costs from refunds, and bounds complete exports at 250 events. See `CPA-FINANCIAL-LEDGER.md`. Initial build typed-link and browser warning-locator failures were corrected before this successful run. It adds no migration or provider acceptance.
 
 ## Migration review
 
@@ -67,6 +73,8 @@ The last recorded hosted revision is `a2495c4afa459a9c258804841fa37b038ecdd828`.
 The existing two-migration refund-foundation deployment gate remains unchanged. Do not run it as authority for this larger release. Before deployment, retain a current recoverable backup and encryption keys, quiesce web writes/workers, record the exact candidate source and migration checksums, capture the retained-record checkpoint, apply the reviewed migrations, and verify the original records before restoring traffic. The fingerprint checkpoint is comparison evidence, not a database backup. Keep Render auto-deploy off and deploy only an exact accepted revision; the service's configured main branch is older.
 
 ## Remaining build and acceptance scope
+
+The current complete gap list is [REMAINING-GO-LIVE-BUILD.md](REMAINING-GO-LIVE-BUILD.md), including post-delivery tips, approved cash/Zelle exceptions, measured route mileage and final workflow review. Do not describe external API connections as the only unfinished work.
 
 - QuickBooks cost journal posting and recovery are implemented and verified with isolated provider fixtures. Sales/refund receipt submission and recovery passed full CI in PR 64. Compensation accounting remains incomplete; the expense and cost workflows must not be described as all accounting posting complete.
 - Refund settlement tax evidence supports exact completed provider report matching. Compensation tax evidence remains unverified until an appropriate provider evidence path is implemented and accepted.
