@@ -340,3 +340,70 @@ export async function verifyRefundBalanceEvidence(
   )
     throw fail();
 }
+
+/** Internal single-claim adapter for dedicated tip payments. Recovery never calls this POST path. */
+export async function submitClaimedStripeTipRefund(
+  raw: z.infer<typeof submission>,
+): Promise<RefundObservation> {
+  const input = submission.parse(raw);
+  const age = Date.now() - new Date(input.submittedAt).getTime();
+  if (age < 0 || age > 600000) throw fail();
+  const observation = await inspectStripeTipRefunds(input.binding);
+  const matches = observation.refunds.filter((r) => r.requestId === input.requestId);
+  const valid = (r: RefundObservation) => {
+    if (
+      r.requestId !== input.requestId ||
+      r.requestHash !== input.requestHash ||
+      r.project !== "detergents-delivered" ||
+      r.amountCents !== input.amountCents ||
+      r.currency !== input.binding.currency
+    )
+      throw fail();
+    return r;
+  };
+  if (matches.length > 1) throw fail();
+  if (matches.length === 1) return valid(matches[0]);
+  for (const r of observation.refunds) {
+    if (["failed", "canceled"].includes(r.status) && r.failureBalanceTransactionId)
+      await verifyRefundBalanceEvidence(input.binding, r, true);
+  }
+  const reserved = observation.refunds
+    .filter(
+      (r) =>
+        !["failed", "canceled"].includes(r.status) ||
+        (r.balanceTransactionId && !r.failureBalanceTransactionId),
+    )
+    .reduce((sum, r) => sum + r.amountCents, 0);
+  if (
+    observation.disputed ||
+    observation.refunds.some((r) => ["pending", "requires_action"].includes(r.status)) ||
+    input.amountCents + reserved > observation.capturedCents
+  )
+    throw fail();
+  const config = await readCommerce(true);
+  if (config.accountId !== input.binding.accountId || config.live !== input.binding.live)
+    throw fail();
+  const stripe = await stripeClient(config);
+  return valid(
+    refundObservation(
+      await stripe.refunds.create(
+        {
+          payment_intent: input.binding.paymentIntentId,
+          amount: input.amountCents,
+          metadata: {
+            project: "detergents-delivered",
+            tipId: input.binding.checkoutId,
+            refundRequestId: input.requestId,
+            requestHash: input.requestHash,
+          },
+        },
+        {
+          ...requestOptions,
+          idempotencyKey: `dd:tip-refund:${input.requestId}:${input.requestHash}:v1`,
+        },
+      ),
+      input.binding,
+      observation.chargeId,
+    ),
+  );
+}

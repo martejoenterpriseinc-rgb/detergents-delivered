@@ -1,3 +1,4 @@
+import { recoverTipRefunds } from "@/lib/services/tip-refunds";
 import { runDeliveryTexts } from "@/lib/services/sms-delivery";
 import { recoverDeliveryTips } from "@/lib/services/delivery-tips";
 import { smsConfig } from "@/lib/integrations/twilio-client";
@@ -82,6 +83,10 @@ export async function paymentRecoveryWork(
       attention++;
     }
   }
+  const tipRefunds = await recoverTipRefunds(ownsLease);
+  checked += tipRefunds.checked;
+  completed += tipRefunds.completed;
+  attention += tipRefunds.attention;
   const tips = await recoverDeliveryTips(ownsLease);
   checked += tips.checked;
   completed += tips.completed;

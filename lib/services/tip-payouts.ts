@@ -1,3 +1,4 @@
+import { tipRefundRequestHold } from "./tip-refunds";
 import { createHash } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { AccountError } from "@/lib/domain/account";
@@ -20,19 +21,38 @@ export async function readTipAccounting(actor: string, tipId: string) {
     where: { tipId },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
   });
+  const refundRequests = await prisma.tipRefundRequest.findMany({
+    where: { tipId },
+    orderBy: { createdAt: "desc" },
+    take: 101,
+  });
+  const refundHold = tipRefundRequestHold(refundRequests, observation.refunds);
+  const accounting = tipAccounting(
+    tip.amountCents,
+    tip.totalCents!,
+    observation.refunds,
+    entries,
+    await tipRefundTaxAllocations(prisma, tip),
+  );
   return {
     tipId,
     driver,
     amountCents: tip.amountCents,
+    refundSubmissionEnabled:
+      process.env.DD_TIP_REFUNDS_ENABLED === "true" &&
+      (!tip.livemode || process.env.DD_LIVE_TIP_REFUNDS_ACCEPTED === "true"),
     checkedAt: new Date().toISOString(),
     disputed: observation.disputed,
-    ...tipAccounting(
-      tip.amountCents,
-      tip.totalCents!,
-      observation.refunds,
-      entries,
-      await tipRefundTaxAllocations(prisma, tip),
-    ),
+    ...accounting,
+    review: accounting.review || refundHold,
+    payableCents: refundHold ? 0 : accounting.payableCents,
+    refundRequests: refundRequests.map((r) => ({
+      id: r.id,
+      state: r.state,
+      amountCents: r.amountCents,
+      providerRefundId: r.providerRefundId,
+      lastError: r.lastError,
+    })),
     entries,
     refunds: observation.refunds.map((r) => ({
       id: r.id,
@@ -103,6 +123,10 @@ export async function recordTipPayout(actor: string, raw: unknown) {
           409,
         );
     } else if (
+      tipRefundRequestHold(
+        await tx.tipRefundRequest.findMany({ where: { tipId: data.tipId }, take: 101 }),
+        observation.refunds,
+      ) ||
       observation.disputed ||
       accounting.review ||
       data.amountCents > accounting.payableCents

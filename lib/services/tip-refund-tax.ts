@@ -146,6 +146,7 @@ export async function matchTipRefundTax(actor: string, raw: unknown) {
       return { matched: true, id: evidenceId(input.tipId, refund.id) };
     }
     if (
+      existing.length >= 100 ||
       existing.some(
         (e) =>
           e.refundTaxTransactionId === evidence.refundTaxTransactionId ||

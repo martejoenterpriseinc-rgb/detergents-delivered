@@ -64,3 +64,12 @@ Report summary KPIs drill into provider rows; missing authorization never produc
 zero balances. Refer to TIP-PAYOUT-ACCOUNTING.md and QUICKBOOKS-FINANCIAL-REPORTS.md for
 remaining report acceptance, scale/export and tax-specific gaps. Actual refund initiation,
 provider corrections and QuickBooks correcting/tip postings remain open before activation.
+
+## Tip refund request checkpoint
+
+Tip refund initiation now has a durable claim ledger, gated one-time provider submission,
+GET-only reconciliation, staff recovery controls and payment-worker recovery. This supersedes
+the broad earlier statement that tip refund initiation is wholly absent. Manual cash/Zelle
+refund workflows, provider tax compensation, actual QuickBooks correcting/tip postings,
+remaining report gaps and provider/production acceptance are still required. New tip-refund
+activation flags remain off; the new migration has not been applied to hosted databases.

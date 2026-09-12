@@ -9,7 +9,9 @@ const mocked = vi.hoisted(() => ({
   updateMany: vi.fn(),
   count: vi.fn(),
   tips: vi.fn(),
+  tipRefunds: vi.fn(),
 }));
+vi.mock("@/lib/services/tip-refunds", () => ({ recoverTipRefunds: mocked.tipRefunds }));
 vi.mock("@/lib/services/delivery-tips", () => ({ recoverDeliveryTips: mocked.tips }));
 vi.mock("@/lib/prisma", () => ({
   prisma: {
@@ -34,6 +36,7 @@ beforeEach(() => {
   vi.unstubAllEnvs();
   mocked.updateMany.mockResolvedValue({ count: 1 });
   mocked.tips.mockResolvedValue({ checked: 0, completed: 0, attention: 0 });
+  mocked.tipRefunds.mockResolvedValue({ checked: 0, completed: 0, attention: 0 });
 });
 it("keeps uncertain payments protected and does not count review states as successful processing", async () => {
   mocked.commerce.mockResolvedValue({});
