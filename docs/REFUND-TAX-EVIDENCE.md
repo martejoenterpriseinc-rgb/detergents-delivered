@@ -25,6 +25,12 @@ Before adding compensation evidence, exercise the intended Checkout integration 
 
 The current implementation retains the signed application compensation and flags any already-posted QuickBooks refund for correction review. It does not create another sale, void a provider receipt, or manually reverse Checkout tax based on this research.
 
+## Immediate accounting correction warnings
+
+Verified refund compensation now flags its active QuickBooks refund export in the same database transaction as the cash/tax/reward correction. The warning and its audit must succeed or the entire local compensation rolls back. A repeated verified reconciliation can backfill a missing warning without duplicating the audit. Original receipt source, payload, external ID and confirmation remain unchanged; the original sale receipt is not flagged by this action.
+
+Submission/recovery read failures retain `REFUND_COMPENSATION_REVIEW` instead of replacing it with a generic unconfirmed-evidence message. Native regression coverage includes immediate marking, duplicate replay, audit-failure rollback and a later provider read outage. These changes preserve the correction obligation; they do not assert that Stripe Tax or QuickBooks has accepted an external correcting transaction. Provider correction matching/posting remains pending the deferred account setup and supported Checkout evidence.
+
 Primary references:
 - [Custom Tax API: undo a partial refund](https://docs.stripe.com/tax/payment-intent/custom#undo-a-partial-refund)
 - [Tax reversal API](https://docs.stripe.com/api/tax/transactions/create_reversal)

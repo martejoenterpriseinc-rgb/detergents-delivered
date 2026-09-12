@@ -913,6 +913,56 @@ describe("durable refund submission claim (isolated PostgreSQL, no provider writ
     const year = new Date().getUTCFullYear();
     const taxFilter = { from: `${year}-01-01`, to: `${year}-12-31` };
     const taxBefore = await readTaxReview(cpa, taxFilter);
+    const settlement = await prisma.refundAdjustment.findUniqueOrThrow({
+      where: { requestId_kind: { requestId: f.draft.id, kind: "SETTLEMENT" } },
+    });
+    const saleReceiptId = "synthetic-qbo-sale-" + randomUUID(),
+      refundReceiptId = "synthetic-qbo-refund-" + randomUUID();
+    const baseReceipt = {
+      orderId: f.sale.id,
+      mode: "sandbox",
+      realm: "synthetic-refund-correction-" + randomUUID(),
+      status: "POSTED",
+      requestHash: randomUUID(),
+      source: { sale: { orderId: f.sale.id } },
+      mapping: {},
+      submittedAt: new Date(),
+      confirmedAt: new Date(),
+    };
+    const saleDoc = "DS" + randomUUID().replaceAll("-", "").slice(0, 19),
+      refundDoc = "DR" + randomUUID().replaceAll("-", "").slice(0, 19);
+    await prisma.qboReceiptExport.create({
+      data: {
+        ...baseReceipt,
+        id: saleReceiptId,
+        sourceKey: "sale:" + f.sale.id,
+        entity: "SalesReceipt",
+        docNumber: saleDoc,
+        externalId: "synthetic-sale",
+        payload: {
+          entity: "SalesReceipt",
+          sourceId: f.sale.id,
+          payload: { DocNumber: saleDoc },
+        },
+      },
+    });
+    const receiptBefore = await prisma.qboReceiptExport.create({
+      data: {
+        ...baseReceipt,
+        id: refundReceiptId,
+        adjustmentId: settlement.id,
+        parentSaleId: saleReceiptId,
+        sourceKey: "refund:" + settlement.id,
+        entity: "RefundReceipt",
+        docNumber: refundDoc,
+        externalId: "synthetic-refund",
+        payload: {
+          entity: "RefundReceipt",
+          sourceId: settlement.id,
+          payload: { DocNumber: refundDoc },
+        },
+      },
+    });
     expect(taxBefore.rows.filter((r) => r.orderId === f.sale.id)).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ kind: "SALE", taxCents: 168 }),
@@ -937,6 +987,38 @@ describe("durable refund submission claim (isolated PostgreSQL, no provider writ
       ],
     });
     refundReviewMocks.verifyBalance.mockResolvedValue(undefined);
+    await prisma.$executeRawUnsafe(
+      `CREATE FUNCTION dd_refund_qbo_audit_test_fail() RETURNS trigger AS $$ BEGIN IF NEW.action = 'quickbooks.refund-correction.required' THEN RAISE EXCEPTION 'synthetic refund accounting audit failure'; END IF; RETURN NEW; END; $$ LANGUAGE plpgsql`,
+    );
+    await prisma.$executeRawUnsafe(
+      `CREATE TRIGGER dd_refund_qbo_audit_test_fail BEFORE INSERT ON "AuditLog" FOR EACH ROW EXECUTE FUNCTION dd_refund_qbo_audit_test_fail()`,
+    );
+    try {
+      await expect(reconcileRefundSettlement(admin, f.input)).rejects.toThrow(
+        /synthetic refund accounting audit failure/,
+      );
+      expect(
+        (await prisma.refundRequest.findUniqueOrThrow({ where: { id: f.draft.id } }))
+          .status,
+      ).toBe("SUCCEEDED");
+      expect(
+        await prisma.refundAdjustment.count({
+          where: { requestId: f.draft.id, kind: "COMPENSATION" },
+        }),
+      ).toBe(0);
+      expect(
+        (
+          await prisma.qboReceiptExport.findUniqueOrThrow({
+            where: { id: refundReceiptId },
+          })
+        ).reconciliationIssue,
+      ).toBeNull();
+    } finally {
+      await prisma.$executeRawUnsafe(
+        'DROP TRIGGER dd_refund_qbo_audit_test_fail ON "AuditLog"',
+      );
+      await prisma.$executeRawUnsafe("DROP FUNCTION dd_refund_qbo_audit_test_fail()");
+    }
     await reconcileRefundSettlement(admin, f.input);
     await reconcileRefundSettlement(admin, f.input);
     expect(refundReviewMocks.verifyBalance).toHaveBeenCalledWith(
@@ -972,6 +1054,29 @@ describe("durable refund submission claim (isolated PostgreSQL, no provider writ
     );
     expect(taxAfter.refundTaxCents).toBe(taxBefore.refundTaxCents - 56);
     expect(taxAfter.unverifiedAdjustments).toBe(taxBefore.unverifiedAdjustments + 1);
+    const receiptAfter = await prisma.qboReceiptExport.findUniqueOrThrow({
+      where: { id: refundReceiptId },
+    });
+    expect(receiptAfter).toMatchObject({
+      status: "POSTED",
+      reconciliationIssue: "REFUND_COMPENSATION_REVIEW",
+      externalId: receiptBefore.externalId,
+      source: receiptBefore.source,
+      payload: receiptBefore.payload,
+      confirmedAt: receiptBefore.confirmedAt,
+    });
+    expect(
+      await prisma.auditLog.count({
+        where: {
+          entityId: refundReceiptId,
+          action: "quickbooks.refund-correction.required",
+        },
+      }),
+    ).toBe(1);
+    expect(
+      (await prisma.qboReceiptExport.findUniqueOrThrow({ where: { id: saleReceiptId } }))
+        .reconciliationIssue,
+    ).toBeNull();
     expect(JSON.stringify(viewed)).not.toContain("txn_returned");
     // Released quantity can be prepared again without consuming historical failed cash.
     expect((await f.prepare()).amountCents).toBe(756);
