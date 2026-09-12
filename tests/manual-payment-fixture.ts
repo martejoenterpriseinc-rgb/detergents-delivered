@@ -11,7 +11,7 @@ export async function manualPaymentFixture(db: PrismaClient, passwordHash?: stri
     users.push(
       await db.user.create({
         data: {
-          email: `manual-${code}-${randomUUID()}@example.test`,
+          email: `manual-${code.toLowerCase()}-${randomUUID()}@example.test`,
           emailVerified: new Date(),
           passwordHash,
           userRoles: { create: { roleId: role.id } },
