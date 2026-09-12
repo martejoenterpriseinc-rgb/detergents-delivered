@@ -103,6 +103,14 @@ export function AccountOrders({
             <p className="text-sm text-teal-800">
               {order.items.map((i) => `${i.nameSnapshot} × ${i.quantity}`).join(" · ")}
             </p>
+            {order.status === "DELIVERED" && (
+              <Link
+                className="inline-flex min-h-11 items-center underline"
+                href={{ pathname: `/account/orders/${order.id}/tip` }}
+              >
+                Optional delivery tip
+              </Link>
+            )}
             <Link
               className="inline-flex min-h-11 items-center rounded-full border border-teal-200 px-4 text-sm font-semibold text-teal-900 hover:bg-teal-50"
               href={`/account/support/new?orderId=${encodeURIComponent(order.id)}`}

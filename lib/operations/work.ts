@@ -1,4 +1,5 @@
 import { runDeliveryTexts } from "@/lib/services/sms-delivery";
+import { recoverDeliveryTips } from "@/lib/services/delivery-tips";
 import { smsConfig } from "@/lib/integrations/twilio-client";
 import { reconcileScheduledQuickbooksCostJournals } from "@/lib/services/quickbooks-cost-journals";
 import { reconcileScheduledQuickbooksReceipts } from "@/lib/services/quickbooks-receipt-posting";
@@ -78,6 +79,10 @@ export async function paymentRecoveryWork(
       attention++;
     }
   }
+  const tips = await recoverDeliveryTips(ownsLease);
+  checked += tips.checked;
+  completed += tips.completed;
+  attention += tips.attention;
   return {
     state: attention ? "ATTENTION" : "HEALTHY",
     checked,

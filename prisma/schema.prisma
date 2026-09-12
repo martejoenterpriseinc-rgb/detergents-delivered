@@ -677,6 +677,7 @@ enum PaymentProvider {
 }
 
 model Order {
+  tips DeliveryTip[]
   receiptExports QboReceiptExport[]
   costExports QboCostExport[]
   smsDeliveries SmsDelivery[]
@@ -1076,6 +1077,7 @@ enum DeliveryAttemptResult {
 }
 
 model DeliveryAttempt {
+  tips DeliveryTip[]
   id          String                 @id @default(cuid())
   orderId     String
   order       Order                  @relation(fields: [orderId], references: [id])
@@ -1894,4 +1896,37 @@ model QboReceiptExport {
   @@unique([mode, realm, entity, externalId])
   @@index([sourceKey, status])
   @@index([mode, realm, status, recoveryCheckedAt])
+}
+
+/// Optional post-delivery payment, wholly separate from the original sale.
+model DeliveryTip {
+  id String @id @default(cuid())
+  orderId String
+  order Order @relation(fields:[orderId], references:[id], onDelete:Restrict)
+  deliveryAttemptId String
+  deliveryAttempt DeliveryAttempt @relation(fields:[deliveryAttemptId],references:[id],onDelete:Restrict)
+  requestKey String
+  requestHash String
+  choice String
+  percent Int?
+  baseCents Int
+  amountCents Int
+  taxCents Int?
+  totalCents Int?
+  currency String @default("USD")
+  state String
+  source Json
+  stripeAccountId String
+  livemode Boolean
+  taxCode String?
+  stripeSessionId String? @unique
+  stripeCustomerId String?
+  paymentIntentId String? @unique
+  expiresAt DateTime
+  paidAt DateTime?
+  recoveryCheckedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([orderId, requestKey])
+  @@index([state,recoveryCheckedAt])
 }
