@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PaymentOverviewLive } from "@/components/admin/payment-overview-live";
 import {
   quickbooksCategories,
   quickbooksOverview,
@@ -22,6 +23,7 @@ export default async function Page({
           Detergents Delivered accounting activity for company{" "}
           {overview.realm ?? "not configured"} ({overview.mode ?? "unavailable"}).
         </p>
+        <PaymentOverviewLive provider="quickbooks" />
         <nav aria-label="QuickBooks reporting period" className="flex flex-wrap gap-3">
           {(["day", "week", "month", "year"] as const).map((period) => (
             <Link
