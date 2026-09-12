@@ -13,6 +13,7 @@ import {
   verifyQuickbooksCompany,
   readQuickbooksAccounts,
   readQuickbooksAccount,
+  readQuickbooksFinancialReportData,
 } from "./quickbooks-client";
 const config = {
   mode: "sandbox" as const,
@@ -311,4 +312,44 @@ it("bounds sales-entity reads and exposes only the fields needed for record mapp
     readQuickbooksSalesEntity(config, "synthetic-access", "item", "2/other"),
   ).rejects.toThrow();
   expect(call).toHaveBeenCalledTimes(2);
+});
+
+it("reads only allowlisted company financial reports with explicit range/basis and bounded responses", async () => {
+  const call = vi.fn().mockResolvedValue(Response.json({ Header: {} }));
+  vi.stubGlobal("fetch", call);
+  await readQuickbooksFinancialReportData(config, "synthetic-access", {
+    name: "ProfitAndLoss",
+    from: "2026-09-01",
+    to: "2026-09-12",
+    basis: "Accrual",
+  });
+  const [raw, init] = call.mock.calls[0];
+  const url = new URL(raw);
+  expect(url.origin).toBe("https://sandbox-quickbooks.api.intuit.com");
+  expect(url.pathname).toBe("/v3/company/123/reports/ProfitAndLoss");
+  expect(Object.fromEntries(url.searchParams)).toEqual({
+    start_date: "2026-09-01",
+    end_date: "2026-09-12",
+    accounting_method: "Accrual",
+    summarize_column_by: "Total",
+  });
+  expect(init).toMatchObject({ method: "GET", redirect: "error", cache: "no-store" });
+  call.mockResolvedValueOnce(Response.json({ Header: {} }));
+  await readQuickbooksFinancialReportData(
+    { ...config, mode: "live" },
+    "synthetic-access",
+    { name: "BalanceSheet", from: "2026-09-01", to: "2026-09-12", basis: "Cash" },
+  );
+  const balance = new URL(call.mock.calls[1][0]);
+  expect(balance.origin).toBe("https://quickbooks.api.intuit.com");
+  expect(balance.searchParams.has("start_date")).toBe(false);
+  call.mockResolvedValueOnce(new Response("x".repeat(128001)));
+  await expect(
+    readQuickbooksFinancialReportData(config, "synthetic-access", {
+      name: "TrialBalance",
+      from: "2026-09-01",
+      to: "2026-09-12",
+      basis: "Accrual",
+    }),
+  ).rejects.toMatchObject({ status: 503 });
 });

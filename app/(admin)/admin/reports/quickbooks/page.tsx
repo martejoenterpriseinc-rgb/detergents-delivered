@@ -24,6 +24,12 @@ export default async function Page({
           {overview.realm ?? "not configured"} ({overview.mode ?? "unavailable"}).
         </p>
         <PaymentOverviewLive provider="quickbooks" />
+        <Link
+          className="ops-button"
+          href={`/admin/reports/quickbooks/financial?period=${overview.period.period}`}
+        >
+          Financial reports and live KPIs
+        </Link>
         <nav aria-label="QuickBooks reporting period" className="flex flex-wrap gap-3">
           {(["day", "week", "month", "year"] as const).map((period) => (
             <Link
@@ -58,8 +64,8 @@ export default async function Page({
         </div>
         <p className="text-sm">
           Snapshot: {overview.checkedAt}. These are application export records. Company
-          revenue, profit, cash flow, receivables and payables require QuickBooks
-          financial report integration.
+          revenue, profit, cash flow, receivables and payables are available in Financial
+          reports after QuickBooks authorization.
         </p>
       </section>
       <div id="accounting-workflows">
