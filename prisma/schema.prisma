@@ -1900,6 +1900,7 @@ model QboReceiptExport {
 
 /// Optional post-delivery payment, wholly separate from the original sale.
 model DeliveryTip {
+  payoutEntries TipPayoutEntry[]
   id String @id @default(cuid())
   orderId String
   order Order @relation(fields:[orderId], references:[id], onDelete:Restrict)
@@ -1929,4 +1930,25 @@ model DeliveryTip {
   updatedAt DateTime @updatedAt
   @@unique([orderId, requestKey])
   @@index([state,recoveryCheckedAt])
+}
+
+/// Immutable records of driver transfers; no entry initiates a bank transfer.
+model TipPayoutEntry {
+  id String @id
+  tipId String
+  tip DeliveryTip @relation(fields: [tipId], references: [id], onDelete: Restrict)
+  driverUserId String
+  kind String
+  amountCents Int
+  reference String
+  paidOn String
+  reason String
+  requestHash String
+  reversalOfId String? @unique
+  reversalOf TipPayoutEntry? @relation("TipPayoutReversal", fields: [reversalOfId], references: [id], onDelete: Restrict)
+  reversal TipPayoutEntry? @relation("TipPayoutReversal")
+  actorUserId String
+  createdAt DateTime @default(now())
+  @@unique([tipId, reference])
+  @@index([driverUserId, paidOn])
 }

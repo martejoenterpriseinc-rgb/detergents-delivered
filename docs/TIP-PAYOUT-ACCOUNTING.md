@@ -1,0 +1,13 @@
+# Tip refund and driver-transfer accounting
+
+Reports → Delivery tips → Refund and payout accounting inspects the original dedicated Stripe tip payment and its complete bounded refund history. Merchandise payment metadata cannot stand in for tip evidence. The existing verified receipt audit, original tip source and pinned driver are required. Intended account, environment, captured amount and currency are checked before displaying payable amounts or accepting a new transfer record.
+
+Driver entitlement excludes collected tax. Successful full refunds remove the full tip entitlement; if that tip was already paid out, the amount becomes recoverable from the driver. Pending refunds, disputes, missing debit evidence and partial refunds without a verified tip/tax split block additional payments. Failed refund debits require matching provider failure-balance evidence before restoring payable capacity. Cash refund observations do not establish accepted provider tax corrections.
+
+Admins record an already completed transfer with amount, date, unique per-tip receipt reference, reason and explicit receipt confirmation. This does not initiate bank transfers. CPA access is read-only. Separate exact-amount reversal entries document funds returned or a failed transfer; the original record is preserved. Reversals do not silently issue another driver payment. The service checks source, access and payout capacity under a tip row lock; duplicate requests reuse one result, changed request payloads conflict and audit failure rolls back the transfer entry. Original orders, rewards, tax, stock and tip receipts are unchanged.
+
+The additive `20260917010000_tip_payout_accounting` migration adds only `TipPayoutEntry` with foreign keys, positive amount constraints, reversal constraints and duplicate-reference protections. It is not applied to hosted databases in this increment. All earlier migration SQL remains unchanged.
+
+Validation added: domain tests for tax exclusion, refunds after payout, pending/partial refund holds, returned balances, exact reversal and duplicate evidence; provider tests isolate dedicated tip metadata; native tests cover authorization, duplicate concurrency, excess/reused requests, retained originals, refunds after payout, reversals and audit rollback. Native/production acceptance must be recorded from their actual runs.
+
+Remaining tip work: initiation and recovery of app-requested refunds, partial tip/tax allocation backed by provider evidence, QuickBooks liability/refund/payout posting, scheduled tip refund monitoring, native/browser acceptance and real provider acceptance. No API credentials were connected and no real transfer or refund was initiated.
