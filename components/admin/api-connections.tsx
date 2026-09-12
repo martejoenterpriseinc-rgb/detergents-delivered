@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import {
   ArrowUpRight,
@@ -606,7 +607,7 @@ export function ApiConnections({ initial }: { initial: ApiEditorData }) {
             <span>
               Uses the Stripe credentials above. Tax setup requires verification.
             </span>
-            <a href="/admin/payments">Open payments ↗</a>
+            <Link href="/admin/payments">Open payments ↗</Link>
           </p>
         </div>
       </details>

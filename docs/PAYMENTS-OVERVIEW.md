@@ -1,0 +1,13 @@
+# Payments overview
+
+The Payments workspace follows the supplied Stripe overview reference while retaining DetergentsDelivered navigation and styling. It replaces the misplaced address-review action with an environment-aware Stripe dashboard link and an Integrations action. Large Day/Week/Month/Year controls select Chicago calendar periods (week starts Monday). Every KPI opens its own detail route, preserving the selected period; details paginate 50 records at a time.
+
+Succeeded/gross use original recorded Stripe captures, including captures later refunded. Authorized payments are uncaptured. Failed payments use saved FAILED records. Processing includes PREPARING/OPEN/PROCESSING checkout attempts, including attempts without an order. Needs review retains checkout reconciliation actions. Signed refund settlement/compensation entries are summed by their own entry dates. This is a recorded-order view; separate tips remain in their existing report. It is not a Stripe account-wide payment statement. Metrics aggregate the whole selected range, not just displayed rows. Queries scope the deployment mode and configured account when present.
+
+Balances are retrieved from Stripe and explicitly labeled as current account-wide USD balances. Net volume after fees and Radar-blocked evidence are unavailable until their provider reporting is implemented; neither a zero nor another payment state is substituted. No invented history, fee deductions or tax totals are displayed.
+
+The private admin-only connection endpoint makes bounded read-only Account and Balance requests with the existing managed key. Green requires matching account identity and balance livemode, with configuration unchanged at completion. Missing/wrong-mode keys, access denial, mismatch, timeout or transport errors show red with text and no secret/provider-error exposure. The page checks on entry, every minute while visible, and on explicit refresh. Displayed payment records refresh with the check. API connectivity is separate from checkout activation, webhook readiness, tax acceptance and Go Live. No credentials are created or connected by this build.
+
+Review/tests cover calendar/DST boundaries, missing/wrong-mode credentials, provider outage, changed configuration, account-scoped totals, recoverable orderless checkouts and read-only behavior. Browser acceptance covers category destinations, larger date controls, Stripe links, missing connection/failure and all three widths. No migration or financial write is introduced.
+
+Primary provider reference: https://docs.stripe.com/api/balance/balance_retrieve and https://docs.stripe.com/api/balance/balance_object. The Stripe CLI was unavailable; official documentation was checked through web search.
