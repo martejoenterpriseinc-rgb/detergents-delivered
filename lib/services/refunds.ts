@@ -1394,6 +1394,7 @@ export async function reconcileScheduledRefunds(ownsLease: () => Promise<boolean
   const requests = await prisma.refundRequest.findMany({
     where: {
       submittedAt: { not: null },
+      payment: { provider: "STRIPE" },
       amountCents: { gt: 0 },
       providerAccountId: commerce.accountId,
       livemode: commerce.live,

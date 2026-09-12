@@ -1,3 +1,4 @@
+import { verifiedManualRefundReceipt } from "./manual-refund-evidence";
 import { verifiedManualSaleEvidence } from "./manual-sale-evidence";
 import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
@@ -303,7 +304,19 @@ export async function recordedRefundSource(
       };
     })
     .sort((a, b) => a.orderItemId.localeCompare(b.orderItemId));
+  const manualReceipt = sale.manualSettlementId
+    ? await verifiedManualRefundReceipt(tx, request.id)
+    : null;
   if (
+    manualReceipt &&
+    (kind !== "SETTLEMENT" ||
+      a.providerRefundId ||
+      a.balanceTransactionId ||
+      a.failureBalanceTransactionId)
+  )
+    throw new AccountError("Manual refund accounting evidence requires review.", 409);
+  if (
+    !manualReceipt &&
     kind !== "REWARD_ONLY" &&
     (!a.providerRefundId ||
       a.providerRefundId !== request.providerRefundId ||
@@ -372,7 +385,13 @@ export async function recordedRefundSource(
     requestId: request.id,
     customerId: sale.customerId,
     number: sale.number,
-    date: businessDate(a.createdAt),
+    date: businessDate(manualReceipt ? new Date(manualReceipt.returnedAt) : a.createdAt),
+    ...(manualReceipt
+      ? {
+          paymentMethod: manualReceipt.method,
+          manualRefundReference: manualReceipt.reference,
+        }
+      : {}),
     currency: "USD" as const,
     cashCents: a.cashCents,
     netCents: a.netCents,
