@@ -107,7 +107,7 @@ export async function currentReceiptMapping(
   mode: string,
   realm: string,
 ) {
-  const settingsKey = receiptSettingsKey(mode, realm),
+  const settingsKey = receiptSettingsKey(mode, realm, sale.paymentMethod ?? "STRIPE"),
     customerKey = salesMappingKey(mode, realm, "customer", sale.customerId);
   const keys = sale.lines.map((l) => salesMappingKey(mode, realm, "item", l.variantId));
   const rows = await tx.setting.findMany({

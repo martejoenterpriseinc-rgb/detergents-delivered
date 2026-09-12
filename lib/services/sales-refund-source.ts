@@ -1,3 +1,4 @@
+import { verifiedManualSaleEvidence } from "./manual-sale-evidence";
 import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
@@ -66,7 +67,7 @@ export async function recordedSaleSource(tx: Prisma.TransactionClient, orderId: 
     !checkout ||
     checkout.state !== "PAID" ||
     checkout.livemode !== (mode === "live") ||
-    !checkout.stripeSessionId ||
+    (checkout.paymentMethod === "STRIPE" && !checkout.stripeSessionId) ||
     !parsed.success
   )
     throw fail();
@@ -94,9 +95,14 @@ export async function recordedSaleSource(tx: Prisma.TransactionClient, orderId: 
     s.lines.reduce((n, l) => n + l.netCents, 0) !== s.totalCents - s.taxCents
   )
     throw fail();
+  const manual =
+    checkout.paymentMethod !== "STRIPE"
+      ? await verifiedManualSaleEvidence(tx, checkout, s.totalCents, s.taxCents)
+      : null;
   const payments = order.payments.filter(
     (p) =>
-      p.provider === "STRIPE" &&
+      p.provider === (manual ? "MANUAL" : "STRIPE") &&
+      (!manual || p.id === manual.paymentId) &&
       ["CAPTURED", "PARTIALLY_REFUNDED", "REFUNDED"].includes(p.status) &&
       p.currency === "USD" &&
       p.amountCents === s.totalCents &&
@@ -104,7 +110,11 @@ export async function recordedSaleSource(tx: Prisma.TransactionClient, orderId: 
         (e) =>
           e.verifiedAt &&
           e.externalId === `checkout:${checkout.id}:paid` &&
-          ["checkout.session.completed", "checkout.session.reconciled"].includes(e.type),
+          [
+            "checkout.session.completed",
+            "checkout.session.reconciled",
+            ...(manual ? ["manual.payment.settled"] : []),
+          ].includes(e.type),
       ),
   );
   if (payments.length !== 1 || !payments[0].externalId) throw fail();
@@ -139,7 +149,9 @@ export async function recordedSaleSource(tx: Prisma.TransactionClient, orderId: 
   });
   const proof = z
     .object({
-      sessionId: z.string(),
+      sessionId: z.string().optional(),
+      manualSettlementId: z.string().optional(),
+      taxTransactionId: z.string().optional(),
       amount: cents,
       currency: z.literal("usd"),
       livemode: z.boolean(),
@@ -155,7 +167,11 @@ export async function recordedSaleSource(tx: Prisma.TransactionClient, orderId: 
   if (
     audits.length !== 1 ||
     !proof.success ||
-    proof.data.sessionId !== checkout.stripeSessionId ||
+    (manual
+      ? proof.data.manualSettlementId !== manual.manualSettlementId ||
+        proof.data.taxTransactionId !== manual.taxTransactionId ||
+        canonicalJson(proof.data.taxLines) !== canonicalJson(manual.taxLines)
+      : proof.data.sessionId !== checkout.stripeSessionId) ||
     proof.data.amount !== s.totalCents ||
     proof.data.livemode !== checkout.livemode ||
     proof.data.rewardsUsedCents !== s.rewardsCents ||
@@ -191,12 +207,20 @@ export async function recordedSaleSource(tx: Prisma.TransactionClient, orderId: 
     sourceId: order.id,
     customerId: order.customerId,
     number: order.number,
-    date: businessDate(order.placedAt),
+    date: businessDate(manual?.receivedAt ?? order.placedAt),
     currency: "USD" as const,
     providerAccountId: checkout.stripeAccountId,
     livemode: checkout.livemode,
     paymentId: payments[0].id,
-    paymentIntentId: payments[0].externalId,
+    paymentIntentId: manual ? null : payments[0].externalId,
+    ...(manual
+      ? {
+          paymentMethod: manual.paymentMethod,
+          manualSettlementId: manual.manualSettlementId,
+          receiptReference: manual.receiptReference,
+          taxTransactionId: manual.taxTransactionId,
+        }
+      : {}),
     sessionId: checkout.stripeSessionId,
     subtotalCents: s.subtotalCents,
     promotionCents: s.promotionCents,

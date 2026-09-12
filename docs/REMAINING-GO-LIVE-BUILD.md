@@ -45,3 +45,12 @@ Still outstanding: manual cash/Zelle order settlement and related tax/refund int
 ## Manual settlement construction increment
 
 `MANUAL-CHECKOUT-SETTLEMENT.md` describes approved manual reservations, staff received-money recording, recoverable Stripe Tax posting, shared order finalization and customer receipts. Both manual-payment activation flags stay off. Exception handling, manual refunds/tax reversals, CPA/QuickBooks export support and provider/browser acceptance are still required before activating the method. The original card settlement remains covered by the full existing checkout suite.
+
+
+## Manual accounting source checkpoint
+
+PR 79 adds evidence-validated manual sale/FIFO accounting sources and independent
+cash/Zelle receipt account mappings. Customer receipt validation shares the same proof.
+This supersedes the earlier statement that all manual CPA/QuickBooks export support is
+absent. Manual refunds, exception settlement, tax correction, complete financial reports,
+API authorization and production acceptance remain open. No live activation is implied.

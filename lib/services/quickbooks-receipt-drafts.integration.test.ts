@@ -7,6 +7,7 @@ import { sealIntegration } from "@/lib/integrations/secrets";
 import * as provider from "@/lib/integrations/quickbooks-client";
 import * as sources from "./sales-refund-source";
 import {
+  currentReceiptMapping,
   prepareQuickbooksReceiptDraft,
   cancelQuickbooksReceiptDraft,
   listQuickbooksReceiptDrafts,
@@ -802,4 +803,51 @@ it("requires a posted original sale and preserves its mapping when preparing a m
       data: { externalId: "901" },
     }),
   ).rejects.toThrow();
+});
+
+it("requires the manual method mapping and never falls back to Stripe clearing", async () => {
+  const manual = {
+    ...sale,
+    paymentMethod: "CASH" as const,
+    paymentIntentId: null,
+    sessionId: null,
+  };
+  await expect(
+    prisma.$transaction((tx) =>
+      currentReceiptMapping(tx, manual, config.mode, config.realm),
+    ),
+  ).rejects.toMatchObject({ status: 409 });
+  const original = await prisma.setting.findUniqueOrThrow({
+    where: { key: receiptSettingsKey(config.mode, config.realm) },
+  });
+  const cashKey = receiptSettingsKey(config.mode, config.realm, "CASH");
+  try {
+    await setting(cashKey, {
+      ...(original.valueJson as Prisma.JsonObject),
+      depositAccount: { id: "99", name: "Cash bank", type: "Bank", currency: "USD" },
+    });
+    const mapping = await prisma.$transaction((tx) =>
+      currentReceiptMapping(tx, manual, config.mode, config.realm),
+    );
+    expect(mapping.settings.depositAccount.id).toBe("99");
+    expect(
+      (
+        await prisma.$transaction((tx) =>
+          currentReceiptMapping(tx, sale, config.mode, config.realm),
+        )
+      ).settings.depositAccount.id,
+    ).toBe("12");
+    await expect(
+      prisma.$transaction((tx) =>
+        currentReceiptMapping(
+          tx,
+          { ...manual, paymentMethod: "ZELLE" },
+          config.mode,
+          config.realm,
+        ),
+      ),
+    ).rejects.toMatchObject({ status: 409 });
+  } finally {
+    await prisma.setting.deleteMany({ where: { key: cashKey } });
+  }
 });

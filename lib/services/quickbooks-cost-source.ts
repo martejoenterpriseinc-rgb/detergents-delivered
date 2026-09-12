@@ -1,3 +1,4 @@
+import { recordedSaleSource } from "./sales-refund-source";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { financeAccess } from "./finance";
@@ -42,26 +43,29 @@ export async function recordedOrderCost(
     checkout.costs.length > 500 ||
     order.stockReturns.length > 500 ||
     order.stockReturns.reduce((sum, r) => sum + r.lines.length, 0) > 500 ||
-    !order.payments.some(
-      (p) =>
-        p.provider === "STRIPE" &&
-        ["CAPTURED", "PARTIALLY_REFUNDED", "REFUNDED"].includes(p.status) &&
-        p.amountCents === order.totalCents &&
-        p.currency === "USD" &&
-        p.events.some(
-          (e) =>
-            e.verifiedAt &&
-            e.externalId === `checkout:${checkout.id}:paid` &&
-            ["checkout.session.completed", "checkout.session.reconciled"].includes(
-              e.type,
-            ),
-        ),
-    )
+    (checkout.paymentMethod === "STRIPE" &&
+      !order.payments.some(
+        (p) =>
+          p.provider === "STRIPE" &&
+          ["CAPTURED", "PARTIALLY_REFUNDED", "REFUNDED"].includes(p.status) &&
+          p.amountCents === order.totalCents &&
+          p.currency === "USD" &&
+          p.events.some(
+            (e) =>
+              e.verifiedAt &&
+              e.externalId === `checkout:${checkout.id}:paid` &&
+              ["checkout.session.completed", "checkout.session.reconciled"].includes(
+                e.type,
+              ),
+          ),
+      ))
   )
     throw new AccountError(
       "A verified paid order with complete original cost evidence is required.",
       409,
     );
+  const manualSale =
+    checkout.paymentMethod !== "STRIPE" ? await recordedSaleSource(tx, orderId) : null;
   const pieces = checkout.costs.map((c) => ({
     allocationId: c.id,
     costLayerId: c.costLayerId,
@@ -90,7 +94,7 @@ export async function recordedOrderCost(
       orderId: order.id,
       number: order.number,
       sourceId: order.id,
-      date: businessDate(order.placedAt),
+      date: manualSale?.date ?? businessDate(order.placedAt),
       currency: "USD" as const,
       amountCents: recordedCost(pieces),
       pieces: pieces.sort((a, b) => a.allocationId.localeCompare(b.allocationId)),

@@ -4,6 +4,7 @@ import type { QuickbooksAccount } from "@/lib/integrations/quickbooks-client";
 import type { receiptSettingsData } from "@/lib/services/quickbooks-receipt-settings";
 type Data = Awaited<ReturnType<typeof receiptSettingsData>>;
 export function QuickbooksReceiptSettings() {
+  const [method, setMethod] = useState<"STRIPE" | "CASH" | "ZELLE">("STRIPE");
   const [data, setData] = useState<Data | null>(null),
     [accounts, setAccounts] = useState<QuickbooksAccount[]>([]),
     [next, setNext] = useState<number | null>(null),
@@ -32,7 +33,9 @@ export function QuickbooksReceiptSettings() {
   async function load(more = false) {
     await run(async () => {
       const mapping: Data =
-        more && data ? data : await response("/api/admin/quickbooks/receipt-settings");
+        more && data
+          ? data
+          : await response("/api/admin/quickbooks/receipt-settings?method=" + method);
       const result = await response(
         "/api/admin/quickbooks/accounts?start=" + (more ? next : 1),
       );
@@ -67,6 +70,7 @@ export function QuickbooksReceiptSettings() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           requestKey,
+          paymentMethod: data.method,
           depositAccountId: selected,
           version: data.mapping?.version ?? 0,
           confirmed: true,
@@ -82,15 +86,40 @@ export function QuickbooksReceiptSettings() {
       <h2 className="text-xl font-semibold">Receipt clearing account</h2>
       <p>
         Choose the company account used to track receipt cash before payout
-        reconciliation. Saving checks the company&apos;s country, home currency and sales-tax
-        setting.
+        reconciliation. Saving checks the company&apos;s country, home currency and
+        sales-tax setting.
       </p>
+      <label className="block">
+        Payment method
+        <select
+          aria-label="Receipt payment method"
+          className="mt-1 block w-full rounded border p-3"
+          value={method}
+          disabled={busy}
+          onChange={(event) => {
+            setMethod(event.target.value as typeof method);
+            setData(null);
+            setAccounts([]);
+            setNext(null);
+            setSelected("");
+            setConfirmed(false);
+            setKey("");
+          }}
+        >
+          <option value="STRIPE">Stripe card payments</option>
+          <option value="CASH">Cash payments</option>
+          <option value="ZELLE">Zelle payments</option>
+        </select>
+      </label>
+      <p>Each payment method requires its own reviewed account mapping.</p>
       <button className="ops-button" disabled={busy} onClick={() => load()}>
         Load receipt accounts
       </button>
       {data && (
         <>
-          <p>Receipt settings for company {data.realm}</p>
+          <p>
+            Receipt settings for {data.method} in company {data.realm}
+          </p>
           {data.mapping && (
             <div className="space-y-2 rounded border p-4" role="status">
               <p>Saved receipt clearing account: {data.mapping.depositAccount.name}.</p>
