@@ -1,0 +1,9 @@
+# Cash and Zelle exception approvals
+
+Admins can open **Cash / Zelle approvals** from a customer directory row. Each method has a separate per-order USD limit, expiry of up to 90 days, optimistic revision, required reason and permanent audit. Revocation takes effect immediately. CPA access is read-only; customers and drivers cannot read staff decisions or grant approval.
+
+Approval requires an active customer with verified email, purchase approval and completed credential setup. The transaction guard rechecks those requirements, method, expiry and amount while holding the customer lock. Concurrent duplicate submissions retain one decision. Changed payloads cannot reuse a request key, stale revisions cannot overwrite a decision, and an audit failure rolls back the approval. The browser retains a possibly committed request for identical retry following a lost response.
+
+This is permission only. It does not create a payment, mark an order paid, reserve inventory/capacity, award rewards or post tax/accounting. The payment exception is not yet exposed in checkout. Authoritative manual reservation and settlement, received-money evidence, tax transactions, refunds and reporting still need integration before this feature can accept money. Zelle receipt must be confirmed by staff against actual bank evidence; no automatic Zelle connection is implied.
+
+The additive `20260916233000_manual_payment_approvals` migration preserves all existing records. Native tests cover authorization, duplicate concurrency, stale/reused requests, limits, revocation, expiry, changed eligibility and audit rollback. Browser acceptance covers cash and Zelle, interrupted saves, revocation and retained history on three viewport sizes. CI evidence is recorded in the PR; tests do not establish provider acceptance. No hosted database or provider configuration changed.

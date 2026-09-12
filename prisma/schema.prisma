@@ -184,6 +184,7 @@ model UserRole {
 // ---------------------------------------------------------------------------
 
 model Customer {
+  manualPaymentApprovals ManualPaymentApproval[]
   smsConsents SmsConsent[]
   commerceGrants CommerceGrant[]
   purchaseApprovedAt DateTime?
@@ -213,6 +214,21 @@ model Customer {
 
   @@index([phone])
   @@index([deletedAt])
+}
+
+/// Permission only. This record is never proof of payment or an inventory reservation.
+model ManualPaymentApproval {
+  id String @id @default(cuid())
+  customerId String
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  method String
+  enabled Boolean @default(false)
+  maxOrderCents Int
+  expiresAt DateTime
+  version Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([customerId, method])
 }
 
 model Address {
