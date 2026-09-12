@@ -141,4 +141,5 @@ jobs:
             test-results/**/route-mileage.png
             test-results/**/manual-payment-approvals.png
             test-results/**/delivery-tips.png
+            test-results/**/payment-overview.png
           retention-days: 14
