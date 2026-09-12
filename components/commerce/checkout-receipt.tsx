@@ -65,7 +65,9 @@ export function CheckoutReceipt({ initial }: { initial: Receipt }) {
       >
         {paid
           ? `Your order is saved. Payment total: ${formatCents(data.totalCents)}.`
-          : "Only a verified payment confirms an order. Do not pay again while confirmation is pending."}
+          : data.state === "REFUNDED"
+            ? "This order is marked refunded. Its original purchase receipt remains available."
+            : "Only a verified payment confirms an order. Do not pay again while confirmation is pending."}
       </p>
       {["PAID", "REFUNDED"].includes(data.state) && data.orderId && (
         <Link

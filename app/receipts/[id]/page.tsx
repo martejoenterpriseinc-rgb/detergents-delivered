@@ -80,7 +80,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
             </p>
             <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 text-sm">
               <dt>Discounts and rewards</dt>
-              <dd>{formatCents(-l.discountCents)}</dd>
+              <dd>{formatCents(l.discountCents ? -l.discountCents : 0)}</dd>
               <dt>After savings</dt>
               <dd>{formatCents(l.netCents)}</dd>
               <dt>Recorded tax</dt>
@@ -95,7 +95,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
         {totals.map(([label, value]) => (
           <div key={label} className="contents">
             <dt>{label}</dt>
-            <dd>{formatCents(value)}</dd>
+            <dd>{formatCents(value || 0)}</dd>
           </div>
         ))}
         <dt className="border-t pt-3 text-lg font-bold">Original payment</dt>
