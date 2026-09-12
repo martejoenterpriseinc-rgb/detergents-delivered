@@ -1,5 +1,6 @@
 import { runtimeGoogleConfigured } from "@/lib/integrations/google";
 import Link from "next/link";
+import { safeLoginCallback } from "@/lib/domain/login-destination";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,9 +11,10 @@ import { registerWithCredentials, signInWithGoogle } from "../actions";
 export default async function RegisterPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; callbackUrl?: string }>;
 }) {
   const params = await searchParams;
+  const callbackUrl = safeLoginCallback(params.callbackUrl);
 
   return (
     <div className="mx-auto flex w-full max-w-md flex-col px-4 py-16">
@@ -33,6 +35,7 @@ export default async function RegisterPage({
       ) : null}
       <Card className="mt-8 space-y-4">
         <form action={registerWithCredentials} className="space-y-4">
+          <input type="hidden" name="callbackUrl" value={callbackUrl} />
           <div className="space-y-2">
             <Label htmlFor="name">Name</Label>
             <Input id="name" name="name" autoComplete="name" required />
@@ -69,6 +72,7 @@ export default async function RegisterPage({
         </form>
         {(await runtimeGoogleConfigured()) && (
           <form action={signInWithGoogle}>
+            <input type="hidden" name="callbackUrl" value={callbackUrl} />
             <Button type="submit" variant="outline" className="w-full">
               Continue with Google
             </Button>
@@ -81,7 +85,10 @@ export default async function RegisterPage({
         </p>
         <p className="text-center text-sm text-teal-800">
           Already have an account?{" "}
-          <Link href="/sign-in" className="font-semibold text-teal-900 underline">
+          <Link
+            href={`/sign-in?callbackUrl=${encodeURIComponent(callbackUrl)}`}
+            className="font-semibold text-teal-900 underline"
+          >
             Sign in
           </Link>
         </p>

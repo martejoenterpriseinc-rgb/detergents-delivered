@@ -52,6 +52,8 @@ export async function signOutAction() {
 }
 
 export async function registerWithCredentials(formData: FormData) {
+  const callbackUrl = safeLoginCallback(formData.get("callbackUrl"));
+  const callbackQuery = `&callbackUrl=${encodeURIComponent(callbackUrl)}`;
   const parsed = registerAccountSchema.safeParse({
     name: formData.get("name"),
     email: formData.get("email"),
@@ -59,28 +61,28 @@ export async function registerWithCredentials(formData: FormData) {
     confirmPassword: formData.get("confirmPassword"),
   });
   if (!parsed.success) {
-    redirect("/register?error=invalid");
+    redirect(`/register?error=invalid${callbackQuery}`);
   }
 
   if (!(await consumeAuthenticationLimit("register", parsed.data.email)))
-    redirect("/register?error=limited");
+    redirect(`/register?error=limited${callbackQuery}`);
   try {
     await registerCustomer(parsed.data);
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")
-      redirect("/register?error=unavailable");
-    redirect("/register?error=invalid");
+      redirect(`/register?error=unavailable${callbackQuery}`);
+    redirect(`/register?error=invalid${callbackQuery}`);
   }
 
   try {
     await signIn("credentials", {
       email: parsed.data.email,
       password: parsed.data.password,
-      redirectTo: "/account",
+      redirectTo: callbackUrl,
     });
   } catch (error) {
     if (error instanceof AuthError) {
-      redirect("/sign-in?error=credentials");
+      redirect(`/sign-in?error=credentials${callbackQuery}`);
     }
     throw error;
   }

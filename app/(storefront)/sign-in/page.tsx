@@ -69,7 +69,10 @@ export default async function SignInPage({
         ) : null}
         <p className="text-center text-sm text-teal-800">
           New household?{" "}
-          <Link href="/register" className="font-semibold text-teal-900 underline">
+          <Link
+            href={`/register?callbackUrl=${encodeURIComponent(callbackUrl)}`}
+            className="font-semibold text-teal-900 underline"
+          >
             Create an account
           </Link>
         </p>
