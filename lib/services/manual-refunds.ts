@@ -8,6 +8,7 @@ import {
   allocateRemainingRefundLine,
   refundRequestInput,
   refundReservationStates,
+  cancelRefundInput,
 } from "@/lib/domain/refund-allocation";
 import { financeAccess } from "./finance";
 import { recordedSaleSource } from "./sales-refund-source";
@@ -18,6 +19,7 @@ import {
   manualRefundDigest,
   manualRefundReceiptKey,
   verifiedManualRefundReceipt,
+  verifiedManualRefundTax,
 } from "./manual-refund-evidence";
 const json = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(value));
 const fail = (
@@ -401,16 +403,65 @@ export async function readManualRefunds(actor: string, orderId: string) {
               .filter((v) => v.orderItemId === l.orderItemId)
               .reduce((n, v) => n + v.quantity, 0),
         })),
-        requests: s.requests.map((r) => ({
-          id: r.id,
-          status: r.status,
-          amountCents: r.amountCents,
-          reason: r.reason,
-          taxCents: r.lines.reduce((n, l) => n + l.taxCents, 0),
-          rewardCents: r.lines.reduce((n, l) => n + l.rewardCents, 0),
-        })),
+        requests: await Promise.all(
+          s.requests.map(async (r) => ({
+            taxStatus: (await verifiedManualRefundTax(tx, r.id))
+              ? "VERIFIED"
+              : (await tx.refundRequestEvent.count({
+                    where: { refundRequestId: r.id, type: "manual-refund.tax.claimed" },
+                  }))
+                ? "RECOVERY"
+                : "PENDING",
+            id: r.id,
+            status: r.status,
+            amountCents: r.amountCents,
+            reason: r.reason,
+            taxCents: r.lines.reduce((n, l) => n + l.taxCents, 0),
+            rewardCents: r.lines.reduce((n, l) => n + l.rewardCents, 0),
+          })),
+        ),
       };
     },
     { isolationLevel: "RepeatableRead" },
   );
+}
+
+export async function cancelManualRefund(actor: string, raw: unknown) {
+  const d = cancelRefundInput.parse(raw);
+  return prisma.$transaction(async (tx) => {
+    await financeAccess(tx, actor, true);
+    await tx.$queryRaw`SELECT id FROM "Order" WHERE id=${d.orderId} FOR UPDATE`;
+    const s = await source(tx, d.orderId),
+      r = s.requests.find((r) => r.id === d.requestId);
+    if (!r) throw new AccountError("Manual refund draft not found.", 404);
+    if (
+      r.submittedAt ||
+      r.providerRefundId ||
+      !["PREPARED", "CANCELED"].includes(r.status)
+    )
+      throw fail("A recorded return cannot be canceled as an unused draft.");
+    if (r.status === "CANCELED") return { id: r.id, status: r.status };
+    await tx.refundRequest.update({
+      where: { id: r.id },
+      data: { status: "CANCELED", lastError: null },
+    });
+    await tx.refundRequestEvent.create({
+      data: {
+        refundRequestId: r.id,
+        type: "manual-refund.draft.canceled",
+        status: "CANCELED",
+        evidenceJson: { actorUserId: actor, reason: d.reason },
+      },
+    });
+    await tx.auditLog.create({
+      data: {
+        actorUserId: actor,
+        entityType: "RefundRequest",
+        entityId: r.id,
+        action: "manual-refund.draft.canceled",
+        afterJson: { reason: d.reason },
+      },
+    });
+    return { id: r.id, status: "CANCELED" };
+  });
 }

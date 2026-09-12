@@ -1,6 +1,7 @@
 "use client";
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { ManualRefundTax } from "./manual-refund-tax";
 import type { readManualRefunds } from "@/lib/services/manual-refunds";
 type Data = Awaited<ReturnType<typeof readManualRefunds>>;
 const money = (c: number) => `$${(c / 100).toFixed(2)}`;
@@ -115,6 +116,14 @@ export function ManualRefunds({ data }: { data: Data }) {
               Return receipt recorded. Tax verification and accounting posting are
               separate steps.
             </p>
+          )}
+          {r.status === "SUCCEEDED" && (
+            <ManualRefundTax
+              orderId={data.orderId}
+              requestId={r.id}
+              status={r.taxStatus}
+              canWrite={data.canWrite}
+            />
           )}
           {r.status === "PREPARED" && data.canWrite && (
             <>

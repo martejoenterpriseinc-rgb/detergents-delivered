@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { TaxEvidence } from "@/components/commerce/tax-evidence";
 import { ZodError } from "zod";
 import { requireRole } from "@/lib/authz";
@@ -122,6 +123,9 @@ export default async function Page({
             </div>
             <strong>{money(row.taxCents)}</strong>
             {row.canMatch && <TaxEvidence adjustmentId={row.id} />}
+            {row.manualRefundUrl && (
+              <Link href={row.manualRefundUrl}>Manual refund tax verification</Link>
+            )}
           </article>
         ))}
       </section>

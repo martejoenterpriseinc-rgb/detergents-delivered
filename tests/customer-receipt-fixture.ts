@@ -5,6 +5,7 @@ export async function receiptFixture(
   db: PrismaClient,
   options: {
     passwordHash?: string;
+    manual?: "CASH" | "ZELLE";
     financialEvidence?: boolean;
     zero?: boolean;
     pending?: boolean;
@@ -72,7 +73,8 @@ export async function receiptFixture(
           expiresAt: new Date(),
           livemode: false,
           stripeAccountId: "acct_synthetic_receipt",
-          stripeSessionId: "cs_" + marker,
+          stripeSessionId: options.manual ? null : "cs_" + marker,
+          paymentMethod: options.manual ?? "STRIPE",
           snapshot: {
             address: {
               line1: "1 Synthetic Street",
@@ -115,17 +117,89 @@ export async function receiptFixture(
     include: { checkoutAttempt: true },
   });
   const checkoutId = order.checkoutAttempt!.id;
+  const manualId = "manual_" + marker;
+  const taxTransactionId = "tax_manual" + marker.replaceAll("-", "");
+  const receivedAt = new Date("2026-02-01T18:00:00Z");
+  const manualRecord = {
+    manualSettlementId: manualId,
+    paymentStatus: "paid",
+    status: "complete",
+    amount: total,
+    currency: "usd",
+    livemode: false,
+    source: "staff-confirmed-manual",
+    method: options.manual ?? "CASH",
+    taxTransactionId,
+    receivedAt: receivedAt.toISOString(),
+  };
+  if (options.manual) {
+    await db.manualCheckoutSettlement.create({
+      data: {
+        id: manualId,
+        checkoutId,
+        method: options.manual,
+        reference: marker,
+        amountCents: total,
+        receivedAt,
+        actorUserId: user.id,
+        reason: "Synthetic receipt fixture",
+        approvalId: "synthetic-approval",
+        approvalVersion: 1,
+        requestHash: marker,
+        accountId: "acct_synthetic_receipt",
+        livemode: false,
+        state: "SETTLED",
+        taxTransactionId,
+        taxEvidence: {
+          taxTransactionId,
+          accountId: "acct_synthetic_receipt",
+          livemode: false,
+          reference: `dd-manual:${manualId}`,
+          postedAt: Math.floor(receivedAt.getTime() / 1000),
+          taxLines: [{ variantId: variant.id, netCents: net, taxCents: tax }],
+        },
+      },
+    });
+    await db.auditLog.create({
+      data: {
+        actorUserId: user.id,
+        entityType: "ManualCheckoutSettlement",
+        entityId: manualId,
+        action: "manual-payment.received",
+        afterJson: {
+          checkoutId,
+          amountCents: total,
+          reference: marker,
+          receivedAt: receivedAt.toISOString(),
+          approvalId: "synthetic-approval",
+          approvalVersion: 1,
+          method: options.manual,
+          reason: "Synthetic receipt fixture",
+        },
+      },
+    });
+    await db.auditLog.create({
+      data: {
+        actorUserId: user.id,
+        entityType: "ManualCheckoutSettlement",
+        entityId: manualId,
+        action: "manual-payment.settled",
+        afterJson: manualRecord,
+      },
+    });
+  }
   await db.payment.create({
     data: {
       orderId: order.id,
-      provider: "STRIPE",
+      provider: options.manual ? "MANUAL" : "STRIPE",
       status: "CAPTURED",
       amountCents: total,
-      externalId: `pi_private_${marker}`,
+      externalId: options.manual ? manualId : `pi_private_${marker}`,
       events: {
         create: {
           externalId: `checkout:${checkoutId}:paid`,
-          type: "checkout.session.completed",
+          type: options.manual ? "manual.payment.settled" : "checkout.session.completed",
+          ...(options.manual ? { payload: manualRecord } : {}),
           verifiedAt: options.unverified ? null : new Date(),
         },
       },
@@ -177,7 +251,9 @@ export async function receiptFixture(
         entityId: order.id,
         action: "checkout.payment.finalized",
         afterJson: {
-          sessionId: "cs_" + marker,
+          ...(options.manual
+            ? { manualSettlementId: manualId, taxTransactionId }
+            : { sessionId: "cs_" + marker }),
           amount: total,
           currency: "usd",
           livemode: false,

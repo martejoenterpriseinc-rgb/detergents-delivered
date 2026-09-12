@@ -73,3 +73,12 @@ the broad earlier statement that tip refund initiation is wholly absent. Manual 
 refund workflows, provider tax compensation, actual QuickBooks correcting/tip postings,
 remaining report gaps and provider/production acceptance are still required. New tip-refund
 activation flags remain off; the new migration has not been applied to hosted databases.
+
+## Manual refund and tax reversal checkpoint
+
+PR 83 adds cash/Zelle item refunds, immutable returned-money receipts, original-source CPA
+accounting, exact partial reward restoration, standalone tax reversal claims/recovery and
+verified tax evidence for the existing QuickBooks RefundReceipt workflow. See
+`MANUAL-REFUND-ACCEPTANCE.md` for activation and exact remaining gates. This supersedes the
+earlier blanket statement that manual refunds are absent; it does not claim provider or
+production acceptance, failed-card-refund compensation posting or dedicated tip QBO posting.

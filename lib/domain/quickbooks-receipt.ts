@@ -30,6 +30,8 @@ const sourceLine = z.object({
 const saleSchema = z
   .object({
     kind: z.literal("SALE"),
+    paymentMethod: z.enum(["CASH", "ZELLE"]).optional(),
+    taxTransactionId: id.optional(),
     orderId: id,
     sourceId: id,
     customerId: id,
@@ -78,7 +80,9 @@ const refundSchema = z
     netCents: cents,
     taxCents: cents,
     rewardCents: cents,
-    providerRefundId: id,
+    providerRefundId: id.nullable(),
+    paymentMethod: z.enum(["CASH", "ZELLE"]).optional(),
+    manualRefundReference: z.string().min(5).max(160).optional(),
     taxEvidenceStatus: z.literal("MATCHED"),
     taxEvidenceId: id,
     originalTaxTransactionId: id,
@@ -90,6 +94,9 @@ const refundSchema = z
   })
   .refine(
     (s) =>
+      (s.providerRefundId
+        ? !s.paymentMethod && !s.manualRefundReference
+        : Boolean(s.paymentMethod && s.manualRefundReference)) &&
       s.cashCents === s.netCents + s.taxCents &&
       s.lines.reduce((n, l) => n + l.netCents, 0) === s.netCents &&
       s.lines.reduce((n, l) => n + l.taxCents, 0) === s.taxCents &&
@@ -168,7 +175,10 @@ export function prepareCashReceipt(input: {
   if (
     mapping.customerId !== sale.customerId ||
     (refund &&
-      (refund.orderId !== sale.orderId ||
+      (refund.paymentMethod !== sale.paymentMethod ||
+        (sale.paymentMethod &&
+          refund.originalTaxTransactionId !== sale.taxTransactionId) ||
+        refund.orderId !== sale.orderId ||
         refund.customerId !== sale.customerId ||
         refund.cashCents > sale.cashCents ||
         refund.rewardCents > sale.rewardsCents)) ||
