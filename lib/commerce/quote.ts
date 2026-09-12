@@ -268,6 +268,7 @@ export async function createQuote(
   return publicCheckout(attempt);
 }
 export function publicCheckout(a: {
+  paymentMethod?: string;
   id: string;
   state: string;
   snapshot: Prisma.JsonValue;
@@ -277,6 +278,7 @@ export function publicCheckout(a: {
 }) {
   const s = a.snapshot as unknown as CheckoutSnapshot;
   return {
+    paymentMethod: a.paymentMethod ?? "STRIPE",
     id: a.id,
     state: a.state,
     expiresAt: a.expiresAt.toISOString(),

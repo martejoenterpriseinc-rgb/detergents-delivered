@@ -36,7 +36,10 @@ export async function paymentRecoveryWork(
     return blocked();
   }
   const attempts = await prisma.checkoutAttempt.findMany({
-    where: { state: { in: ["PREPARING", "OPEN", "PROCESSING", "REVIEW"] } },
+    where: {
+      paymentMethod: "STRIPE",
+      state: { in: ["PREPARING", "OPEN", "PROCESSING", "REVIEW"] },
+    },
     orderBy: [
       { recoveryCheckedAt: { sort: "asc", nulls: "first" } },
       { createdAt: "asc" },

@@ -1,5 +1,6 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useCart } from "@/components/storefront/cart-provider";
 import { adminFetch } from "@/lib/admin-fetch";
 import { formatCents } from "@/lib/domain/money";
@@ -25,6 +26,7 @@ export function ConnectedCheckout({
   };
 }) {
   const cart = useCart();
+  const router = useRouter();
   const ready = Boolean(initialQuote) || Boolean(subscription) || cart.ready;
   const lines =
     initialQuote?.lines.map((line) => ({
@@ -43,6 +45,22 @@ export function ConnectedCheckout({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [pendingKey, setPendingKey] = useState<string | null>(null);
+  const [manualMethods, setManualMethods] = useState<string[]>([]);
+  const [paymentMethod, setPaymentMethod] = useState("STRIPE");
+  useEffect(() => {
+    let current = true;
+    if (quote)
+      void adminFetch<{ methods: string[] }>(`/api/checkout/${quote.id}/manual`)
+        .then((r) => {
+          if (current) setManualMethods(r.methods);
+        })
+        .catch(() => {
+          if (current) setManualMethods([]);
+        });
+    return () => {
+      current = false;
+    };
+  }, [quote]);
   if (!ready) return <p>Loading your cart…</p>;
   if (!lines.length)
     return (
@@ -93,6 +111,14 @@ export function ConnectedCheckout({
     setBusy(true);
     setError("");
     try {
+      if (paymentMethod !== "STRIPE") {
+        await adminFetch(`/api/checkout/${quote.id}/manual`, {
+          method: "POST",
+          body: JSON.stringify({ method: paymentMethod, acceptedWindow: accepted }),
+        });
+        router.push(`/checkout/receipt/${quote.id}`);
+        return;
+      }
       const result = await adminFetch<Quote & { url: string | null }>(
         `/api/checkout/${quote.id}`,
         {
@@ -175,8 +201,31 @@ export function ConnectedCheckout({
               />
               I accept this delivery window and payment at purchase.
             </label>
+            {manualMethods.length > 0 && (
+              <label className="block">
+                Approved payment method
+                <select
+                  value={paymentMethod}
+                  onChange={(e) => setPaymentMethod(e.target.value)}
+                  className="mt-2 w-full rounded-xl border p-3"
+                >
+                  <option value="STRIPE">Pay online</option>
+                  {manualMethods.map((m) => (
+                    <option key={m} value={m}>
+                      {m === "CASH"
+                        ? "Cash — staff confirmation required"
+                        : "Zelle — staff confirmation required"}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             <Button onClick={pay} disabled={busy || !accepted}>
-              {busy ? "Opening payment…" : "Continue to secure payment"}
+              {busy
+                ? "Preparing checkout…"
+                : paymentMethod === "STRIPE"
+                  ? "Continue to secure payment"
+                  : "Reserve for approved manual payment"}
             </Button>
             <p className="text-sm">
               Stock, rewards and vehicle space are reserved before payment. Confirmation

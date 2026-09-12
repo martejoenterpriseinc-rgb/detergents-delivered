@@ -1,3 +1,4 @@
+import { assertManualPaymentApproval } from "@/lib/services/manual-payment-approvals";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { AccountError } from "@/lib/domain/account";
@@ -18,8 +19,17 @@ export async function reserveCheckout(
   userId: string,
   id: string,
   acceptedWindow: boolean,
+  method: "STRIPE" | "CASH" | "ZELLE" = "STRIPE",
 ) {
+  if (method !== "STRIPE" && process.env.DD_MANUAL_PAYMENTS_ENABLED !== "true")
+    throw new AccountError("Manual payment checkout is not available yet.", 503);
   const config = await readCommerce();
+  if (
+    method !== "STRIPE" &&
+    config.live &&
+    process.env.DD_LIVE_MANUAL_PAYMENTS_ACCEPTED !== "true"
+  )
+    throw new AccountError("Manual payments have not passed production acceptance.", 503);
   return prisma.$transaction(
     async (tx) => {
       const { customer } = await customerIdentity(tx, userId);
@@ -30,12 +40,21 @@ export async function reserveCheckout(
       if (!a) throw new AccountError("Checkout not found.", 404);
       if (a.stripeAccountId !== config.accountId || a.livemode !== config.live)
         throw new AccountError("Checkout environment changed.", 409);
-      if (a.state !== "QUOTED") return a;
+      if (a.state !== "QUOTED") {
+        if (a.paymentMethod !== method)
+          throw new AccountError(
+            "This checkout already uses a different payment method.",
+            409,
+          );
+        return a;
+      }
       if (!acceptedWindow)
         throw new AccountError("Accept the first delivery window before payment.");
       if (a.expiresAt <= new Date())
         throw new AccountError("This quote expired. Review your cart again.", 409);
       const saved = a.snapshot as unknown as CheckoutSnapshot;
+      if (method !== "STRIPE")
+        await assertManualPaymentApproval(tx, customer.id, method, saved.totalCents);
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(613279105)`;
       await tx.$queryRaw`SELECT id FROM "Address" WHERE id = ${saved.address.id} FOR UPDATE`;
       for (const line of saved.lines)
@@ -254,6 +273,7 @@ export async function reserveCheckout(
         where: { id },
         data: {
           state: "PREPARING",
+          paymentMethod: method,
           orderId: order.id,
           sessionExpiresAt: new Date(Date.now() + 45 * 60000),
           vehicleId: vehicle.id,

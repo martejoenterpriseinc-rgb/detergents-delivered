@@ -59,6 +59,13 @@ export function CheckoutReceipt({ initial }: { initial: Receipt }) {
                 ? "Payment needs staff review"
                 : "Checking payment status"}
       </h1>
+      {data.paymentMethod !== "STRIPE" && !paid && (
+        <p>
+          Your approved {data.paymentMethod === "CASH" ? "cash" : "Zelle"} checkout awaits
+          staff confirmation of received money and tax. Contact staff to arrange payment;
+          do not send a second payment while confirmation is pending.
+        </p>
+      )}
       <p
         className={`rounded-xl p-3 ${paid ? "bg-teal-50 text-teal-900" : "bg-amber-50 text-amber-950"}`}
         role="status"
