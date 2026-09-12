@@ -478,3 +478,54 @@ it("rolls back a tip refund claim when its permanent audit cannot be saved", asy
     await f.cleanup();
   }
 });
+it("does not let an older refund lookup overwrite a newer provider result", async () => {
+  const f = await fixture();
+  const input = {
+    tipId: f.tip.id,
+    requestKey: randomUUID(),
+    amountCents: 108,
+    reason: "Synthetic concurrent lookup",
+    confirmed: true,
+  };
+  try {
+    let observed: Record<string, unknown>;
+    m.submit.mockImplementation(async (claim) => {
+      observed = {
+        id: "re_" + claim.requestId.replaceAll("_", ""),
+        amountCents: 108,
+        currency: "USD",
+        status: "succeeded",
+        balanceTransactionId: "txn_synthetic",
+        requestId: claim.requestId,
+        requestHash: claim.requestHash,
+        project: "detergents-delivered",
+      };
+      m.inspect.mockResolvedValue({ disputed: false, refunds: [observed] });
+      return observed;
+    });
+    const request = await submitTipRefund(f.userId, input);
+    let release!: (v: unknown) => void, started!: () => void;
+    const began = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const held = new Promise((resolve) => {
+      release = resolve;
+    });
+    m.inspect.mockImplementationOnce(() => {
+      started();
+      return held;
+    });
+    const older = reconcileTipRefund(f.userId, request.id);
+    const rejection = expect(older).rejects.toMatchObject({ status: 409 });
+    await began;
+    await reconcileTipRefund(f.userId, request.id);
+    release({ disputed: false, refunds: [{ ...observed!, status: "pending" }] });
+    await rejection;
+    expect(
+      (await prisma.tipRefundRequest.findUniqueOrThrow({ where: { id: request.id } }))
+        .state,
+    ).toBe("SUCCEEDED");
+  } finally {
+    await f.cleanup();
+  }
+});

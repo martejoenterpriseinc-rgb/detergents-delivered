@@ -249,6 +249,7 @@ async function reconcileAs(actor: string | null, id: string) {
     const current = await tipAccountingSource(tx, request.tipId);
     if (canonicalJson(current) !== canonicalJson(before)) throw fail();
     const latest = await tx.tipRefundRequest.findUniqueOrThrow({ where: { id } });
+    if (latest.updatedAt.getTime() !== request.updatedAt.getTime()) throw fail();
     return saveObservation(tx, latest, matches[0], actor);
   });
 }
