@@ -7,6 +7,7 @@ import { prepareManualRefund, recordManualRefund } from "./manual-refunds";
 import { reconcileManualRefundTax } from "./manual-refund-tax";
 import { recordedSaleSource, recordedRefundSource } from "./sales-refund-source";
 const provider = vi.hoisted(() => vi.fn());
+const fixtureUsers: string[] = [];
 vi.mock("@/lib/commerce/manual-refund-tax", () => ({
   executeManualTaxReversal: provider,
 }));
@@ -15,9 +16,16 @@ beforeEach(() => {
   vi.stubEnv("DD_MANUAL_REFUND_TAX_ENABLED", "true");
   provider.mockReset();
 });
-afterEach(() => vi.unstubAllEnvs());
+afterEach(async () => {
+  await prisma.user.updateMany({
+    where: { id: { in: fixtureUsers.splice(0) } },
+    data: { deletedAt: new Date() },
+  });
+  vi.unstubAllEnvs();
+});
 async function fixture(method: "CASH" | "ZELLE" = "CASH") {
   const f = await receiptFixture(prisma, { financialEvidence: true, manual: method });
+  fixtureUsers.push(f.userId);
   const role = await prisma.role.upsert({
     where: { code: "ADMIN" },
     update: {},
