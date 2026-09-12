@@ -160,6 +160,21 @@ export function DeliveryQueue({
           </Link>
         </div>
       )}
+      <nav aria-label="Route mileage" className="flex flex-wrap gap-3">
+        {data.routeIds.map((id) => (
+          <Link
+            key={id}
+            className="ops-button secondary"
+            href={{
+              pathname: data.canManage
+                ? `/admin/deliveries/${id}/mileage`
+                : `/driver/mileage/${id}`,
+            }}
+          >
+            Mileage · {data.stops.find((s) => s.routeId === id)?.routeNumber ?? "Route"}
+          </Link>
+        ))}
+      </nav>
       <div className="ops-toolbar">
         <DatePicker
           date={data.date}

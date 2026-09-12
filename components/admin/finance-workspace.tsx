@@ -353,6 +353,14 @@ export function FinanceWorkspace({ data }: { data: Data }) {
               <h2 className="mt-1 font-semibold">
                 {row.description || "No description recorded"}
               </h2>
+              {row.routeId && (
+                <a
+                  className="underline"
+                  href={`/admin/deliveries/${row.routeId}/mileage`}
+                >
+                  Review route readings
+                </a>
+              )}
               {!expense && (
                 <p className="text-sm">
                   Odometer: {row.startOdometer ?? "—"} → {row.endOdometer ?? "—"}
