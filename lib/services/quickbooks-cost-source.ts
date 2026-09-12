@@ -64,7 +64,8 @@ export async function recordedOrderCost(
       "A verified paid order with complete original cost evidence is required.",
       409,
     );
-  if (checkout.paymentMethod !== "STRIPE") await recordedSaleSource(tx, orderId);
+  const manualSale =
+    checkout.paymentMethod !== "STRIPE" ? await recordedSaleSource(tx, orderId) : null;
   const pieces = checkout.costs.map((c) => ({
     allocationId: c.id,
     costLayerId: c.costLayerId,
@@ -93,7 +94,7 @@ export async function recordedOrderCost(
       orderId: order.id,
       number: order.number,
       sourceId: order.id,
-      date: businessDate(order.placedAt),
+      date: manualSale?.date ?? businessDate(order.placedAt),
       currency: "USD" as const,
       amountCents: recordedCost(pieces),
       pieces: pieces.sort((a, b) => a.allocationId.localeCompare(b.allocationId)),

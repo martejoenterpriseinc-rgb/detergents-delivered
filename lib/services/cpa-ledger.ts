@@ -65,8 +65,26 @@ export async function readCpaLedger(actor: string, raw: unknown, exported = fals
       };
       const [sales, refunds, returns] = await Promise.all([
         tx.order.findMany({
-          where: { ...scope, placedAt: dates },
-          select: { id: true, number: true, placedAt: true },
+          where: {
+            ...scope,
+            OR: [
+              { checkoutAttempt: { paymentMethod: "STRIPE" }, placedAt: dates },
+              {
+                checkoutAttempt: {
+                  paymentMethod: { in: ["CASH", "ZELLE"] },
+                  manualSettlement: { receivedAt: dates },
+                },
+              },
+            ],
+          },
+          select: {
+            id: true,
+            number: true,
+            placedAt: true,
+            checkoutAttempt: {
+              select: { manualSettlement: { select: { receivedAt: true } } },
+            },
+          },
           orderBy: { id: "asc" },
           take: 251,
         }),
@@ -127,7 +145,13 @@ export async function readCpaLedger(actor: string, raw: unknown, exported = fals
         issues: [],
       });
       for (const s of sales) {
-        const r = row("SALE", s.id, s.id, s.number, s.placedAt!);
+        const r = row(
+          "SALE",
+          s.id,
+          s.id,
+          s.number,
+          s.checkoutAttempt?.manualSettlement?.receivedAt ?? s.placedAt!,
+        );
         try {
           const v = await recordedSaleSource(tx, s.id);
           Object.assign(r, {

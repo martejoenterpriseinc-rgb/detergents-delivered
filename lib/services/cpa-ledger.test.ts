@@ -55,7 +55,15 @@ it("uses full Chicago DST day and environment filters for each independent event
   expect(mock.sales).toHaveBeenCalledWith(
     expect.objectContaining({
       where: expect.objectContaining({
-        placedAt: dates,
+        OR: [
+          { checkoutAttempt: { paymentMethod: "STRIPE" }, placedAt: dates },
+          {
+            checkoutAttempt: {
+              paymentMethod: { in: ["CASH", "ZELLE"] },
+              manualSettlement: { receivedAt: dates },
+            },
+          },
+        ],
         checkoutAttempt: { state: "PAID", livemode: false },
       }),
     }),
@@ -116,4 +124,19 @@ it("keeps a return with missing cost noncash and leaves its cost unknown", async
     rewardCents: 0,
     costCents: null,
   });
+});
+
+it("dates a manual receipt independently of later order finalization", async () => {
+  mock.sales.mockResolvedValue([
+    {
+      id: "manual",
+      number: "manual",
+      placedAt: new Date("2026-03-09T06:00:00Z"),
+      checkoutAttempt: {
+        manualSettlement: { receivedAt: new Date("2026-03-09T04:59:59Z") },
+      },
+    },
+  ]);
+  const result = await readCpaLedger("cpa", { from: "2026-03-08", to: "2026-03-08" });
+  expect(result.rows[0].date).toBe("2026-03-08");
 });

@@ -1,3 +1,4 @@
+import { readCpaLedger } from "@/lib/services/cpa-ledger";
 import { recordedSaleSource } from "@/lib/services/sales-refund-source";
 import { recordedOrderCost } from "@/lib/services/quickbooks-cost-source";
 import { issueCommerceGrant, revokeCommerceGrant } from "@/lib/services/commerce-grants";
@@ -897,6 +898,14 @@ it("settles approved manual funds once through shared stock, rewards, route and 
     (await prisma.$transaction((tx) => recordedOrderCost(tx, before.orderId!)))
       .amountCents,
   ).toBeGreaterThan(0);
+  const receiptDay = businessDate(new Date(d.receivedAt));
+  const ledger = await readCpaLedger(f.admin.id, {
+    orderId: before.orderId!,
+    from: receiptDay,
+    to: receiptDay,
+  });
+  expect(ledger).toMatchObject({ count: 1, attention: 0 });
+  expect(ledger.rows[0]).toMatchObject({ date: receiptDay, cashCents: q.totalCents });
   await prisma.manualCheckoutSettlement.update({
     where: { id: r1.id },
     data: { taxEvidence: { invalid: true } },
