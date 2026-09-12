@@ -26,6 +26,11 @@ export function tipAccounting(
     amountCents: number;
     reversalOfId: string | null;
   }[],
+  allocations: readonly {
+    providerRefundId: string;
+    cashCents: number;
+    taxCents: number;
+  }[] = [],
 ) {
   if (
     !Number.isSafeInteger(amountCents) ||
@@ -72,21 +77,54 @@ export function tipAccounting(
       paidCents -= p.amountCents;
     } else throw Error("Invalid payout entry");
   }
+  const successful = refunds.filter((r) => r.status === "succeeded");
+  const allocated = new Map<string, { cashCents: number; taxCents: number }>();
+  for (const a of allocations) {
+    if (
+      allocated.has(a.providerRefundId) ||
+      !Number.isSafeInteger(a.cashCents) ||
+      !Number.isSafeInteger(a.taxCents) ||
+      a.cashCents <= 0 ||
+      a.taxCents < 0 ||
+      a.taxCents > a.cashCents
+    )
+      throw Error("Invalid tip tax allocation");
+    allocated.set(a.providerRefundId, a);
+  }
+  let allocatedTip = 0,
+    allocatedTax = 0;
+  for (const r of successful) {
+    const a = allocated.get(r.id);
+    if (a) {
+      if (a.cashCents !== r.amountCents)
+        throw Error("Tip refund allocation amount changed");
+      allocatedTip += a.cashCents - a.taxCents;
+      allocatedTax += a.taxCents;
+    }
+  }
+  if (allocatedTip > amountCents || allocatedTax > totalCents - amountCents)
+    throw Error("Tip refund allocation exceeds original payment");
+  // A failed/refunded-back debit does not consume the previously matched allocation.
+  const matched = successful.length > 0 && successful.every((r) => allocated.has(r.id));
   const partialRefund = refundedCashCents > 0 && refundedCashCents < totalCents;
-  const refundedTipCents = partialRefund
-    ? null
-    : refundedCashCents === totalCents
-      ? amountCents
-      : 0;
+  const unresolvedPartial = partialRefund && !matched;
+  const refundedTipCents = matched
+    ? allocatedTip
+    : partialRefund
+      ? null
+      : refundedCashCents === totalCents
+        ? amountCents
+        : 0;
   const owedCents =
     refundedTipCents === null ? null : amountCents - refundedTipCents - paidCents;
   return {
     refundedCashCents,
     refundedTipCents,
     paidCents,
-    review: review || partialRefund,
-    payableCents: review || partialRefund ? 0 : Math.max(0, owedCents!),
+    review: review || unresolvedPartial,
+    payableCents: review || unresolvedPartial ? 0 : Math.max(0, owedCents!),
     recoverableCents: owedCents === null ? null : Math.max(0, -owedCents),
-    taxRefundEvidence: "UNVERIFIED" as const,
+    taxRefundEvidence: matched ? ("MATCHED" as const) : ("UNVERIFIED" as const),
+    refundedTaxCents: matched ? allocatedTax : null,
   };
 }

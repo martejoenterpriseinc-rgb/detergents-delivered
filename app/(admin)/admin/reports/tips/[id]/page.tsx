@@ -1,3 +1,4 @@
+import { TipRefundTaxForm } from "@/components/admin/tip-refund-tax-form";
 import Link from "next/link";
 import { requireRole } from "@/lib/authz";
 import { prisma } from "@/lib/prisma";
@@ -39,6 +40,9 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
       <div className="grid gap-3 sm:grid-cols-2">
         <p>Original tip: {money(data.amountCents)}</p>
         <p>Refunded cash including tax: {money(data.refundedCashCents)}</p>
+        <p>Refunded tip: {money(data.refundedTipCents)}</p>
+        <p>Refunded tax: {money(data.refundedTaxCents)}</p>
+        <p>Tax evidence: {data.taxRefundEvidence}</p>
         <p>Net driver transfers: {money(data.paidCents)}</p>
         <p>Available to pay: {money(data.disputed ? 0 : data.payableCents)}</p>
         <p>Recoverable from driver: {money(data.recoverableCents)}</p>
@@ -72,6 +76,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
           <p>{e.reason}</p>
         </article>
       ))}
+      {canWrite && <TipRefundTaxForm tipId={id} refunds={data.refunds} />}
       {canWrite && <TipPayoutForm tipId={id} transfers={reversible} />}
     </div>
   );

@@ -11,3 +11,24 @@ The additive `20260917010000_tip_payout_accounting` migration adds only `TipPayo
 Validation added: domain tests for tax exclusion, refunds after payout, pending/partial refund holds, returned balances, exact reversal and duplicate evidence; provider tests isolate dedicated tip metadata; native tests cover authorization, duplicate concurrency, excess/reused requests, retained originals, refunds after payout, reversals and audit rollback. Native/production acceptance must be recorded from their actual runs.
 
 Remaining tip work: initiation and recovery of app-requested refunds, partial tip/tax allocation backed by provider evidence, QuickBooks liability/refund/payout posting, scheduled tip refund monitoring, native/browser acceptance and real provider acceptance. No API credentials were connected and no real transfer or refund was initiated.
+
+## Matched partial tip/tax allocations
+
+The tip accounting screen now accepts a completed refund, completed Stripe itemized tax
+report run ID and refunded tax amount for verification. The existing bounded report API
+reader binds the original Checkout session, payment intent, refund ID, currency, original
+cash/tax totals and reversal totals. Staff-entered amounts alone cannot create evidence.
+
+An immutable, deterministically keyed audit receipt records the report/file/hash, original
+and refund tax transaction IDs, intended account/environment and exact cash/tax allocation.
+Concurrent/repeated matching preserves one record. A changed tax transaction or allocation
+conflicts. Original payment, order, tax, rewards and payout entries remain unchanged.
+
+Partial refunds with complete matched allocations reduce driver entitlement by refunded
+cash minus refunded tax. Already-paid entitlement becomes recoverable. Pending refunds,
+disputes, missing debit evidence or incomplete allocations continue to block new payments.
+Failed refunds do not consume a prior allocation; existing returned-balance verification
+still applies. Cumulative allocations cannot exceed original tip or tax amounts.
+
+This reads existing provider evidence. It does not initiate a refund, submit a tax correction,
+or post a QuickBooks entry. Those workflows and live provider acceptance remain open.
