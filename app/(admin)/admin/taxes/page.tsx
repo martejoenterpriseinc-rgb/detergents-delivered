@@ -124,7 +124,7 @@ export default async function Page({
             <strong>{money(row.taxCents)}</strong>
             {row.canMatch && <TaxEvidence adjustmentId={row.id} />}
             {row.manualRefundUrl && (
-              <Link href={row.manualRefundUrl}>Manual refund tax verification</Link>
+              <Link href={`/admin/payments/manual/${row.orderId}`}>Manual refund tax verification</Link>
             )}
           </article>
         ))}
