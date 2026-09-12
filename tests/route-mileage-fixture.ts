@@ -13,7 +13,7 @@ export async function mileageFixture(db: PrismaClient, passwordHash?: string) {
     users.push(
       await db.user.create({
         data: {
-          email: `mileage-${code}-${users.length}-${marker}@example.test`,
+          email: `mileage-${code.toLowerCase()}-${users.length}-${marker}@example.test`,
           passwordHash,
           userRoles: { create: { roleId: role.id } },
         },
@@ -61,6 +61,10 @@ export async function mileageFixture(db: PrismaClient, passwordHash?: string) {
     route,
     vehicle,
     cleanup: async () => {
+      await db.route.update({
+        where: { id: route.id },
+        data: { serviceDate: new Date("2000-01-01T00:00:00Z") },
+      });
       await db.user.updateMany({
         where: { id: { in: users.map((u) => u.id) } },
         data: { deletedAt: new Date() },
