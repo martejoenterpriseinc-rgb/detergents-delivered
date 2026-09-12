@@ -131,3 +131,14 @@ jobs:
             playwright-report
             test-results
           retention-days: 14
+
+      - name: Preserve finance workflow screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: finance-workflow-screenshots
+          path: |
+            test-results/**/route-mileage.png
+            test-results/**/manual-payment-approvals.png
+            test-results/**/delivery-tips.png
+          retention-days: 14

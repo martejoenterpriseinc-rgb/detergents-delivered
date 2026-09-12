@@ -240,6 +240,14 @@ export function CustomerDirectory({
                       <div>
                         <strong>{c.name}</strong>
                         <small>{c.email}</small>
+                        <Link
+                          className="text-sm underline"
+                          href={{
+                            pathname: `/admin/customers/${c.id}/payment-approvals`,
+                          }}
+                        >
+                          Cash / Zelle approvals
+                        </Link>
                       </div>
                     </div>
                   </td>
