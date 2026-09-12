@@ -127,3 +127,15 @@ it("does not reuse matched tax evidence for another refund or retain a failed re
     taxRefundEvidence: "UNVERIFIED",
   });
 });
+
+it("holds payouts if previously matched refund evidence disappears from the complete provider history", () => {
+  expect(
+    tipAccounting(
+      100,
+      108,
+      [],
+      [],
+      [{ providerRefundId: "re_missing", cashCents: 54, taxCents: 4 }],
+    ),
+  ).toMatchObject({ review: true, payableCents: 0 });
+});

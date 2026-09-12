@@ -90,6 +90,7 @@ export function tipAccounting(
     )
       throw Error("Invalid tip tax allocation");
     allocated.set(a.providerRefundId, a);
+    if (!refunds.some((r) => r.id === a.providerRefundId)) review = true;
   }
   let allocatedTip = 0,
     allocatedTax = 0;

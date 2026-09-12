@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { AccountError } from "@/lib/domain/account";
 import { businessDate } from "@/lib/domain/operations";
