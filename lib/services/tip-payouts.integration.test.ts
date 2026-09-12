@@ -27,6 +27,7 @@ async function fixture() {
     totalCents: 108,
     paymentIntentId: `pi_${id}`,
     stripeSessionId: `cs_${id}`,
+    stripeCustomerId: `cus_${id}`,
   };
   const tip = await prisma.deliveryTip.create({
     data: {
