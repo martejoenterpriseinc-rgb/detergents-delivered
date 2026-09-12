@@ -141,6 +141,11 @@ export async function recordTipPayout(actor: string, raw: unknown) {
     if (data.paidOn < businessDate(current.tip.paidAt!))
       throw new AccountError("Transfer date precedes the tip payment.", 409);
     const entries = await tx.tipPayoutEntry.findMany({ where: { tipId: data.tipId } });
+    if (entries.some((entry) => entry.reference === data.reference))
+      throw new AccountError(
+        "This receipt reference is already recorded for the tip.",
+        409,
+      );
     const accounting = tipAccounting(
       current.tip.amountCents,
       current.tip.totalCents!,
