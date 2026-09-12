@@ -187,6 +187,7 @@ export function verifyManualTaxReversal(
 export async function executeManualTaxReversal(
   b: ManualTaxReversalBinding,
   recoveredId?: string,
+  authorizeCreate?: () => Promise<void>,
 ) {
   const c = await readCommerce(true);
   if (c.accountId !== b.accountId || c.live !== b.live) throw fail();
@@ -206,6 +207,10 @@ export async function executeManualTaxReversal(
     current.key !== c.key
   )
     throw fail();
+  if (!recoveredId) {
+    if (!authorizeCreate) throw fail();
+    await authorizeCreate();
+  }
   const t = recoveredId
     ? await stripe.tax.transactions.retrieve(
         recoveredId,

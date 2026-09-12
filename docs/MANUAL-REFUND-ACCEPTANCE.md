@@ -21,7 +21,8 @@ by building or testing this change.
   stock returns stay in their existing workflow and are never inferred from a refund.
 - Separate manual tax reversal submission binds the original standalone Stripe Tax sale,
   account/mode, address, original tax line IDs and exact negative net/tax allocations.
-  The durable claim commits before the provider create call. There is no automatic second
+  The durable claim commits before the provider create call. Staff authority and original
+  evidence are rechecked after provider reads and immediately before creation. There is no automatic second
   create. Lost outcomes require an existing tax reversal ID for GET-only recovery.
 - Verified reversal evidence and its audit are append-only. Money returned is recognized
   independently of provider tax evidence. The CPA and tax views use original manual sale
@@ -45,7 +46,7 @@ records: `20260917040000_manual_refund_receipts` and
 
 ## Validation and remaining launch gates
 
-Local typecheck, ESLint and 420 unit tests pass at the tax/evidence increment. Native tests
+Local typecheck, ESLint and 421 unit tests pass at the tax/evidence increment. Native tests
 cover concurrent receipts, full and partial capacity, wrong methods/amounts/times, audit
 rollback, source tampering, reward conservation, CPA/live gating and GET-only tax recovery.
 Three-width browser coverage exercises the actual partial-return form and an intentionally

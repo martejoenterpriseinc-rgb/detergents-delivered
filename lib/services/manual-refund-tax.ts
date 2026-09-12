@@ -150,6 +150,20 @@ export async function reconcileManualRefundTax(actor: string, raw: unknown) {
   const observed = await executeManualTaxReversal(
     before.s.binding,
     d.taxTransactionId,
+    async () => {
+      await prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT id FROM "Order" WHERE id=${d.orderId} FOR UPDATE`;
+        const current = await snapshot(tx, actor, d);
+        if (
+          manualRefundDigest(current) !== manualRefundDigest(before.s) ||
+          (await verifiedManualRefundTax(tx, d.requestId))
+        )
+          throw new AccountError(
+            "Refund authority or evidence changed before tax submission.",
+            409,
+          );
+      });
+    },
   ).catch(() => {
     throw new AccountError(
       "Tax submission could not be confirmed. Preserve the returned-money receipt and recover the existing tax reversal by ID.",

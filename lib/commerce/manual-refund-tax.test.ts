@@ -169,7 +169,7 @@ it("rejects mismatched originals, partial line lists and wrong reversal amounts"
   ).toThrow();
 });
 it("creates once with a stable key, while recovery only retrieves", async () => {
-  await executeManualTaxReversal(binding);
+  await executeManualTaxReversal(binding, undefined, async () => {});
   expect(mocks.create).toHaveBeenCalledTimes(1);
   expect(mocks.create.mock.calls[0][1]).toMatchObject({
     idempotencyKey: "dd-manual-refund:refund",
@@ -187,5 +187,15 @@ it("refuses account or configuration changes before creating a reversal", async 
     .mockResolvedValueOnce({ accountId: "acct_test", live: false, key: "old" })
     .mockResolvedValueOnce({ accountId: "acct_test", live: false, key: "new" });
   await expect(executeManualTaxReversal(binding)).rejects.toThrow();
+  expect(mocks.create).not.toHaveBeenCalled();
+});
+
+it("requires current staff authorization after provider reads and before tax creation", async () => {
+  await expect(executeManualTaxReversal(binding)).rejects.toThrow();
+  expect(mocks.create).not.toHaveBeenCalled();
+  const authorize = vi.fn().mockRejectedValue(new Error("Synthetic revoked permission"));
+  await expect(executeManualTaxReversal(binding, undefined, authorize)).rejects.toThrow();
+  expect(authorize).toHaveBeenCalledOnce();
+  expect(mocks.retrieve).toHaveBeenCalled();
   expect(mocks.create).not.toHaveBeenCalled();
 });
