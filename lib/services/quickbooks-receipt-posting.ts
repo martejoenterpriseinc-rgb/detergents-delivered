@@ -35,13 +35,15 @@ import {
 } from "./quickbooks-receipt-drafts";
 import { recordedSaleSource, recordedRefundSource } from "./sales-refund-source";
 const idSchema = z.string().min(1).max(100);
-async function retainReceiptReadFailure(id: string) {
+async function retainReceiptReadFailure(id: string, checked = true) {
   // A transient read error cannot erase a known failed-refund correction obligation.
   await prisma.$transaction(async (tx) => {
-    await tx.qboReceiptExport.update({
-      where: { id },
-      data: { recoveryCheckedAt: new Date() },
-    });
+    await tx.$queryRaw`SELECT id FROM "QboReceiptExport" WHERE id=${id} FOR UPDATE`;
+    if (checked)
+      await tx.qboReceiptExport.update({
+        where: { id },
+        data: { recoveryCheckedAt: new Date() },
+      });
     await tx.qboReceiptExport.updateMany({
       where: {
         id,
@@ -290,7 +292,8 @@ export async function submitQuickbooksReceipt(actor: string, id: string) {
       where: { id, status: "SUBMITTING" },
       data: { status: "UNKNOWN" },
     });
-    await retainReceiptReadFailure(id);
+    // Submission is not a recovery read. Keep the first worker check immediately due.
+    await retainReceiptReadFailure(id, false);
     throw new AccountError(
       "Receipt submission was not confirmed. Reconcile this export before any further accounting action.",
       503,
