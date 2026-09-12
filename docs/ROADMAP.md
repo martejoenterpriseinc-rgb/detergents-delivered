@@ -1,6 +1,6 @@
 # Roadmap
 
-Current remaining work and API-last sequence: [September 12 Go Live build audit](REMAINING-GO-LIVE-BUILD.md). This includes earlier tipping, approved manual payments, measured route mileage and CPA reporting requirements that are not complete merely because core checkout and receipt tests pass.
+Current remaining work and API-last sequence: [September 12 Go Live build audit](REMAINING-GO-LIVE-BUILD.md). This includes earlier tipping, approved manual payments, measured route mileage and remaining reporting requirements. The CPA financial event ledger passed PR 68 / CI 156; it does not establish bank reconciliation or complete financial statements.
 
 Current owner-directed build scope: [full build and go-live contract](GO-LIVE-BUILD-CONTRACT.md). It includes the Render application authority, preferred storefront, dynamic ZIP map, matching responsive Website Builder, durable photos, Google login and password recovery. Reconcile the older phase statuses below against tested source before claiming completion.
 
@@ -21,7 +21,7 @@ The older phase boxes below are not a current launch verdict. Source and accepta
 | Loyalty, referral and promotions | `LOYALTY_DELIVERY.md`, `LAUNCH-OFFERS.md`, `REFUND-SETTLEMENT.md` | Provider-backed lifecycle acceptance |
 | Shared storefront and Website Builder | `STOREFRONT-BUILDER.md`, `API-ROW-EDITOR-RELEASE.md` | Hosted durable photo and redeploy acceptance |
 | Quarterly subscriptions | `QUARTERLY-SUBSCRIPTIONS.md`, `QUARTERLY-CHECKOUT-CYCLES.md` | Customer-reviewed payment acceptance; no automatic off-session charging is asserted |
-| Expenses, mileage and CPA reports | `FINANCE-RECORDS.md` | Intended operating records and provider reconciliation acceptance |
+| Expenses, mileage and CPA reports | `FINANCE-RECORDS.md`, `CPA-FINANCIAL-LEDGER.md` | Intended operating records and provider reconciliation acceptance |
 | Catalog exchange and scoped commerce gateway | `CATALOG-FILE-EXCHANGE.md`, `SCOPED-COMMERCE-GATEWAY.md` | Real catalog/stock review and scoped client acceptance |
 | QuickBooks expense, cost and receipt exports | `QUICKBOOKS-EXPENSE-POSTING.md`, `QUICKBOOKS-COST-JOURNALS.md`, `QUICKBOOKS-RECEIPT-DRAFTS.md`, `QUICKBOOKS-RECEIPT-POSTING.md` | Receipt posting passed full CI 149; real company acceptance and compensation accounting remain |
 | Hosted operations and retained records | `PRODUCTION-OPERATIONS.md`, `BUILD-RELEASE-CANDIDATE.md` | Exact release integration, current backup/restore proof, retained-record verification and production health |
@@ -114,7 +114,8 @@ The historical phase boxes below remain an archive of the initial plan, not a cu
 
 - [ ] Expense capture
 - [ ] Mileage trips
-- [ ] CPA Center read models
+- [x] CPA Center expense/mileage and source-verified financial event read models (PR 68 / CI 156)
+- [ ] Complete financial statements and bank reconciliation
 
 ## Phase 7 — Import/export, QuickBooks
 
