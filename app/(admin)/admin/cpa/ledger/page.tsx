@@ -36,9 +36,10 @@ export default async function Page({
     to: data.filter.to,
     ...(data.filter.orderId ? { orderId: data.filter.orderId } : {}),
   });
-  const pageLink = (page: number) =>
-    "/admin/cpa/ledger?" +
-    new URLSearchParams({ ...Object.fromEntries(query), page: String(page) });
+  const pageLink = (page: number) => ({
+    pathname: "/admin/cpa/ledger",
+    query: { ...Object.fromEntries(query), page: String(page) },
+  });
   const amount = (v: number | null) =>
     v === null ? "Needs review" : formatCents(v || 0);
   const names = {
@@ -88,10 +89,10 @@ export default async function Page({
           Filtered to one order.{" "}
           <Link
             className="underline"
-            href={
-              "/admin/cpa/ledger?" +
-              new URLSearchParams({ from: data.filter.from, to: data.filter.to })
-            }
+            href={{
+              pathname: "/admin/cpa/ledger",
+              query: { from: data.filter.from, to: data.filter.to },
+            }}
           >
             Show all orders for these dates
           </Link>
