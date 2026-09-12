@@ -76,3 +76,66 @@ it("requires explicit receipt confirmation, whole cents and evidence notes", () 
     }).success,
   ).toBe(false);
 });
+
+it("uses matched partial tax evidence to preserve driver entitlement without paying tax", () => {
+  const allocation = { providerRefundId: "re_synthetic", cashCents: 54, taxCents: 4 };
+  expect(tipAccounting(100, 108, [refund(54)], [], [allocation])).toMatchObject({
+    refundedTipCents: 50,
+    refundedTaxCents: 4,
+    payableCents: 50,
+    taxRefundEvidence: "MATCHED",
+    review: false,
+  });
+  expect(tipAccounting(100, 108, [refund(54)], [payout], [allocation])).toMatchObject({
+    payableCents: 0,
+    recoverableCents: 50,
+  });
+  expect(() =>
+    tipAccounting(100, 108, [refund(54)], [], [{ ...allocation, taxCents: 9 }]),
+  ).toThrow();
+  expect(() =>
+    tipAccounting(100, 108, [refund(54)], [], [{ ...allocation, cashCents: 53 }]),
+  ).toThrow();
+  expect(() =>
+    tipAccounting(100, 108, [refund(54)], [], [allocation, allocation]),
+  ).toThrow();
+});
+it("does not reuse matched tax evidence for another refund or retain a failed refund deduction", () => {
+  const allocation = { providerRefundId: "re_old", cashCents: 54, taxCents: 4 };
+  expect(tipAccounting(100, 108, [refund(54)], [], [allocation])).toMatchObject({
+    review: true,
+    payableCents: 0,
+  });
+  expect(
+    tipAccounting(
+      100,
+      108,
+      [
+        {
+          ...refund(54),
+          id: "re_old",
+          status: "failed",
+          failureBalanceTransactionId: "txn_return",
+        },
+      ],
+      [],
+      [allocation],
+    ),
+  ).toMatchObject({
+    refundedTipCents: 0,
+    payableCents: 100,
+    taxRefundEvidence: "UNVERIFIED",
+  });
+});
+
+it("holds payouts if previously matched refund evidence disappears from the complete provider history", () => {
+  expect(
+    tipAccounting(
+      100,
+      108,
+      [],
+      [],
+      [{ providerRefundId: "re_missing", cashCents: 54, taxCents: 4 }],
+    ),
+  ).toMatchObject({ review: true, payableCents: 0 });
+});

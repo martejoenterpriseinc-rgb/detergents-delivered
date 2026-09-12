@@ -1,88 +1,17 @@
 import { createHash } from "node:crypto";
-import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { AccountError } from "@/lib/domain/account";
 import { businessDate } from "@/lib/domain/operations";
 import { tipPayoutInput, tipAccounting } from "@/lib/domain/tip-accounting";
 import {
-  inspectStripeTipRefunds,
-  verifyRefundBalanceEvidence,
-} from "@/lib/commerce/refund-provider";
-import { canonicalJson } from "@/lib/commerce/domain";
-import { financeAccess } from "./finance";
+  tipAccountingSource as source,
+  observeTipRefunds as observe,
+} from "./tip-accounting-source";
+import { tipRefundTaxAllocations } from "./tip-refund-tax";
 const fail = () =>
   new AccountError("Tip accounting requires verified payment evidence.", 409);
-async function source(tx: Prisma.TransactionClient, tipId: string) {
-  const tip = await tx.deliveryTip.findUnique({ where: { id: tipId } });
-  if (
-    !tip ||
-    tip.state !== "PAID" ||
-    !tip.paymentIntentId ||
-    !tip.stripeSessionId ||
-    !tip.paidAt ||
-    tip.currency !== "USD" ||
-    tip.taxCents === null ||
-    tip.totalCents !== tip.amountCents + tip.taxCents
-  )
-    throw fail();
-  const driver = (tip.source as Record<string, unknown>)?.driverUserId;
-  if (typeof driver !== "string" || !driver) throw fail();
-  const audit = await tx.auditLog.findMany({
-    where: {
-      entityType: "DeliveryTip",
-      entityId: tip.id,
-      action: "delivery.tip.reconciled",
-    },
-    select: { afterJson: true },
-  });
-  if (
-    !audit.some((a) => {
-      const e = a.afterJson as Record<string, unknown> | null;
-      return (
-        e?.state === "PAID" &&
-        e.source === "stripe-api" &&
-        e.accountId === tip.stripeAccountId &&
-        e.livemode === tip.livemode &&
-        e.paymentIntentId === tip.paymentIntentId &&
-        e.stripeSessionId === tip.stripeSessionId &&
-        e.taxCents === tip.taxCents &&
-        e.totalCents === tip.totalCents
-      );
-    })
-  )
-    throw fail();
-  return { tip, driver };
-}
-async function observe(tip: Awaited<ReturnType<typeof source>>["tip"]) {
-  const observation = await inspectStripeTipRefunds({
-    accountId: tip.stripeAccountId,
-    live: tip.livemode,
-    paymentIntentId: tip.paymentIntentId!,
-    checkoutId: tip.id,
-    amountCents: tip.totalCents!,
-    currency: "USD",
-  });
-  for (const refund of observation.refunds) {
-    if (
-      ["failed", "canceled"].includes(refund.status) &&
-      refund.failureBalanceTransactionId
-    ) {
-      await verifyRefundBalanceEvidence(
-        {
-          accountId: tip.stripeAccountId,
-          live: tip.livemode,
-          paymentIntentId: tip.paymentIntentId!,
-          checkoutId: tip.id,
-          amountCents: tip.totalCents!,
-          currency: "USD",
-        },
-        refund,
-        true,
-      );
-    }
-  }
-  return observation;
-}
+import { canonicalJson } from "@/lib/commerce/domain";
+import { financeAccess } from "./finance";
 export async function readTipAccounting(actor: string, tipId: string) {
   await financeAccess(prisma, actor);
   const { tip, driver } = await source(prisma, tipId);
@@ -97,7 +26,13 @@ export async function readTipAccounting(actor: string, tipId: string) {
     amountCents: tip.amountCents,
     checkedAt: new Date().toISOString(),
     disputed: observation.disputed,
-    ...tipAccounting(tip.amountCents, tip.totalCents!, observation.refunds, entries),
+    ...tipAccounting(
+      tip.amountCents,
+      tip.totalCents!,
+      observation.refunds,
+      entries,
+      await tipRefundTaxAllocations(prisma, tip),
+    ),
     entries,
     refunds: observation.refunds.map((r) => ({
       id: r.id,
@@ -151,6 +86,7 @@ export async function recordTipPayout(actor: string, raw: unknown) {
       current.tip.totalCents!,
       observation.refunds,
       entries,
+      await tipRefundTaxAllocations(tx, current.tip),
     );
     if (data.reversalOfId) {
       const parent = entries.find(

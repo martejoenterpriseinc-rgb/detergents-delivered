@@ -4,8 +4,10 @@ import { afterAll, beforeEach, expect, it, vi } from "vitest";
 import { prisma } from "@/lib/prisma";
 import { deliveryTipFixture } from "@/tests/delivery-tip-fixture";
 import { businessDate } from "@/lib/domain/operations";
-const m = vi.hoisted(() => ({ inspect: vi.fn() }));
+const m = vi.hoisted(() => ({ inspect: vi.fn(), report: vi.fn() }));
 vi.mock("@/lib/commerce/refund-provider", () => ({ inspectStripeTipRefunds: m.inspect }));
+vi.mock("@/lib/commerce/tax-report", () => ({ readRefundTaxEvidence: m.report }));
+import { matchTipRefundTax } from "./tip-refund-tax";
 import { recordTipPayout, readTipAccounting } from "./tip-payouts";
 beforeEach(() => {
   vi.resetAllMocks();
@@ -166,6 +168,141 @@ it("rolls back the transfer if its permanent audit cannot be saved", async () =>
   } finally {
     await prisma.$executeRawUnsafe(`DROP TRIGGER IF EXISTS ${name} ON "AuditLog"`);
     await prisma.$executeRawUnsafe(`DROP FUNCTION IF EXISTS ${name}()`);
+    await f.cleanup();
+  }
+});
+
+it("matches one audited partial tax allocation across retries and pays only the remaining driver entitlement", async () => {
+  const f = await fixture();
+  const input = {
+    tipId: f.tip.id,
+    providerRefundId: "re_syntheticpartial",
+    reportRunId: "frr_synthetic",
+    taxCents: 4,
+    confirmed: true,
+  };
+  m.inspect.mockResolvedValue({
+    disputed: false,
+    refunds: [
+      {
+        id: input.providerRefundId,
+        amountCents: 54,
+        currency: "USD",
+        status: "succeeded",
+        balanceTransactionId: "txn_synthetic",
+      },
+    ],
+  });
+  m.report.mockResolvedValue({
+    originalTaxTransactionId: "tax_original",
+    refundTaxTransactionId: "tax_reversal",
+    taxCents: 4,
+    reportRunId: input.reportRunId,
+    fileId: "file_synthetic",
+    reportHash: "a".repeat(64),
+  });
+  try {
+    await expect(matchTipRefundTax(f.driver.id, input)).rejects.toMatchObject({
+      status: 403,
+    });
+    expect(m.report).not.toHaveBeenCalled();
+    expect((await readTipAccounting(f.userId, f.tip.id)).payableCents).toBe(0);
+    const [a, b] = await Promise.all([
+      matchTipRefundTax(f.userId, input),
+      matchTipRefundTax(f.userId, input),
+    ]);
+    expect(a.id).toBe(b.id);
+    expect(m.report).toHaveBeenCalledWith(
+      input.reportRunId,
+      expect.objectContaining({
+        paymentIntentId: f.tip.paymentIntentId,
+        sessionId: f.tip.stripeSessionId,
+        refundCents: 54,
+        refundTaxCents: 4,
+      }),
+    );
+    expect(await readTipAccounting(f.userId, f.tip.id)).toMatchObject({
+      refundedTipCents: 50,
+      refundedTaxCents: 4,
+      payableCents: 50,
+      taxRefundEvidence: "MATCHED",
+      review: false,
+    });
+    await expect(recordTipPayout(f.userId, f.input)).rejects.toMatchObject({
+      status: 409,
+    });
+    await recordTipPayout(f.userId, { ...f.input, amountCents: 50 });
+    expect((await readTipAccounting(f.userId, f.tip.id)).payableCents).toBe(0);
+    expect(
+      await prisma.auditLog.count({
+        where: { entityId: f.tip.id, action: "delivery.tip.refund-tax.matched" },
+      }),
+    ).toBe(1);
+    expect(await prisma.deliveryTip.findUnique({ where: { id: f.tip.id } })).toEqual(
+      f.tip,
+    );
+    m.report.mockResolvedValueOnce({
+      originalTaxTransactionId: "tax_original",
+      refundTaxTransactionId: "tax_different",
+      taxCents: 4,
+      reportRunId: input.reportRunId,
+      fileId: "file_synthetic",
+      reportHash: "b".repeat(64),
+    });
+    await expect(matchTipRefundTax(f.userId, input)).rejects.toMatchObject({
+      status: 409,
+    });
+  } finally {
+    await f.cleanup();
+  }
+});
+it("never saves tax allocation after a report mismatch or for a pending refund", async () => {
+  const f = await fixture();
+  const input = {
+    tipId: f.tip.id,
+    providerRefundId: "re_syntheticpartial",
+    reportRunId: "frr_synthetic",
+    taxCents: 4,
+    confirmed: true,
+  };
+  try {
+    m.inspect.mockResolvedValue({
+      disputed: false,
+      refunds: [
+        {
+          id: input.providerRefundId,
+          amountCents: 54,
+          currency: "USD",
+          status: "pending",
+          balanceTransactionId: null,
+        },
+      ],
+    });
+    await expect(matchTipRefundTax(f.userId, input)).rejects.toMatchObject({
+      status: 409,
+    });
+    expect(m.report).not.toHaveBeenCalled();
+    m.inspect.mockResolvedValue({
+      disputed: false,
+      refunds: [
+        {
+          id: input.providerRefundId,
+          amountCents: 54,
+          currency: "USD",
+          status: "succeeded",
+          balanceTransactionId: "txn_synthetic",
+        },
+      ],
+    });
+    m.report.mockRejectedValue(new Error("Synthetic report mismatch"));
+    await expect(matchTipRefundTax(f.userId, input)).rejects.toThrow();
+    expect(
+      await prisma.auditLog.count({
+        where: { entityId: f.tip.id, action: "delivery.tip.refund-tax.matched" },
+      }),
+    ).toBe(0);
+    expect((await readTipAccounting(f.userId, f.tip.id)).payableCents).toBe(0);
+  } finally {
     await f.cleanup();
   }
 });
