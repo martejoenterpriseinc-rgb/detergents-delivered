@@ -92,6 +92,17 @@ function refundObservation(
 export async function inspectStripeRefunds(
   raw: RefundPaymentBinding,
 ): Promise<RefundPaymentObservation> {
+  return inspectBoundRefunds(raw, "checkoutId");
+}
+
+/** A tip uses its own PaymentIntent metadata, never the merchandise checkout. */
+export async function inspectStripeTipRefunds(raw: RefundPaymentBinding) {
+  return inspectBoundRefunds(raw, "tipId");
+}
+async function inspectBoundRefunds(
+  raw: RefundPaymentBinding,
+  identityField: "checkoutId" | "tipId",
+) {
   const binding = paymentBinding.parse(raw);
   const config = await readCommerce(true);
   if (config.accountId !== binding.accountId || config.live !== binding.live)
@@ -111,7 +122,7 @@ export async function inspectStripeRefunds(
     payment.amount_received !== binding.amountCents ||
     payment.currency !== binding.currency.toLowerCase() ||
     payment.metadata.project !== "detergents-delivered" ||
-    payment.metadata.checkoutId !== binding.checkoutId ||
+    payment.metadata[identityField] !== binding.checkoutId ||
     !chargeId
   )
     throw fail();

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { requireRole } from "@/lib/authz";
 import { readTipReport } from "@/lib/services/tip-report";
 const money = (n: number | null) =>
@@ -67,6 +68,14 @@ export default async function Page({
             {money(r.totalCents)}
           </p>
           <p className="text-sm break-all">Assigned driver record: {r.driverUserId}</p>
+          {r.verified && (
+            <Link
+              className="inline-flex min-h-12 items-center font-semibold underline"
+              href={`/admin/reports/tips/${r.id}`}
+            >
+              Refund and payout accounting
+            </Link>
+          )}
         </article>
       ))}
     </div>

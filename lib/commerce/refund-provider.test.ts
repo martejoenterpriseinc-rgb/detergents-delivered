@@ -20,6 +20,7 @@ vi.mock("./stripe", () => ({
 }));
 import {
   inspectStripeRefunds,
+  inspectStripeTipRefunds,
   matchProviderRefunds,
   submitClaimedStripeRefund,
   verifyRefundBalanceEvidence,
@@ -433,4 +434,16 @@ describe("verified returned-funds evidence", () => {
     await verifyRefundBalanceEvidence(binding, refund(), false);
     expect(mocks.balance).not.toHaveBeenCalled();
   });
+});
+
+it("tip refunds require the dedicated tip metadata and cannot borrow a merchandise payment", async () => {
+  await expect(inspectStripeTipRefunds(binding)).rejects.toThrow();
+  mocks.payment.mockResolvedValue({
+    ...payment,
+    metadata: { tipId: binding.checkoutId, project: "detergents-delivered" },
+  });
+  expect((await inspectStripeTipRefunds(binding)).paymentIntentId).toBe(
+    binding.paymentIntentId,
+  );
+  await expect(inspectStripeRefunds(binding)).rejects.toThrow();
 });
