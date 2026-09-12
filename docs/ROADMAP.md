@@ -1,6 +1,6 @@
 # Roadmap
 
-Current remaining work and API-last sequence: [September 12 Go Live build audit](REMAINING-GO-LIVE-BUILD.md). This includes earlier tipping, approved manual payments, measured route mileage and remaining reporting requirements. The CPA financial event ledger passed PR 68 / CI 156; it does not establish bank reconciliation or complete financial statements.
+Current remaining work and API-last sequence: [September 12 Go Live build audit](REMAINING-GO-LIVE-BUILD.md). This distinguishes implemented tipping, manual-payment approval and measured route-mileage controls from remaining settlement, tip accounting and provider acceptance requirements. The CPA financial event ledger passed PR 68 / CI 156; it does not establish bank reconciliation or complete financial statements.
 
 Current owner-directed build scope: [full build and go-live contract](GO-LIVE-BUILD-CONTRACT.md). It includes the Render application authority, preferred storefront, dynamic ZIP map, matching responsive Website Builder, durable photos, Google login and password recovery. Reconcile the older phase statuses below against tested source before claiming completion.
 
@@ -12,19 +12,19 @@ Later phases stay unchecked until implemented.
 
 The older phase boxes below are not a current launch verdict. Source and acceptance evidence in the following documents supersede stale descriptions such as “tax stub” or “local-only uploads.” Broad phase completion remains unchecked where related workflows or provider acceptance are missing.
 
-| Area | Implemented evidence | Remaining acceptance or scope |
-| --- | --- | --- |
-| Checkout and original financial records | `CONNECTED-CHECKOUT.md`, `SALES-REFUND-SOURCE-REVIEW.md` | Intended payment/tax provider acceptance and controlled production order |
-| Refund settlement, stock returns and rewards | `REFUND-SETTLEMENT.md`, `REWARD-ONLY-REFUNDS.md`, `REFUND-SUBMISSION.md`, `REFUND-TAX-EVIDENCE.md` | Real provider lifecycle; compensation tax evidence and downstream compensation accounting |
-| Customer account and access recovery | `ACCOUNT_SUPPORT.md`, `CUSTOMER-ACCESS.md` | Google/email acceptance and production owner onboarding |
-| Delivery capacity, driver operations and SMS | `DELIVERY-COMMAND-CENTER.md`, `ONGOING-DELIVERY-BOOKING.md`, `DELIVERY-TEXT-CONSENT.md`, `DELIVERY-TEXT-DISPATCH.md` | Real route, consent, provider callback and notification acceptance |
-| Loyalty, referral and promotions | `LOYALTY_DELIVERY.md`, `LAUNCH-OFFERS.md`, `REFUND-SETTLEMENT.md` | Provider-backed lifecycle acceptance |
-| Shared storefront and Website Builder | `STOREFRONT-BUILDER.md`, `API-ROW-EDITOR-RELEASE.md` | Hosted durable photo and redeploy acceptance |
-| Quarterly subscriptions | `QUARTERLY-SUBSCRIPTIONS.md`, `QUARTERLY-CHECKOUT-CYCLES.md` | Customer-reviewed payment acceptance; no automatic off-session charging is asserted |
-| Expenses, mileage and CPA reports | `FINANCE-RECORDS.md`, `CPA-FINANCIAL-LEDGER.md` | Intended operating records and provider reconciliation acceptance |
-| Catalog exchange and scoped commerce gateway | `CATALOG-FILE-EXCHANGE.md`, `SCOPED-COMMERCE-GATEWAY.md` | Real catalog/stock review and scoped client acceptance |
-| QuickBooks expense, cost and receipt exports | `QUICKBOOKS-EXPENSE-POSTING.md`, `QUICKBOOKS-COST-JOURNALS.md`, `QUICKBOOKS-RECEIPT-DRAFTS.md`, `QUICKBOOKS-RECEIPT-POSTING.md` | Receipt posting passed full CI 149; real company acceptance and compensation accounting remain |
-| Hosted operations and retained records | `PRODUCTION-OPERATIONS.md`, `BUILD-RELEASE-CANDIDATE.md` | Exact release integration, current backup/restore proof, retained-record verification and production health |
+| Area                                         | Implemented evidence                                                                                                            | Remaining acceptance or scope                                                                               |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Checkout and original financial records      | `CONNECTED-CHECKOUT.md`, `SALES-REFUND-SOURCE-REVIEW.md`                                                                        | Intended payment/tax provider acceptance and controlled production order                                    |
+| Refund settlement, stock returns and rewards | `REFUND-SETTLEMENT.md`, `REWARD-ONLY-REFUNDS.md`, `REFUND-SUBMISSION.md`, `REFUND-TAX-EVIDENCE.md`                              | Real provider lifecycle; compensation tax evidence and downstream compensation accounting                   |
+| Customer account and access recovery         | `ACCOUNT_SUPPORT.md`, `CUSTOMER-ACCESS.md`                                                                                      | Google/email acceptance and production owner onboarding                                                     |
+| Delivery capacity, driver operations and SMS | `DELIVERY-COMMAND-CENTER.md`, `ONGOING-DELIVERY-BOOKING.md`, `DELIVERY-TEXT-CONSENT.md`, `DELIVERY-TEXT-DISPATCH.md`            | Real route, consent, provider callback and notification acceptance                                          |
+| Loyalty, referral and promotions             | `LOYALTY_DELIVERY.md`, `LAUNCH-OFFERS.md`, `REFUND-SETTLEMENT.md`                                                               | Provider-backed lifecycle acceptance                                                                        |
+| Shared storefront and Website Builder        | `STOREFRONT-BUILDER.md`, `API-ROW-EDITOR-RELEASE.md`                                                                            | Hosted durable photo and redeploy acceptance                                                                |
+| Quarterly subscriptions                      | `QUARTERLY-SUBSCRIPTIONS.md`, `QUARTERLY-CHECKOUT-CYCLES.md`                                                                    | Customer-reviewed payment acceptance; no automatic off-session charging is asserted                         |
+| Expenses, mileage and CPA reports            | `FINANCE-RECORDS.md`, `ROUTE-MILEAGE.md`, `CPA-FINANCIAL-LEDGER.md`                                                             | Intended operating records and provider reconciliation acceptance                                           |
+| Catalog exchange and scoped commerce gateway | `CATALOG-FILE-EXCHANGE.md`, `SCOPED-COMMERCE-GATEWAY.md`                                                                        | Real catalog/stock review and scoped client acceptance                                                      |
+| QuickBooks expense, cost and receipt exports | `QUICKBOOKS-EXPENSE-POSTING.md`, `QUICKBOOKS-COST-JOURNALS.md`, `QUICKBOOKS-RECEIPT-DRAFTS.md`, `QUICKBOOKS-RECEIPT-POSTING.md` | Receipt posting passed full CI 149; real company acceptance and compensation accounting remain              |
+| Hosted operations and retained records       | `PRODUCTION-OPERATIONS.md`, `BUILD-RELEASE-CANDIDATE.md`                                                                        | Exact release integration, current backup/restore proof, retained-record verification and production health |
 
 The historical phase boxes below remain an archive of the initial plan, not a current feature inventory. Use `BUILD-RELEASE-CANDIDATE.md` for cumulative tested revisions and outstanding launch gates. The accounting, notification and payment providers used in automated tests are synthetic fixtures; these tests do not establish external acceptance.
 
@@ -113,7 +113,7 @@ The historical phase boxes below remain an archive of the initial plan, not a cu
 ## Phase 6 — Expenses, mileage, CPA
 
 - [ ] Expense capture
-- [ ] Mileage trips
+- [x] Measured route mileage, precise correction history and report linkage (PR 70 / CI 161; hosted acceptance pending)
 - [x] CPA Center expense/mileage and source-verified financial event read models (PR 68 / CI 156)
 - [ ] Complete financial statements and bank reconciliation
 
