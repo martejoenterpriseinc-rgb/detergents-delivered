@@ -32,3 +32,35 @@ still applies. Cumulative allocations cannot exceed original tip or tax amounts.
 
 This reads existing provider evidence. It does not initiate a refund, submit a tax correction,
 or post a QuickBooks entry. Those workflows and live provider acceptance remain open.
+
+## Tip refund initiation and recovery
+
+Admins can submit a full or partial cash refund against the original dedicated tip payment.
+`DD_TIP_REFUNDS_ENABLED` gates submission; live additionally requires
+`DD_LIVE_TIP_REFUNDS_ACCEPTED`. Both remain off for activation/acceptance. Recovery remains
+available for already-committed requests even if new submission is disabled.
+
+The additive `20260917030000_tip_refund_requests` migration creates a durable request ledger.
+The original verified tip/account/environment is bound to the request. The request and its
+permanent claim audit commit under the tip lock before the one provider create invocation.
+A stable request key/hash provides replay protection. Repeated requests never trigger a
+second POST. Network or provider uncertainty retains UNKNOWN capacity. Recovery looks up
+the complete bounded provider history and requires exact request metadata, amount, currency,
+original payment, and claim audit; it never re-submits a create request.
+
+A received POST response is not treated as settled money: a fresh provider lookup confirms
+state. Successful refunds require debit evidence; failed debits require returned-balance
+verification before capacity reopens. Unknown/pending local requests and disappearing or
+changed provider evidence block new payouts. Refunds after completed driver transfers create
+recoverable entitlement through the existing accounting view; partial tip/tax matching remains
+necessary. Original orders, rewards, receipts and driver transfers are not rewritten.
+
+The payment recovery worker includes bounded tip-refund lookups with lease checks. Staff can
+also check a request from the tip screen. An unknown request absent from provider history is
+retained for investigation, never assumed safe to cancel or send again.
+
+Validation added: provider binding/idempotency/stale-claim tests; native concurrent submission,
+unknown-result recovery without another POST, access/activation/remaining-cash guards,
+original-record preservation and audit rollback. Dedicated live provider acceptance, tip refund
+webhook routing, reviewed resolution of never-created UNKNOWN claims, QuickBooks tip postings
+and production migration/release remain open. No live refund has been sent in this build.

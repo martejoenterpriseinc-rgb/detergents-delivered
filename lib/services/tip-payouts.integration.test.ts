@@ -1,18 +1,31 @@
 import "@/tests/integration-guard";
 import { randomUUID } from "node:crypto";
-import { afterAll, beforeEach, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
 import { prisma } from "@/lib/prisma";
 import { deliveryTipFixture } from "@/tests/delivery-tip-fixture";
 import { businessDate } from "@/lib/domain/operations";
-const m = vi.hoisted(() => ({ inspect: vi.fn(), report: vi.fn() }));
-vi.mock("@/lib/commerce/refund-provider", () => ({ inspectStripeTipRefunds: m.inspect }));
+const m = vi.hoisted(() => ({
+  inspect: vi.fn(),
+  report: vi.fn(),
+  submit: vi.fn(),
+  commerce: vi.fn(),
+}));
+vi.mock("@/lib/commerce/refund-provider", () => ({
+  inspectStripeTipRefunds: m.inspect,
+  submitClaimedStripeTipRefund: m.submit,
+}));
 vi.mock("@/lib/commerce/tax-report", () => ({ readRefundTaxEvidence: m.report }));
+vi.mock("@/lib/commerce/runtime", () => ({ readCommerce: m.commerce }));
+import { submitTipRefund, reconcileTipRefund } from "./tip-refunds";
 import { matchTipRefundTax } from "./tip-refund-tax";
 import { recordTipPayout, readTipAccounting } from "./tip-payouts";
 beforeEach(() => {
   vi.resetAllMocks();
   m.inspect.mockResolvedValue({ disputed: false, refunds: [] });
+  m.commerce.mockResolvedValue({ accountId: "acct_synthetic_receipt", live: false });
+  vi.stubEnv("DD_TIP_REFUNDS_ENABLED", "true");
 });
+afterEach(() => vi.unstubAllEnvs());
 afterAll(() => prisma.$disconnect());
 async function fixture() {
   const f = await deliveryTipFixture(prisma);
@@ -303,6 +316,165 @@ it("never saves tax allocation after a report mismatch or for a pending refund",
     ).toBe(0);
     expect((await readTipAccounting(f.userId, f.tip.id)).payableCents).toBe(0);
   } finally {
+    await f.cleanup();
+  }
+});
+
+it("commits one refund claim before provider submission and preserves driver recovery and original records", async () => {
+  const f = await fixture();
+  const input = {
+    tipId: f.tip.id,
+    requestKey: randomUUID(),
+    amountCents: 108,
+    reason: "Synthetic requested refund",
+    confirmed: true,
+  };
+  try {
+    await recordTipPayout(f.userId, f.input);
+    m.submit.mockImplementation(async (claim) => {
+      expect(
+        (
+          await prisma.tipRefundRequest.findUniqueOrThrow({
+            where: { id: claim.requestId },
+          })
+        ).state,
+      ).toBe("SUBMITTING");
+      const result = {
+        id: "re_" + claim.requestId.replaceAll("_", ""),
+        amountCents: 108,
+        currency: "USD",
+        status: "succeeded",
+        balanceTransactionId: "txn_synthetic",
+        requestId: claim.requestId,
+        requestHash: claim.requestHash,
+        project: "detergents-delivered",
+      };
+      m.inspect.mockResolvedValue({ disputed: false, refunds: [result] });
+      return result;
+    });
+    await expect(submitTipRefund(f.driver.id, input)).rejects.toMatchObject({
+      status: 403,
+    });
+    const [a, b] = await Promise.all([
+      submitTipRefund(f.userId, input),
+      submitTipRefund(f.userId, input),
+    ]);
+    expect(a.id).toBe(b.id);
+    expect(m.submit).toHaveBeenCalledTimes(1);
+    expect((await reconcileTipRefund(f.userId, a.id)).state).toBe("SUCCEEDED");
+    expect(await readTipAccounting(f.userId, f.tip.id)).toMatchObject({
+      recoverableCents: 100,
+      payableCents: 0,
+    });
+    expect(await prisma.deliveryTip.findUnique({ where: { id: f.tip.id } })).toEqual(
+      f.tip,
+    );
+    await expect(
+      submitTipRefund(f.userId, { ...input, amountCents: 50 }),
+    ).rejects.toMatchObject({ status: 409 });
+    await submitTipRefund(f.userId, input);
+    expect(m.submit).toHaveBeenCalledTimes(1);
+  } finally {
+    await f.cleanup();
+  }
+});
+it("holds unknown refund capacity and recovers by provider lookup without a second POST", async () => {
+  const f = await fixture();
+  const input = {
+    tipId: f.tip.id,
+    requestKey: randomUUID(),
+    amountCents: 54,
+    reason: "Synthetic interrupted refund",
+    confirmed: true,
+  };
+  try {
+    m.submit.mockRejectedValue(new Error("Synthetic network interruption"));
+    const result = await submitTipRefund(f.userId, input);
+    expect(result.state).toBe("UNKNOWN");
+    expect((await readTipAccounting(f.userId, f.tip.id)).payableCents).toBe(0);
+    await expect(recordTipPayout(f.userId, f.input)).rejects.toMatchObject({
+      status: 409,
+    });
+    await expect(
+      submitTipRefund(f.userId, { ...input, requestKey: randomUUID() }),
+    ).rejects.toMatchObject({ status: 409 });
+    await submitTipRefund(f.userId, input);
+    expect(m.submit).toHaveBeenCalledTimes(1);
+    await expect(reconcileTipRefund(f.userId, result.id)).rejects.toMatchObject({
+      status: 409,
+    });
+    const saved = await prisma.tipRefundRequest.findUniqueOrThrow({
+      where: { id: result.id },
+    });
+    m.inspect.mockResolvedValue({
+      disputed: false,
+      refunds: [
+        {
+          id: "re_" + saved.id.replaceAll("_", ""),
+          amountCents: 54,
+          currency: "USD",
+          status: "succeeded",
+          balanceTransactionId: "txn_synthetic",
+          requestId: saved.id,
+          requestHash: saved.requestHash,
+          project: "detergents-delivered",
+        },
+      ],
+    });
+    expect((await reconcileTipRefund(f.userId, result.id)).state).toBe("SUCCEEDED");
+    expect(m.submit).toHaveBeenCalledTimes(1);
+    expect((await readTipAccounting(f.userId, f.tip.id)).payableCents).toBe(0); // Partial tax still needs evidence.
+  } finally {
+    await f.cleanup();
+  }
+});
+it("keeps submission disabled without activation and rejects amounts beyond unrefunded cash", async () => {
+  const f = await fixture();
+  const input = {
+    tipId: f.tip.id,
+    requestKey: randomUUID(),
+    amountCents: 109,
+    reason: "Synthetic invalid refund",
+    confirmed: true,
+  };
+  try {
+    vi.stubEnv("DD_TIP_REFUNDS_ENABLED", "false");
+    await expect(
+      submitTipRefund(f.userId, { ...input, amountCents: 108 }),
+    ).rejects.toMatchObject({ status: 409 });
+    vi.stubEnv("DD_TIP_REFUNDS_ENABLED", "true");
+    await expect(submitTipRefund(f.userId, input)).rejects.toMatchObject({ status: 409 });
+    expect(m.submit).not.toHaveBeenCalled();
+    expect(await prisma.tipRefundRequest.count({ where: { tipId: f.tip.id } })).toBe(0);
+  } finally {
+    await f.cleanup();
+  }
+});
+
+it("rolls back a tip refund claim when its permanent audit cannot be saved", async () => {
+  const f = await fixture(),
+    name = "tip_refund_audit_" + randomUUID().replaceAll("-", "");
+  try {
+    await prisma.$executeRawUnsafe(
+      `CREATE FUNCTION ${name}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW."entityType" = 'TipRefundRequest' AND NEW."actorUserId" = '${f.userId}' THEN RAISE EXCEPTION 'synthetic refund audit failure'; END IF; RETURN NEW; END; $$`,
+    );
+    await prisma.$executeRawUnsafe(
+      `CREATE TRIGGER ${name} BEFORE INSERT ON "AuditLog" FOR EACH ROW EXECUTE FUNCTION ${name}()`,
+    );
+    await expect(
+      submitTipRefund(f.userId, {
+        tipId: f.tip.id,
+        requestKey: randomUUID(),
+        amountCents: 108,
+        reason: "Synthetic audit failure",
+        confirmed: true,
+      }),
+    ).rejects.toThrow();
+    expect(m.submit).not.toHaveBeenCalled();
+    expect(await prisma.tipRefundRequest.count({ where: { tipId: f.tip.id } })).toBe(0);
+  } finally {
+    await prisma.$executeRawUnsafe(`DROP TRIGGER IF EXISTS ${name} ON "AuditLog"`);
+    await prisma.$executeRawUnsafe(`DROP FUNCTION IF EXISTS ${name}()`);
     await f.cleanup();
   }
 });

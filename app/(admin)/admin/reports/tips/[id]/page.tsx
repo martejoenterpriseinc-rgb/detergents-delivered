@@ -1,3 +1,4 @@
+import { TipRefundForm } from "@/components/admin/tip-refund-form";
 import { TipRefundTaxForm } from "@/components/admin/tip-refund-tax-form";
 import Link from "next/link";
 import { requireRole } from "@/lib/authz";
@@ -76,6 +77,13 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
           <p>{e.reason}</p>
         </article>
       ))}
+      {canWrite && (
+        <TipRefundForm
+          tipId={id}
+          enabled={data.refundSubmissionEnabled}
+          requests={data.refundRequests}
+        />
+      )}
       {canWrite && <TipRefundTaxForm tipId={id} refunds={data.refunds} />}
       {canWrite && <TipPayoutForm tipId={id} transfers={reversible} />}
     </div>

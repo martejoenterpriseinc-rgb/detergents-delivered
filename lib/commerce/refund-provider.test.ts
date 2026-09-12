@@ -23,6 +23,7 @@ import {
   inspectStripeTipRefunds,
   matchProviderRefunds,
   submitClaimedStripeRefund,
+  submitClaimedStripeTipRefund,
   verifyRefundBalanceEvidence,
   type RefundPaymentObservation,
   type RefundObservation,
@@ -446,4 +447,63 @@ it("tip refunds require the dedicated tip metadata and cannot borrow a merchandi
     binding.paymentIntentId,
   );
   await expect(inspectStripeRefunds(binding)).rejects.toThrow();
+});
+
+describe("dedicated tip refund submission", () => {
+  const claim = () => ({
+    requestId: "tip-request",
+    requestHash: "a".repeat(64),
+    amountCents: 360,
+    submittedAt: new Date().toISOString(),
+    binding,
+  });
+  const result = () => ({
+    ...rawRefund,
+    metadata: {
+      project: "detergents-delivered",
+      refundRequestId: "tip-request",
+      requestHash: "a".repeat(64),
+    },
+  });
+  it("binds the original tip payment and one stable refund key", async () => {
+    mocks.payment.mockResolvedValue({
+      ...payment,
+      metadata: { project: "detergents-delivered", tipId: binding.checkoutId },
+    });
+    mocks.refunds.mockResolvedValue({ data: [], has_more: false });
+    mocks.createRefund.mockResolvedValue(result());
+    expect(await submitClaimedStripeTipRefund(claim())).toMatchObject({
+      id: rawRefund.id,
+      amountCents: 360,
+    });
+    expect(mocks.createRefund).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payment_intent: binding.paymentIntentId,
+        amount: 360,
+        metadata: expect.objectContaining({ tipId: binding.checkoutId }),
+      }),
+      expect.objectContaining({
+        maxNetworkRetries: 0,
+        idempotencyKey: `dd:tip-refund:tip-request:${"a".repeat(64)}:v1`,
+      }),
+    );
+  });
+  it("reuses matching provider evidence and refuses stale claims or merchandise payment metadata", async () => {
+    mocks.payment.mockResolvedValue({
+      ...payment,
+      metadata: { project: "detergents-delivered", tipId: binding.checkoutId },
+    });
+    mocks.refunds.mockResolvedValue({ data: [result()], has_more: false });
+    await submitClaimedStripeTipRefund(claim());
+    expect(mocks.createRefund).not.toHaveBeenCalled();
+    await expect(
+      submitClaimedStripeTipRefund({
+        ...claim(),
+        submittedAt: new Date(Date.now() - 700000).toISOString(),
+      }),
+    ).rejects.toThrow();
+    mocks.payment.mockResolvedValue(payment);
+    await expect(submitClaimedStripeTipRefund(claim())).rejects.toThrow();
+    expect(mocks.createRefund).not.toHaveBeenCalled();
+  });
 });
