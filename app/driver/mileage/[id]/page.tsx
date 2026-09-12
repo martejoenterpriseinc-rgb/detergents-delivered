@@ -5,14 +5,9 @@ import { readRouteMileage } from "@/lib/services/route-mileage";
 import { RouteMileage } from "@/components/admin/route-mileage";
 export default async function Page({ params }: { params: Promise<{ id: string }> }) {
   const session = await requireRole("ADMIN", "SUPER_ADMIN", "DRIVER");
+  let initial;
   try {
-    return (
-      <main className="mx-auto max-w-4xl p-5">
-        <RouteMileage
-          initial={await readRouteMileage(session.user.id, (await params).id)}
-        />
-      </main>
-    );
+    initial = await readRouteMileage(session.user.id, (await params).id);
   } catch (e) {
     if (e instanceof AccountError && [403, 404].includes(e.status)) notFound();
     if (e instanceof AccountError && [409, 422].includes(e.status))
@@ -24,4 +19,9 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
       );
     throw e;
   }
+  return (
+    <main className="mx-auto max-w-4xl p-5">
+      <RouteMileage initial={initial} />
+    </main>
+  );
 }
