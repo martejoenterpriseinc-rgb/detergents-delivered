@@ -1,3 +1,4 @@
+import { verifiedManualSaleEvidence } from "./manual-sale-evidence";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
@@ -68,18 +69,7 @@ export async function customerReceipt(userId: string, checkoutId: string) {
       const s = parsed.data;
       const manual = a.paymentMethod !== "STRIPE";
       const r = a.manualSettlement;
-      if (
-        manual &&
-        (!r ||
-          r.state !== "SETTLED" ||
-          r.method !== a.paymentMethod ||
-          r.amountCents !== s.totalCents ||
-          r.accountId !== a.stripeAccountId ||
-          r.livemode !== a.livemode ||
-          !r.taxTransactionId ||
-          !r.taxEvidence)
-      )
-        throw unavailable();
+      if (manual) await verifiedManualSaleEvidence(tx, a, s.totalCents, s.taxCents);
       const payments = o.payments.filter(
         (p) =>
           p.provider === (manual ? "MANUAL" : "STRIPE") &&

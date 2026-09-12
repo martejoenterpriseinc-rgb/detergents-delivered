@@ -35,17 +35,25 @@ export const receiptSettingsSchema = z
     verifiedAt: z.string().datetime(),
   })
   .strict();
-export const receiptSettingsKey = (mode: string, realm: string) =>
-  `quickbooks:receipt-map:v1:${mode}:${realm}`;
+export const receiptPaymentMethodSchema = z.enum(["STRIPE", "CASH", "ZELLE"]);
+export type ReceiptPaymentMethod = z.infer<typeof receiptPaymentMethodSchema>;
+export const receiptSettingsKey = (
+  mode: string,
+  realm: string,
+  method: ReceiptPaymentMethod = "STRIPE",
+) =>
+  `quickbooks:receipt-map:v1:${mode}:${realm}${method === "STRIPE" ? "" : ":" + method}`;
 const json = (v: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(v));
-export async function receiptSettingsData(actor: string) {
+export async function receiptSettingsData(actor: string, rawMethod: unknown = "STRIPE") {
+  const method = receiptPaymentMethodSchema.parse(rawMethod);
   const canWrite = await financeAccess(prisma, actor),
     c = await quickbooksConfig();
   const row = await prisma.setting.findUnique({
-    where: { key: receiptSettingsKey(c.mode, c.realm) },
+    where: { key: receiptSettingsKey(c.mode, c.realm, method) },
   });
   return {
     canWrite,
+    method,
     realm: c.realm,
     mapping: row ? receiptSettingsSchema.parse(row.valueJson) : null,
   };
@@ -54,6 +62,7 @@ export async function saveReceiptSettings(actor: string, raw: unknown) {
   const input = z
     .object({
       requestKey: z.uuid(),
+      paymentMethod: receiptPaymentMethodSchema.optional(),
       depositAccountId: numeric,
       version: z.number().int().nonnegative(),
       confirmed: z.literal(true),
@@ -115,7 +124,11 @@ export async function saveReceiptSettings(actor: string, raw: unknown) {
     throw new AccountError("QuickBooks settings changed. Reload before saving.", 409);
   return prisma.$transaction(async (tx) => {
     await assertQuickbooksSnapshot(tx, actor, snapshot, true);
-    const key = receiptSettingsKey(config.mode, config.realm);
+    const key = receiptSettingsKey(
+      config.mode,
+      config.realm,
+      input.paymentMethod ?? "STRIPE",
+    );
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${key},0))`;
     const previous = await tx.auditLog.findUnique({ where: { id } });
     if (previous) return replay(previous.afterJson);

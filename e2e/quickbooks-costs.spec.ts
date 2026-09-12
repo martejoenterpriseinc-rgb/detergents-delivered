@@ -510,10 +510,15 @@ test("cost accounting preserves failed choices and distinguishes original sale f
     });
     let receiptKey = "",
       receiptSaves = 0;
-    await page.route("**/api/admin/quickbooks/receipt-settings", async (route) => {
+    await page.route("**/api/admin/quickbooks/receipt-settings*", async (route) => {
       if (route.request().method() === "GET")
         return route.fulfill({
-          json: { realm: "123456789", canWrite: true, mapping: null },
+          json: {
+            realm: "123456789",
+            canWrite: true,
+            mapping: null,
+            method: new URL(route.request().url()).searchParams.get("method") ?? "STRIPE",
+          },
         });
       const body = route.request().postDataJSON();
       receiptSaves++;
@@ -526,6 +531,7 @@ test("cost accounting preserves failed choices and distinguishes original sale f
       }
       expect(body.requestKey).toBe(receiptKey);
       expect(body.depositAccountId).toBe("receipt-bank");
+      expect(body.paymentMethod).toBe("STRIPE");
       return route.fulfill({
         json: {
           version: 1,
@@ -603,6 +609,24 @@ test("cost accounting preserves failed choices and distinguishes original sale f
       }),
     ).toBeVisible();
     expect(receiptSaves).toBe(2);
+    await page.getByLabel("Receipt payment method", { exact: true }).selectOption("CASH");
+    await expect(
+      page.getByText("Saved receipt clearing account: Synthetic receipt clearing.", {
+        exact: true,
+      }),
+    ).toHaveCount(0);
+    await page
+      .getByRole("button", { name: "Load receipt accounts", exact: true })
+      .click();
+    await expect(
+      page.getByText("Receipt settings for CASH in company 123456789", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByLabel("Receipt clearing account", { exact: true }),
+    ).toHaveValue("");
+    await expect(
+      page.getByRole("button", { name: "Save receipt settings", exact: true }),
+    ).toBeDisabled();
     expect(
       await page.evaluate(
         () => document.documentElement.scrollWidth <= window.innerWidth,

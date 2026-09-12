@@ -19,3 +19,20 @@ Validation added: provider tests cover stable posting parameters, account/mode/a
 Still required before enabling manual payments: received-funds exceptions for revoked/expired approvals and late receipts; manual tax reversal/refund initiation/recovery; source-verified CPA/QuickBooks export support for MANUAL payments; background manual settlement recovery and safe delivery rescheduling; browser acceptance and intended sandbox/live provider acceptance. These gaps remain visible rather than silently marking manual payments ready.
 
 Provider reference reviewed for this implementation: [Stripe Tax transaction from calculation](https://docs.stripe.com/api/tax/transactions/create_from_calculation). The installed pinned SDK declarations were also checked. Tests use synthetic provider evidence and do not establish real provider acceptance.
+
+## Verified accounting sources and method mappings
+
+Manual sales now enter the original sale and FIFO cost source validators only when the
+receipt, receipt audit, settled audit, payment event, and accepted tax transaction agree.
+Source evidence retains CASH/ZELLE, the receipt reference and tax transaction ID; it does
+not fabricate a Stripe payment intent or Checkout session. The sale date uses the actual
+receipt date. Customer receipts use the same manual evidence check.
+
+QuickBooks receipt account settings are independently reviewed and versioned for Stripe,
+cash and Zelle. Existing Stripe keys and source objects are preserved. Cash/Zelle have no
+fallback to the Stripe clearing account. Receipt preparation selects the method-specific
+mapping and otherwise retains the existing customer, product-tax, provider capability,
+posting and unknown-result recovery gates.
+
+This does not enable manual payments or connect QuickBooks. Manual refunds, received-funds
+exceptions, tax corrections, scheduled recovery and live provider acceptance remain open.

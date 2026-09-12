@@ -1,3 +1,5 @@
+import { recordedSaleSource } from "@/lib/services/sales-refund-source";
+import { recordedOrderCost } from "@/lib/services/quickbooks-cost-source";
 import { issueCommerceGrant, revokeCommerceGrant } from "@/lib/services/commerce-grants";
 import { commerceGateway } from "@/lib/services/commerce-gateway";
 import "@/tests/integration-guard";
@@ -862,6 +864,8 @@ it("settles approved manual funds once through shared stock, rewards, route and 
   expect(before.state).toBe("PROCESSING");
   manualTaxMock.mockResolvedValue({
     taxTransactionId: "tax_syntheticmanual",
+    reference: `dd-manual:${r1.id}`,
+    postedAt: Math.floor(new Date(d.receivedAt).getTime() / 1000),
     taxLines: [
       {
         variantId: f.variant.id,
@@ -881,6 +885,29 @@ it("settles approved manual funds once through shared stock, rewards, route and 
   ).toBe(1);
   expect(await prisma.routeStop.count({ where: { orderId: before.orderId! } })).toBe(1);
   expect((await customerReceipt(f.one.id, q.id)).totalCents).toBe(q.totalCents);
+  const sale = await prisma.$transaction((tx) => recordedSaleSource(tx, before.orderId!));
+  expect(sale).toMatchObject({
+    paymentMethod: "CASH",
+    manualSettlementId: r1.id,
+    paymentIntentId: null,
+    sessionId: null,
+    cashCents: q.totalCents,
+  });
+  expect(
+    (await prisma.$transaction((tx) => recordedOrderCost(tx, before.orderId!)))
+      .amountCents,
+  ).toBeGreaterThan(0);
+  await prisma.manualCheckoutSettlement.update({
+    where: { id: r1.id },
+    data: { taxEvidence: { invalid: true } },
+  });
+  await expect(
+    prisma.$transaction((tx) => recordedSaleSource(tx, before.orderId!)),
+  ).rejects.toMatchObject({ status: 409 });
+  await expect(
+    prisma.$transaction((tx) => recordedOrderCost(tx, before.orderId!)),
+  ).rejects.toMatchObject({ status: 409 });
+  await expect(customerReceipt(f.one.id, q.id)).rejects.toMatchObject({ status: 409 });
   expect(
     (await prisma.checkoutCostAllocation.findMany({ where: { checkoutId: q.id } })).every(
       (c) => c.state === "CONSUMED",

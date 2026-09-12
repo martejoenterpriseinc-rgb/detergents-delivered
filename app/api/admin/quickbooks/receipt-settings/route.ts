@@ -10,7 +10,12 @@ import {
 } from "@/lib/services/quickbooks-receipt-settings";
 export async function GET(request: Request) {
   try {
-    return accountJson(await receiptSettingsData(await accountRequest(request)));
+    return accountJson(
+      await receiptSettingsData(
+        await accountRequest(request),
+        new URL(request.url).searchParams.get("method") ?? "STRIPE",
+      ),
+    );
   } catch (e) {
     return accountFailure(e);
   }

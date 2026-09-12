@@ -67,7 +67,7 @@ beforeEach(async () => {
     update: { valueJson: data },
   });
   await prisma.setting.deleteMany({
-    where: { key: "quickbooks:receipt-map:v1:sandbox:654323" },
+    where: { key: { startsWith: "quickbooks:receipt-map:v1:sandbox:654323" } },
   });
   vi.spyOn(provider, "quickbooksConfig").mockResolvedValue(config);
   vi.spyOn(provider, "readQuickbooksReceiptCompany").mockResolvedValue({
@@ -85,7 +85,12 @@ afterAll(async () => {
   await prisma.setting.deleteMany({
     where: {
       key: {
-        in: [key, "quickbooks:receipt-map:v1:sandbox:654323"],
+        in: [
+          key,
+          "quickbooks:receipt-map:v1:sandbox:654323",
+          "quickbooks:receipt-map:v1:sandbox:654323:CASH",
+          "quickbooks:receipt-map:v1:sandbox:654323:ZELLE",
+        ],
       },
     },
   });
@@ -222,4 +227,27 @@ it("refuses unsupported company country, currency, sales-tax state and non-bank 
     });
     expect((await receiptSettingsData(admin)).mapping).toBeNull();
   }
+});
+
+it("isolates cash and Zelle mappings from Stripe with independent versions and replay protection", async () => {
+  await saveReceiptSettings(admin, input());
+  expect((await receiptSettingsData(admin, "CASH")).mapping).toBeNull();
+  expect((await receiptSettingsData(admin, "ZELLE")).mapping).toBeNull();
+  const cash = { ...input(), paymentMethod: "CASH", depositAccountId: "3" };
+  await saveReceiptSettings(admin, cash);
+  await saveReceiptSettings(admin, {
+    ...input(),
+    paymentMethod: "ZELLE",
+    depositAccountId: "4",
+  });
+  expect((await receiptSettingsData(cpa)).mapping?.depositAccount.id).toBe("2");
+  expect((await receiptSettingsData(cpa, "CASH")).mapping?.depositAccount.id).toBe("3");
+  expect((await receiptSettingsData(cpa, "ZELLE")).mapping?.depositAccount.id).toBe("4");
+  await expect(
+    saveReceiptSettings(admin, { ...cash, paymentMethod: "ZELLE" }),
+  ).rejects.toMatchObject({ status: 409 });
+  await expect(
+    saveReceiptSettings(cpa, { ...input(), paymentMethod: "CASH" }),
+  ).rejects.toMatchObject({ status: 403 });
+  await expect(receiptSettingsData(admin, "OTHER")).rejects.toThrow();
 });
