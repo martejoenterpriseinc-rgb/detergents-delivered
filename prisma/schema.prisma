@@ -1002,6 +1002,7 @@ model Vehicle {
 }
 
 model Route {
+  mileageVersion Int @default(0)
   id             String      @id @default(cuid())
   number         String      @unique
   serviceDate    DateTime    @db.Date
@@ -1126,6 +1127,10 @@ model OperationalJob {
 }
 
 model MileageTrip {
+  routeLegId String? @unique
+  routeLeg RouteLeg? @relation(fields: [routeLegId], references: [id], onDelete: Restrict)
+  startOdometerPrecise Decimal? @db.Decimal(12,2)
+  endOdometerPrecise Decimal? @db.Decimal(12,2)
   id          String   @id @default(cuid())
   vehicleId   String
   vehicle     Vehicle  @relation(fields: [vehicleId], references: [id])
@@ -1564,6 +1569,7 @@ model DeliveryAction {
 
 /// Each saved route leg keeps planned and actual mileage separate.
 model RouteLeg {
+  mileageTrip MileageTrip?
   route Route @relation(fields:[routeId],references:[id],onDelete:Restrict)
   fromStop RouteStop? @relation("LegFrom",fields:[fromStopId],references:[id],onDelete:Restrict)
   toStop RouteStop? @relation("LegTo",fields:[toStopId],references:[id],onDelete:Restrict)

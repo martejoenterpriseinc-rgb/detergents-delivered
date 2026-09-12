@@ -112,8 +112,16 @@ export async function saveFinance(userId: string, input: unknown) {
         where: {
           vehicleId: data.vehicleId,
           id: { not: id },
-          startOdometer: { lt: data.endOdometer },
-          endOdometer: { gt: data.startOdometer },
+          OR: [
+            {
+              startOdometer: { lt: data.endOdometer },
+              endOdometer: { gt: data.startOdometer },
+            },
+            {
+              startOdometerPrecise: { lt: data.endOdometer },
+              endOdometerPrecise: { gt: data.startOdometer },
+            },
+          ],
         },
       });
       if (overlap)
@@ -176,6 +184,7 @@ export async function readFinance(
         amount: string;
         currency: string;
         vehicleId?: string;
+        routeId?: string | null;
         startOdometer?: number | null;
         endOdometer?: number | null;
         editable: boolean;
@@ -255,8 +264,13 @@ export async function readFinance(
           amount: r.miles?.toFixed(2) ?? "",
           currency: "miles",
           vehicleId: r.vehicleId,
-          startOdometer: r.startOdometer,
-          endOdometer: r.endOdometer,
+          routeId: r.routeId,
+          startOdometer: r.startOdometerPrecise
+            ? Number(r.startOdometerPrecise)
+            : r.startOdometer,
+          endOdometer: r.endOdometerPrecise
+            ? Number(r.endOdometerPrecise)
+            : r.endOdometer,
           editable:
             canWrite && r.driverUserId === userId && !r.routeId && r.vehicle.isActive,
           version: 0,

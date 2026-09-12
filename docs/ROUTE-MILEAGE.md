@@ -1,0 +1,13 @@
+# Route odometer records
+
+Drivers reach route mileage from the daily queue; administrators use the same workflow from deliveries. CPA readers can follow a recorded trip from mileage reports. Each route includes outbound, between-stop and return legs. Planned estimates and measured odometer readings remain separate. Navigation does not fabricate miles.
+
+The service accepts up to 100 stops plus return, uses exact hundredths of a mile, and requires contiguous recorded legs. Actuals require a started/past-or-current route and completed travel evidence (arrival or completion for a stop, completed route for return). Unknown legs stay blank; the full actual route total is unknown until every leg is recorded. Explicit equal readings record zero travel. Planned legs are bounded at 10,000 miles.
+
+Only administrators or drivers assigned to every stop can write; CPA is read-only. Current identities and assignments are checked server-side. The route and vehicle are locked during updates. Version checks reject stale edits. A stable request key recovers a lost response without adding trips again. Corrections require a reason, preserve previous readings in audit records, and update all affected legs in one transaction. Recorded legs cannot be erased.
+
+Each measured leg owns one MileageTrip. Two new decimal odometer columns retain hundredths without rewriting existing integer odometers. Original manual trips remain unchanged. Both manual and route saves reject overlapping vehicle odometers; legacy route-level trips block new leg records until reviewed to avoid double counting. Route-linked trips cannot be edited through the manual expense/mileage editor. Reports and CSV include exact readings and revisions. The stored noon timestamp places an odometer record on its service business date; it does not claim an observed travel time.
+
+Migration `20260916230000_route_mileage_records` is additive: nullable precise readings and unique leg linkage, a route mileage version, constraints and a restricted foreign key. No existing migration is changed. Deployment requires the reviewed migration release process; this migration has not been applied to hosted databases.
+
+Tests cover precision, malformed/noncontiguous input, assigned-driver/CPA/customer access, concurrent duplicate saves, stale corrections, partial totals, retained audit history, overlap with manual trips in both directions and rollback after injected audit failure. Browser coverage includes lost-save recovery, correction, refresh, reporting and desktop/tablet/mobile layouts. All fixtures are isolated synthetic records. No maps, payment or notification provider is contacted.
