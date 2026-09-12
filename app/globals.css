@@ -2119,3 +2119,29 @@ html[data-environment="unknown"] body {
   padding: 4px 12px;
   text-align: center;
 }
+
+@media print {
+  body:has(.order-receipt) {
+    padding-top: 0 !important;
+    background: white;
+  }
+  body:has(.order-receipt) .environment-bar {
+    position: static;
+    height: auto;
+    color: black;
+    background: white;
+    border-bottom: 2px solid black;
+  }
+  .order-receipt {
+    max-width: none;
+    margin: 0;
+    padding: 12mm;
+    border: 0;
+    border-radius: 0;
+    font-size: 11pt;
+  }
+  .order-receipt .receipt-actions { display: none !important; }
+  .order-receipt .receipt-line,
+  .order-receipt .receipt-totals { break-inside: avoid; }
+  .order-receipt h2, .order-receipt h3 { break-after: avoid; }
+}
