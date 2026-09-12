@@ -74,9 +74,9 @@ test("CPA reads original financial evidence, exports and sees incomplete evidenc
     users.push(incomplete.userId);
     query.set("orderId", incomplete.orderId);
     await page.goto(`/admin/cpa/ledger?${query}`);
-    await expect(page.getByRole("alert")).toContainText(
-      "1 events have incomplete financial evidence",
-    );
+    await expect(
+      page.getByRole("alert", { name: "Financial evidence review", exact: true }),
+    ).toContainText("1 events have incomplete financial evidence");
     await expect(
       page.getByRole("region", { name: "Merchandise less recorded COGS", exact: true }),
     ).toContainText("Needs review");

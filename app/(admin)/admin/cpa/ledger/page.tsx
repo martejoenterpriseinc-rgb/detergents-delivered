@@ -103,7 +103,11 @@ export default async function Page({
         selected range, across all pages. Blank export amounts require review.
       </p>
       {data.attention > 0 && (
-        <p role="alert" className="rounded border border-amber-500 bg-amber-50 p-4">
+        <p
+          role="alert"
+          aria-label="Financial evidence review"
+          className="rounded border border-amber-500 bg-amber-50 p-4"
+        >
           {data.missingFinancial} events have incomplete financial evidence;{" "}
           {data.missingCost} have incomplete cost evidence; {data.pendingTax} await
           provider tax matching. Totals below include only supported amounts.
