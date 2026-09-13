@@ -147,8 +147,11 @@ export function PaymentDashboard({
             {category ? paymentCategories[category] : "Payments"}
           </h1>
           <p className="mt-2">
-            {data.live ? "Production" : "Sandbox"} · Checkout{" "}
-            {data.enabled ? "configured" : "closed"} · USD
+            <span>
+              {data.live ? "Production" : "Sandbox"} · Checkout{" "}
+              {data.enabled ? "configured" : "closed"}
+            </span>{" "}
+            · USD
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
@@ -292,7 +295,7 @@ export function PaymentDashboard({
               return (
                 <a
                   key={key}
-                  href={url(key)}
+                  href={url(key, key === "customers" ? { sort: "amountDesc" } : {})}
                   className="min-w-0 space-y-3 rounded-2xl border bg-white p-5 hover:border-teal-700 focus-visible:outline-2 focus-visible:outline-teal-700"
                 >
                   <h2 className="flex justify-between gap-2 font-semibold">

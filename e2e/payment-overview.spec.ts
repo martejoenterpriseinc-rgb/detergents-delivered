@@ -43,6 +43,7 @@ test("payment overview links every KPI and retains large period controls and con
       await expect(page).toHaveURL(new RegExp("period=" + value));
     }
     const overview = page.getByRole("region", { name: "Payment overview" });
+    await expect(overview.getByRole("link")).toHaveCount(30);
     const links = await overview
       .getByRole("link")
       .evaluateAll((nodes) => nodes.map((n) => n.getAttribute("href")!));
