@@ -87,11 +87,17 @@ export async function readTaxReview(userId: string, raw: unknown) {
         }
       }
       const manualTax = new Set<string>();
+      const manualReview = new Set<string>();
       for (const a of adjustments.filter(
         (a) => a.request.payment.provider === "MANUAL",
       )) {
-        const source = await recordedRefundSource(tx, a.request.orderId, a.id);
-        if (source.taxEvidenceStatus === "MATCHED") manualTax.add(a.id);
+        try {
+          const source = await recordedRefundSource(tx, a.request.orderId, a.id);
+          if (source.taxEvidenceStatus === "MATCHED") manualTax.add(a.id);
+        } catch (e) {
+          if (!(e instanceof AccountError)) throw e;
+          manualReview.add(a.id);
+        }
       }
       const trusted = orders.filter(
         (o) =>
@@ -137,11 +143,13 @@ export async function readTaxReview(userId: string, raw: unknown) {
           date: a.createdAt.toISOString(),
           kind: a.kind,
           taxCents: a.taxCents,
-          evidence: manualTax.has(a.id)
-            ? "Manual refund tax reversal verified"
-            : a.taxEvidence
-              ? "Stripe tax report matched"
-              : "Provider tax matching pending",
+          evidence: manualReview.has(a.id)
+            ? "Manual refund evidence requires review"
+            : manualTax.has(a.id)
+              ? "Manual refund tax reversal verified"
+              : a.request.payment.provider === "STRIPE" && a.taxEvidence
+                ? "Stripe tax report matched"
+                : "Provider tax matching pending",
           canMatch:
             canMatchTax &&
             a.request.payment.provider === "STRIPE" &&
@@ -157,8 +165,8 @@ export async function readTaxReview(userId: string, raw: unknown) {
         filter,
         saleTaxCents: trusted.reduce((n, o) => n + o.taxCents, 0),
         refundTaxCents: adjustments.reduce((n, a) => n + a.taxCents, 0),
-        unverifiedAdjustments: adjustments.filter(
-          (a) => !a.taxEvidence && !manualTax.has(a.id),
+        unverifiedAdjustments: adjustments.filter((a) =>
+          a.request.payment.provider === "MANUAL" ? !manualTax.has(a.id) : !a.taxEvidence,
         ).length,
         excludedOrders: orders.length - trusted.length,
         count: rows.length,

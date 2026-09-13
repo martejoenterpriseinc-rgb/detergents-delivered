@@ -6,6 +6,7 @@ import { receiptFixture } from "@/tests/customer-receipt-fixture";
 import { prepareManualRefund, recordManualRefund } from "./manual-refunds";
 import { reconcileManualRefundTax } from "./manual-refund-tax";
 import { recordedSaleSource, recordedRefundSource } from "./sales-refund-source";
+import { readTaxReview } from "./tax-review";
 const provider = vi.hoisted(() => vi.fn());
 const fixtureUsers: string[] = [];
 vi.mock("@/lib/commerce/manual-refund-tax", () => ({
@@ -177,5 +178,24 @@ it("blocks unaccepted live activation and CPA writes without provider calls", as
   });
   await prisma.userRole.create({ data: { userId: f.userId, roleId: role.id } });
   await expect(f.draft()).rejects.toMatchObject({ status: 403 });
+  expect(provider).not.toHaveBeenCalled();
+});
+it("keeps tax review available when a manual refund source needs evidence review", async () => {
+  const f = await fixture(),
+    r = await f.draft();
+  await recordManualRefund(f.userId, f.returned(r.id));
+  await prisma.payment.update({
+    where: { id: f.sale.paymentId },
+    data: { amountCents: 1 },
+  });
+  const adjustment = await prisma.refundAdjustment.findFirstOrThrow({
+    where: { requestId: r.id },
+  });
+  const report = await readTaxReview(f.userId, {});
+  expect(report.rows.find((row) => row.id === adjustment.id)).toMatchObject({
+    evidence: "Manual refund evidence requires review",
+    canMatch: false,
+  });
+  expect(report.unverifiedAdjustments).toBeGreaterThan(0);
   expect(provider).not.toHaveBeenCalled();
 });
