@@ -120,18 +120,21 @@ callbacks. Rollback requires restoring consistent origins AND affected DNS; neve
 References: https://render.com/docs/configure-other-dns and
 https://render.com/docs/custom-domains (reviewed September 13).
 
-## Actual open application work
+## Financial application work and remaining acceptance
 
-| Area                | Remaining completion                                                                                                                                                                                                                                           |
-| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Failed card refunds | Provider-compatible tax compensation evidence and correcting QuickBooks transactions; intended Checkout behavior must be verified before implementing a tax-writing correction.                                                                                |
-| Tip accounting      | Dedicated QuickBooks liability/refund/driver-payout posting and reviewed resolution of uncertain claims with no provider creation. Refund webhook routing is now implemented; connected provider acceptance remains open. Existing refund initiation, partial allocations, transfer records and scheduled reads are implemented. |
-| Manual cash/Zelle   | Received-funds exceptions for expired/revoked approvals, late receipts and delivery rescheduling; reviewed never-created tax-claim resolution. Normal settlement, manual refunds and standalone tax reversals are implemented.                                 |
-| Provider reports    | Complete remaining scale/export and tax-report acceptance in QUICKBOOKS-FINANCIAL-REPORTS.md. Unsupported payment provider metrics remain explicitly unavailable until ingestion/acceptance.                                                                   |
-| Final acceptance    | Real owner/business setup, catalog/stock/photos, ZIP/calendar/capacity, durable media, restore, worker and end-to-end checks on the deployed revision.                                                                                                         |
+See [APPLICATION-FINANCIAL-COMPLETION.md](APPLICATION-FINANCIAL-COMPLETION.md) for the current implementation and its limits.
 
-The domain association and migration-review tool do not close these items. APIs remain
-unconnected and activation flags remain unchanged. Launch is not declared ready.
+| Area | Implemented | Remaining evidence or acceptance |
+| --- | --- | --- |
+| Failed card refunds | Verify an existing positive tax correction; prepare, post and recover a separate correcting QuickBooks receipt without changing the original receipt. | Confirm intended Checkout tax-correction behavior with the connected provider. The application does not automatically create an unverified tax adjustment. |
+| Tip accounting | Balanced collection, tax liability, driver payout, refund and driver-recovery journals; immutable claims and scheduled read-only recovery. | Verify intended company/accounts and real provider behavior before activating posting. |
+| Manual cash/Zelle | Review late, mismatched and revoked-approval receipts; record actual returns; approve eligible held payments; reschedule within the original area and shared capacity. Persist tax proof before finalization. | Accept the business workflow with intended data and providers. |
+| Uncertain transactions | Explicit original-key retries within 23 hours for tip refunds and manual refund tax; evidence-bound provider recovery; no duplicate automatic posting. | Old requests without an identifiable provider object remain held. An empty lookup does not establish non-creation. Reviewed closure of a never-created claim remains open pending an authoritative provider-evidence contract. |
+| Provider reports | Existing financial source views and historical exports remain available. | Finish intended-provider scale/export and tax-report acceptance in QUICKBOOKS-FINANCIAL-REPORTS.md. |
+| Release | Three additive migrations, immutable financial history and worker recovery are included in the application revision. | Hosted restore proof, retained-record comparison, owner/business setup, catalog/stock/photos, ZIP/calendar/capacity, durable media and acceptance of the same deployed web/worker revision. |
+
+API connections and activation remain deferred. Isolated CI migration replay is not a
+hosted restore drill. No production release or launch readiness is claimed here.
 
 ## September 13 continuation: refund webhook routing and release blockers
 
