@@ -67,6 +67,9 @@ test("manual review keeps the original return request after a lost response", as
     const row = page
       .getByRole("article")
       .filter({ has: page.getByRole("heading", { name: order.number, exact: true }) });
+    await expect(
+      row.getByRole("heading", { name: order.number, exact: true }),
+    ).toBeVisible();
     await row.getByLabel("Action", { exact: true }).selectOption("RESCHEDULE");
     await expect(row.getByLabel("Agreed delivery date")).toBeVisible();
     await row.getByLabel("Action", { exact: true }).selectOption("RETURN");

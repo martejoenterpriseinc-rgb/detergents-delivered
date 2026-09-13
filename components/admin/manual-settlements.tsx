@@ -115,6 +115,7 @@ export function ManualSettlementRow({ row, canWrite }: { row: Row; canWrite: boo
                 <label className="block">
                   Action
                   <select
+                    aria-label="Action"
                     className="mt-1 block w-full rounded-lg border p-3"
                     value={operation}
                     onChange={(e) => setOperation(e.target.value)}
