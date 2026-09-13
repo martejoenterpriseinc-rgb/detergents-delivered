@@ -1,4 +1,5 @@
 "use client";
+import { FinancialClaimReview } from "./financial-claim-review";
 import Link from "next/link";
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -42,6 +43,7 @@ export function ManualSettlementRow({ row, canWrite }: { row: Row; canWrite: boo
                 }
               : {
                   id: row.settlement.id,
+                  ...(form.get("retryReviewed") === "on" ? { retryReviewed: true } : {}),
                   ...(form.get("taxTransactionId")
                     ? { taxTransactionId: form.get("taxTransactionId") }
                     : {}),
@@ -101,6 +103,12 @@ export function ManualSettlementRow({ row, canWrite }: { row: Row; canWrite: boo
           Receipt {row.settlement.reference} · Settlement {row.settlement.state}
         </p>
       )}
+      {canWrite &&
+        row.settlement &&
+        ["SUBMITTING", "UNKNOWN"].includes(row.settlement.state) &&
+        !row.settlement.taxTransactionId && (
+          <FinancialClaimReview kind="MANUAL_CHECKOUT_TAX" claimId={row.settlement.id} />
+        )}
       {canWrite && !["SETTLED", "RETURNED"].includes(row.settlement?.state ?? "") && (
         <form
           onSubmit={(e) => {
@@ -127,14 +135,21 @@ export function ManualSettlementRow({ row, canWrite }: { row: Row; canWrite: boo
                   </select>
                 </label>
                 {operation === "RECONCILE" ? (
-                  <label className="block">
-                    Existing Stripe Tax transaction ID (recovery only)
-                    <input
-                      name="taxTransactionId"
-                      className="mt-1 block w-full rounded-lg border p-3"
-                      placeholder="Leave blank for normal reconciliation"
-                    />
-                  </label>
+                  <div className="space-y-2">
+                    <label className="flex gap-2">
+                      <input name="retryReviewed" type="checkbox" />
+                      Use independently approved non-creation review to retry the original
+                      tax reference.
+                    </label>
+                    <label className="block">
+                      Existing Stripe Tax transaction ID (recovery only)
+                      <input
+                        name="taxTransactionId"
+                        className="mt-1 block w-full rounded-lg border p-3"
+                        placeholder="Leave blank for normal reconciliation"
+                      />
+                    </label>
+                  </div>
                 ) : (
                   <>
                     {operation === "RESCHEDULE" && (

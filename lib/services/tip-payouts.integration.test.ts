@@ -808,3 +808,187 @@ it("retries only the original tip refund key and rejects expired retry windows",
     await f.cleanup();
   }
 });
+
+it("requires independent non-creation review, preserves the claim and recovers a contradictory late refund", async () => {
+  const f = await fixture(),
+    reviewer = await fixture();
+  try {
+    m.submit.mockRejectedValue(new Error("synthetic lost refund response"));
+    const input = {
+      tipId: f.tip.id,
+      requestKey: randomUUID(),
+      amountCents: 108,
+      reason: "Synthetic refund request",
+      confirmed: true,
+    };
+    const r = await submitTipRefund(f.userId, input);
+    await prisma.tipRefundRequest.update({
+      where: { id: r.id },
+      data: { submittedAt: new Date(Date.now() - 49 * 3600000) },
+    });
+    const { proposeClaimReview, decideClaimReview } =
+      await import("./financial-claim-reviews");
+    const evidence = {
+      kind: "TIP_REFUND",
+      claimId: r.id,
+      requestKey: randomUUID(),
+      providerCase: "case-synthetic-123",
+      evidenceReference: "retained/synthetic/provider-confirmation.pdf",
+      evidenceSha256: "a".repeat(64),
+      statement:
+        "Synthetic provider confirms this exact claim never created a transaction and all requests ended.",
+      reviewedThrough: new Date(Date.now() - 1000).toISOString(),
+      confirmed: true,
+    };
+    await expect(proposeClaimReview(f.driver.id, evidence)).rejects.toMatchObject({
+      status: 403,
+    });
+    const [a, b] = await Promise.all([
+      proposeClaimReview(f.userId, evidence),
+      proposeClaimReview(f.userId, evidence),
+    ]);
+    expect(a.id).toBe(b.id);
+    await expect(
+      proposeClaimReview(f.userId, { ...evidence, evidenceSha256: "b".repeat(64) }),
+    ).rejects.toMatchObject({ status: 409 });
+    const approve = {
+      id: a.id,
+      decision: "APPROVED",
+      reason:
+        "Independently checked the retained provider confirmation and completed requests",
+      confirmed: true,
+    };
+    await expect(decideClaimReview(f.userId, approve)).rejects.toMatchObject({
+      status: 403,
+    });
+    expect((await readTipAccounting(f.userId, f.tip.id)).payableCents).toBe(0);
+    await Promise.all([
+      decideClaimReview(reviewer.userId, approve),
+      decideClaimReview(reviewer.userId, approve),
+    ]);
+    expect(
+      await prisma.auditLog.count({
+        where: { entityId: a.id, action: "financial-claim.review.decided" },
+      }),
+    ).toBe(1);
+    expect(await reconcileTipRefund(f.userId, r.id)).toMatchObject({
+      state: "NOT_CREATED",
+    });
+    expect((await readTipAccounting(f.userId, f.tip.id)).payableCents).toBe(100);
+    expect(m.submit).toHaveBeenCalledTimes(1);
+    const saved = await prisma.tipRefundRequest.findUniqueOrThrow({
+      where: { id: r.id },
+    });
+    await expect(
+      prisma.financialClaimReview.update({
+        where: { id: a.id },
+        data: { statement: "replacement evidence" },
+      }),
+    ).rejects.toThrow();
+    await expect(
+      prisma.financialClaimReview.delete({ where: { id: a.id } }),
+    ).rejects.toThrow();
+    await recordTipPayout(f.userId, f.input);
+    m.inspect.mockResolvedValue({
+      disputed: false,
+      refunds: [
+        {
+          id: "re_late" + randomUUID().replaceAll("-", ""),
+          amountCents: 108,
+          currency: "USD",
+          status: "succeeded",
+          balanceTransactionId: "txn_late",
+          requestId: r.id,
+          requestHash: saved.requestHash,
+          project: "detergents-delivered",
+        },
+      ],
+    });
+    expect((await readTipAccounting(f.userId, f.tip.id)).review).toBe(true);
+    expect(await reconcileTipRefund(f.userId, r.id)).toMatchObject({
+      state: "SUCCEEDED",
+    });
+    expect((await readTipAccounting(f.userId, f.tip.id)).recoverableCents).toBe(100);
+    expect(
+      await prisma.auditLog.count({
+        where: {
+          entityId: r.id,
+          action: "delivery.tip.refund.non-creation-contradicted",
+        },
+      }),
+    ).toBe(1);
+    expect(m.submit).toHaveBeenCalledTimes(1);
+    expect(
+      await prisma.financialClaimReview.count({
+        where: { id: a.id, decision: "APPROVED" },
+      }),
+    ).toBe(1);
+  } finally {
+    await f.cleanup();
+    await reviewer.cleanup();
+  }
+});
+
+it("rejects changed provider evidence before approval and permits a corrected proposal after rejection", async () => {
+  const f = await fixture(),
+    reviewer = await fixture();
+  try {
+    m.submit.mockRejectedValue(new Error("synthetic unknown"));
+    const r = await submitTipRefund(f.userId, {
+      tipId: f.tip.id,
+      requestKey: randomUUID(),
+      amountCents: 108,
+      reason: "Synthetic uncertain refund",
+      confirmed: true,
+    });
+    await prisma.tipRefundRequest.update({
+      where: { id: r.id },
+      data: { submittedAt: new Date(Date.now() - 49 * 3600000) },
+    });
+    const { proposeClaimReview, decideClaimReview } =
+      await import("./financial-claim-reviews");
+    const d = {
+      kind: "TIP_REFUND",
+      claimId: r.id,
+      requestKey: randomUUID(),
+      providerCase: "case-synthetic-review",
+      evidenceReference: "retained/provider-confirmation",
+      evidenceSha256: "c".repeat(64),
+      statement: "Synthetic provider non-creation confirmation after all attempts ended.",
+      reviewedThrough: new Date(Date.now() - 1000).toISOString(),
+      confirmed: true,
+    };
+    const p = await proposeClaimReview(f.userId, d);
+    m.inspect.mockResolvedValue({ disputed: true, refunds: [] });
+    await expect(
+      decideClaimReview(reviewer.userId, {
+        id: p.id,
+        decision: "APPROVED",
+        reason: "Independent evidence check",
+        confirmed: true,
+      }),
+    ).rejects.toMatchObject({ status: 409 });
+    await decideClaimReview(f.userId, {
+      id: p.id,
+      decision: "REJECTED",
+      reason: "Withdraw incorrect provider evidence",
+      confirmed: true,
+    });
+    m.inspect.mockResolvedValue({ disputed: false, refunds: [] });
+    const next = await proposeClaimReview(f.userId, {
+      ...d,
+      requestKey: randomUUID(),
+      providerCase: "case-corrected",
+    });
+    expect(next.id).not.toBe(p.id);
+    expect(
+      await prisma.financialClaimReview.count({
+        where: { kind: "TIP_REFUND", claimId: r.id },
+      }),
+    ).toBe(2);
+    expect((await readTipAccounting(f.userId, f.tip.id)).payableCents).toBe(0);
+  } finally {
+    await f.cleanup();
+    await reviewer.cleanup();
+  }
+});

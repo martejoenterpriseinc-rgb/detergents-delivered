@@ -199,3 +199,73 @@ it("keeps tax review available when a manual refund source needs evidence review
   expect(report.unverifiedAdjustments).toBeGreaterThan(0);
   expect(provider).not.toHaveBeenCalled();
 });
+
+it("retries aged manual refund tax only after independent review and preserves the original binding", async () => {
+  const f = await fixture(),
+    reviewer = await fixture(),
+    r = await f.draft();
+  await recordManualRefund(f.userId, f.returned(r.id));
+  const d = { orderId: f.orderId, requestId: r.id, confirmed: true };
+  provider.mockRejectedValueOnce(new Error("synthetic lost tax response"));
+  await expect(reconcileManualRefundTax(f.userId, d)).rejects.toMatchObject({
+    status: 409,
+  });
+  const originalBinding = provider.mock.calls[0][0];
+  const time = vi.spyOn(Date, "now").mockReturnValue(Date.now() + 49 * 3600000);
+  try {
+    await expect(
+      reconcileManualRefundTax(f.userId, { ...d, retryReviewed: true }),
+    ).rejects.toMatchObject({ status: 409 });
+    const runtime = await import("@/lib/commerce/runtime");
+    const config = vi
+      .spyOn(runtime, "readCommerce")
+      .mockResolvedValue({
+        accountId: originalBinding.accountId,
+        live: originalBinding.live,
+      } as Awaited<ReturnType<typeof runtime.readCommerce>>);
+    const { proposeClaimReview, decideClaimReview } =
+      await import("./financial-claim-reviews");
+    const review = await proposeClaimReview(f.userId, {
+      kind: "MANUAL_REFUND_TAX",
+      claimId: r.id,
+      requestKey: randomUUID(),
+      providerCase: "case-tax-synthetic",
+      evidenceReference: "retained/tax-confirmation.pdf",
+      evidenceSha256: "d".repeat(64),
+      statement:
+        "Synthetic provider confirms original tax reversal was never created and attempts have ended.",
+      reviewedThrough: new Date(Date.now() - 1000).toISOString(),
+      confirmed: true,
+    });
+    await decideClaimReview(reviewer.userId, {
+      id: review.id,
+      decision: "APPROVED",
+      reason: "Independently verified original tax reference and provider confirmation",
+      confirmed: true,
+    });
+    const taxId = "tax_reviewed" + randomUUID().replaceAll("-", "");
+    provider.mockImplementation(async (b, id, authorize) => {
+      expect(id).toBeUndefined();
+      await authorize();
+      return {
+        originalTaxTransactionId: b.originalTransactionId,
+        refundTaxTransactionId: taxId,
+        postedAt: Math.floor(Date.now() / 1000),
+        taxLines: b.refundLines.map(
+          (l: { orderItemId: string; netCents: number; taxCents: number }) => ({
+            ...l,
+            originalLineItemId: "tax_li_synthetic",
+          }),
+        ),
+      };
+    });
+    await reconcileManualRefundTax(f.userId, { ...d, retryReviewed: true });
+    expect(provider.mock.calls[1][0]).toEqual(originalBinding);
+    await reconcileManualRefundTax(f.userId, { ...d, retryReviewed: true });
+    expect(provider).toHaveBeenCalledTimes(2);
+    expect(await prisma.refund.count({ where: { requestId: r.id } })).toBe(1);
+    config.mockRestore();
+  } finally {
+    time.mockRestore();
+  }
+});

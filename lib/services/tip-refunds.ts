@@ -1,3 +1,4 @@
+import { approvedClaimReview, tipClaimSource } from "./financial-claim-review-proof";
 import { createHash } from "node:crypto";
 import type Stripe from "stripe";
 import type { Prisma, TipRefundRequest } from "@prisma/client";
@@ -146,6 +147,16 @@ export async function submitTipRefund(actor: string, raw: unknown) {
     if (others.length >= 100 || others.some((r) => unresolved.includes(r.state)))
       throw fail();
     for (const r of others) {
+      if (r.state === "NOT_CREATED") {
+        if (
+          !(await approvedClaimReview(tx, "TIP_REFUND", r.id, tipClaimSource(r))) ||
+          observation.refunds.some(
+            (o) => o.requestId === r.id || o.requestHash === r.requestHash,
+          )
+        )
+          throw fail();
+        continue;
+      }
       const found = observation.refunds.find((o) => o.id === r.providerRefundId);
       if (!found) throw fail();
       match(r, found);
@@ -246,7 +257,8 @@ async function reconcileAs(actor: string | null, id: string) {
   const matches = observation.refunds.filter(
     (o) => o.id === request.providerRefundId || o.requestId === request.id,
   );
-  if (matches.length !== 1) throw fail();
+  if (matches.length !== 1 && !(request.state === "NOT_CREATED" && matches.length === 0))
+    throw fail();
   return prisma.$transaction(async (tx) => {
     if (actor) await financeAccess(tx, actor, true);
     await tx.$queryRaw`SELECT id FROM "DeliveryTip" WHERE id=${request.tipId} FOR UPDATE`;
@@ -254,6 +266,28 @@ async function reconcileAs(actor: string | null, id: string) {
     if (canonicalJson(current) !== canonicalJson(before)) throw fail();
     const latest = await tx.tipRefundRequest.findUniqueOrThrow({ where: { id } });
     if (latest.updatedAt.getTime() !== request.updatedAt.getTime()) throw fail();
+    if (!matches.length) {
+      if (
+        !(await approvedClaimReview(tx, "TIP_REFUND", latest.id, tipClaimSource(latest)))
+      )
+        throw fail();
+      return dto(
+        await tx.tipRefundRequest.update({
+          where: { id: latest.id },
+          data: { recoveryCheckedAt: new Date(), lastError: null },
+        }),
+      );
+    }
+    if (latest.state === "NOT_CREATED")
+      await tx.auditLog.create({
+        data: {
+          actorUserId: actor,
+          entityType: "TipRefundRequest",
+          entityId: latest.id,
+          action: "delivery.tip.refund.non-creation-contradicted",
+          afterJson: json({ providerRefundId: matches[0].id, observation: matches[0] }),
+        },
+      });
     return saveObservation(tx, latest, matches[0], actor);
   });
 }
@@ -335,22 +369,33 @@ export async function recoverTipRefunds(ownsLease: () => Promise<boolean>) {
   return { checked: rows.length, completed, attention: rows.length - completed };
 }
 
-export function tipRefundRequestHold(
+export async function tipRefundRequestHold(
+  tx: Prisma.TransactionClient,
   requests: readonly TipRefundRequest[],
   refunds: readonly RefundObservation[],
 ) {
   if (requests.length > 100) return true;
-  return requests.some((r) => {
-    if (unresolved.includes(r.state) || r.lastError || !r.providerRefundId) return true;
-    const found = refunds.find((o) => o.id === r.providerRefundId);
-    if (!found) return true;
+  for (const r of requests) {
     try {
+      if (r.state === "NOT_CREATED") {
+        if (
+          r.lastError ||
+          refunds.some((o) => o.requestId === r.id || o.requestHash === r.requestHash) ||
+          !(await approvedClaimReview(tx, "TIP_REFUND", r.id, tipClaimSource(r)))
+        )
+          return true;
+        continue;
+      }
+      if (unresolved.includes(r.state) || r.lastError || !r.providerRefundId) return true;
+      const found = refunds.find((o) => o.id === r.providerRefundId);
+      if (!found) return true;
       match(r, found);
-      return state(found) !== r.state;
+      if (state(found) !== r.state) return true;
     } catch {
       return true;
     }
-  });
+  }
+  return false;
 }
 
 /** Explicit replay of the original Stripe idempotency key, within its retention window.

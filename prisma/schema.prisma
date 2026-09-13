@@ -2034,3 +2034,24 @@ model QboTipJournal {
   @@unique([mode, realm, docNumber])
   @@unique([mode, realm, externalId])
 }
+
+model FinancialClaimReview {
+  id                String   @id
+  kind              String
+  claimId           String
+  sourceHash        String
+  sourceJson        Json
+  evidenceReference String
+  evidenceSha256    String
+  providerCase      String
+  statement         String
+  reviewedThrough   DateTime
+  proposedById      String
+  createdAt         DateTime @default(now())
+  decision          String   @default("PENDING")
+  decidedById       String?
+  decidedAt         DateTime?
+  decisionReason    String?
+
+  @@index([kind, claimId, createdAt])
+}

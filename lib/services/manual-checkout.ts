@@ -1,3 +1,4 @@
+import { requireReviewedTaxRetry } from "./financial-claim-review-proof";
 import { integrationEnvironment } from "@/lib/integration-environment";
 import { createHash } from "node:crypto";
 import { z } from "zod";
@@ -189,6 +190,7 @@ export async function reconcileManualCheckout(
   actor: string,
   settlementId: string,
   recoveredTaxId?: string,
+  retryReviewed = false,
 ) {
   idSchema.parse(settlementId);
   z.string()
@@ -228,14 +230,35 @@ export async function reconcileManualCheckout(
         entityType: "ManualCheckoutSettlement",
         entityId: r.id,
         action: "manual-payment.tax.claimed",
-        afterJson: { recovery: Boolean(recoveredTaxId || r.taxTransactionId) },
+        afterJson: {
+          recovery: Boolean(recoveredTaxId || r.taxTransactionId),
+          reviewedRetry: retryReviewed,
+        },
       },
     });
     return { ...updated, checkout: r.checkout };
   });
   if (receipt.state === "SETTLED") return { id: receipt.id, state: "SETTLED" };
   try {
-    const evidence = await confirmManualTax(receipt.checkout, receipt, recoveredTaxId);
+    const evidence = await confirmManualTax(
+      receipt.checkout,
+      receipt,
+      recoveredTaxId,
+      retryReviewed
+        ? async () => {
+            await prisma.$transaction(async (tx) => {
+              await financeAccess(tx, actor, true);
+              await tx.$queryRaw`SELECT id FROM "ManualCheckoutSettlement" WHERE id=${receipt.id} FOR UPDATE`;
+              await requireReviewedTaxRetry(tx, "MANUAL_CHECKOUT_TAX", receipt.id);
+              const current = await tx.manualCheckoutSettlement.findUniqueOrThrow({
+                where: { id: receipt.id },
+              });
+              if (current.claimedAt?.getTime() !== receipt.claimedAt?.getTime())
+                throw new AccountError("Settlement claim changed.", 409);
+            });
+          }
+        : undefined,
+    );
     // Retain verified provider creation even when delivery/finalization later fails.
     // Otherwise a missed route could discard the provider ID and encourage a new POST.
     await prisma.$transaction(async (tx) => {

@@ -1,6 +1,6 @@
 {
   "baselineCommit": "a2495c4afa459a9c258804841fa37b038ecdd828",
-  "candidateCommit": "aa6eeffb1071e6d0bbc4ff8ea10e87714c37f6a9",
+  "candidateCommit": "8d6f7dde8c03c9fb3a642192ad7c916ea776ac21",
   "baselineMigrationCount": 15,
   "migrations": [
     {
@@ -158,6 +158,10 @@
     {
       "name": "20260917080000_refund_correction_receipts",
       "checksum": "cd6da6ba65e6c61d8f350e606b43b1eb20c62ce4ab8b94fcd90c751f93927997"
+    },
+    {
+      "name": "20260917090000_financial_claim_reviews",
+      "checksum": "3afdf27160dabb31ac8fe87e3012bc7ead7bce41f23fc9efe5cd4c28d34414dc"
     }
   ]
 }

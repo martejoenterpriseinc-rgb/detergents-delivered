@@ -1,3 +1,4 @@
+import { requireReviewedTaxRetry } from "./financial-claim-review-proof";
 import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -24,6 +25,7 @@ const input = z
       .max(100)
       .optional(),
     retrySameRequest: z.boolean().optional(),
+    retryReviewed: z.boolean().optional(),
     confirmed: z.literal(true),
   })
   .strict();
@@ -113,6 +115,7 @@ export async function reconcileManualRefundTax(actor: string, raw: unknown) {
         );
       if (
         !d.taxTransactionId &&
+        !d.retryReviewed &&
         (!d.retrySameRequest || Date.now() - previous.createdAt.getTime() > 23 * 3600000)
       )
         throw new AccountError(
@@ -146,7 +149,10 @@ export async function reconcileManualRefundTax(actor: string, raw: unknown) {
         },
       });
     }
-    if (d.retrySameRequest && !d.taxTransactionId) {
+    if ((d.retrySameRequest || d.retryReviewed) && !d.taxTransactionId) {
+      const reviewedId = d.retryReviewed
+        ? await requireReviewedTaxRetry(tx, "MANUAL_REFUND_TAX", d.requestId)
+        : null;
       if (
         !previous ||
         process.env.DD_MANUAL_REFUND_TAX_ENABLED !== "true" ||
@@ -159,7 +165,7 @@ export async function reconcileManualRefundTax(actor: string, raw: unknown) {
           entityType: "RefundRequest",
           entityId: d.requestId,
           action: "manual-refund.tax.same-key-retry",
-          afterJson: { sourceHash: manualRefundDigest(s) },
+          afterJson: { sourceHash: manualRefundDigest(s), reviewedId },
         },
       });
     }
@@ -178,8 +184,11 @@ export async function reconcileManualRefundTax(actor: string, raw: unknown) {
         const claim = await tx.refundRequestEvent.findUniqueOrThrow({
           where: { providerEventId: `dd:manual-tax:claim:${d.requestId}` },
         });
-        if (Date.now() - claim.createdAt.getTime() > 23 * 3600000)
-          throw new AccountError("Safe tax retry window ended.", 409);
+        if (Date.now() - claim.createdAt.getTime() > 23 * 3600000) {
+          if (!d.retryReviewed)
+            throw new AccountError("Safe tax retry window ended.", 409);
+          await requireReviewedTaxRetry(tx, "MANUAL_REFUND_TAX", d.requestId);
+        }
         if (
           manualRefundDigest(current) !== manualRefundDigest(before.s) ||
           (await verifiedManualRefundTax(tx, d.requestId))

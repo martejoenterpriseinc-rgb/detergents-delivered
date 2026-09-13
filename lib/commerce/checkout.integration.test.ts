@@ -1261,3 +1261,67 @@ it("retains verified tax through a missed route and settles the rescheduled paym
   expect(manualTaxMock.mock.calls[1][1].taxTransactionId).toBe(taxId);
   expect((await ownedCheckout(f.one.id, q.id)).state).toBe("PAID");
 });
+
+it("requires an independent review before retrying an aged manual checkout tax claim", async () => {
+  const { q, receipt } = await manualReservation(),
+    r = await recordManualReceipt(f.admin.id, receipt);
+  manualTaxMock.mockReset();
+  manualTaxMock.mockRejectedValue(new Error("synthetic uncertain tax"));
+  await expect(reconcileManualCheckout(f.admin.id, r.id)).rejects.toThrow();
+  await prisma.manualCheckoutSettlement.update({
+    where: { id: r.id },
+    data: { submittedAt: new Date(Date.now() - 49 * 3600000) },
+  });
+  manualTaxMock.mockImplementation(async (_a, _r, _id, authorize) => {
+    await authorize();
+    throw Error("synthetic provider unavailable after authorization");
+  });
+  await expect(
+    reconcileManualCheckout(f.admin.id, r.id, undefined, true),
+  ).rejects.toMatchObject({ status: 409 });
+  const { proposeClaimReview, decideClaimReview } =
+    await import("@/lib/services/financial-claim-reviews");
+  const review = await proposeClaimReview(f.admin.id, {
+    kind: "MANUAL_CHECKOUT_TAX",
+    claimId: r.id,
+    requestKey: randomUUID(),
+    providerCase: "case-checkout-synthetic",
+    evidenceReference: "retained/checkout-tax-confirmation.pdf",
+    evidenceSha256: "e".repeat(64),
+    statement:
+      "Synthetic provider confirms original manual tax transaction was not created and all requests ended.",
+    reviewedThrough: new Date(Date.now() - 1000).toISOString(),
+    confirmed: true,
+  });
+  const role = await prisma.role.findUniqueOrThrow({ where: { code: "ADMIN" } });
+  await prisma.userRole.create({ data: { userId: f.two.id, roleId: role.id } });
+  await decideClaimReview(f.two.id, {
+    id: review.id,
+    decision: "APPROVED",
+    reason: "Independent original reference and provider evidence review",
+    confirmed: true,
+  });
+  const taxId = "tax_reviewed" + randomUUID().replaceAll("-", "");
+  manualTaxMock.mockImplementation(async (_a, _r, _id, authorize) => {
+    await authorize();
+    return {
+      taxTransactionId: taxId,
+      reference: `dd-manual:${r.id}`,
+      postedAt: Math.floor(new Date(receipt.receivedAt).getTime() / 1000),
+      taxLines: [
+        {
+          variantId: f.variant.id,
+          netCents: q.totalCents - q.taxCents,
+          taxCents: q.taxCents,
+        },
+      ],
+      accountId: "acct_synthetic",
+      livemode: false,
+    };
+  });
+  await reconcileManualCheckout(f.admin.id, r.id, undefined, true);
+  expect((await ownedCheckout(f.one.id, q.id)).state).toBe("PAID");
+  expect(
+    await prisma.manualCheckoutSettlement.findUniqueOrThrow({ where: { id: r.id } }),
+  ).toMatchObject({ state: "SETTLED", taxTransactionId: taxId });
+});

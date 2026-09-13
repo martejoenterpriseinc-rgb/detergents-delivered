@@ -153,3 +153,24 @@ it("rejects mismatched totals, addresses, metadata, mode, duplicate lines and tr
     await expect(confirmManualTax(a, receipt())).rejects.toThrow();
   }
 });
+it("requires reviewed authorization for an aged creation and retains the original unique reference", async () => {
+  const old = { ...receipt(), submittedAt: new Date(Date.now() - 49 * 3600000) };
+  const authorize = vi.fn().mockRejectedValueOnce(new Error("review missing"));
+  await expect(confirmManualTax(a, old, undefined, authorize)).rejects.toThrow(
+    "review missing",
+  );
+  expect(m.create).not.toHaveBeenCalled();
+  authorize.mockResolvedValue(undefined);
+  await confirmManualTax(a, old, undefined, authorize);
+  expect(m.create).toHaveBeenCalledWith(
+    expect.objectContaining({
+      reference: "dd-manual:manual_synthetic",
+      calculation: "taxcalc_synthetic",
+    }),
+    expect.objectContaining({
+      idempotencyKey: "dd-manual:manual_synthetic",
+      maxNetworkRetries: 0,
+    }),
+  );
+  expect(authorize).toHaveBeenCalledTimes(2);
+});

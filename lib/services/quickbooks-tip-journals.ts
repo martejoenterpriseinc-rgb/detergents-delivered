@@ -116,7 +116,7 @@ async function checkedSource(tipId: string) {
     a.review ||
     observed.disputed ||
     a.refundedTipCents === null ||
-    tipRefundRequestHold(local.requests, observed.refunds)
+    (await tipRefundRequestHold(prisma, local.requests, observed.refunds))
   )
     throw fail();
   // Tax liability must use actual tax-report evidence, including full refunds.

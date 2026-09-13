@@ -1,4 +1,5 @@
 "use client";
+import { FinancialClaimReview } from "./financial-claim-review";
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 export function TipRefundForm({
@@ -144,6 +145,10 @@ export function TipRefundForm({
               >
                 Retry original provider request within 23 hours
               </button>
+            )}
+          {!r.providerRefundId &&
+            ["SUBMITTING", "UNKNOWN", "NOT_CREATED"].includes(r.state) && (
+              <FinancialClaimReview kind="TIP_REFUND" claimId={r.id} />
             )}
           <button
             type="button"
