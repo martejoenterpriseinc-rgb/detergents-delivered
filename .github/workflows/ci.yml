@@ -142,4 +142,5 @@ jobs:
             test-results/**/manual-payment-approvals.png
             test-results/**/delivery-tips.png
             test-results/**/payment-overview.png
+            test-results/**/manual-refunds.png
           retention-days: 14

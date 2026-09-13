@@ -284,3 +284,37 @@ describe("original cash receipt evidence", () => {
       ).toThrow();
   });
 });
+
+it("requires the original manual method and verified tax reversal for a manual QuickBooks refund", () => {
+  const manualSale = { ...sale, paymentMethod: "CASH", taxTransactionId: "tax_original" };
+  const manualRefund = {
+    ...refund,
+    providerRefundId: null,
+    paymentMethod: "CASH",
+    manualRefundReference: "cash-return-receipt",
+    originalTaxTransactionId: "tax_original",
+  };
+  expect(
+    prepareCashReceipt({
+      documentNumber: "DR" + "a".repeat(19),
+      sale: manualSale,
+      refund: manualRefund,
+      mapping,
+    }).entity,
+  ).toBe("RefundReceipt");
+  for (const altered of [
+    { ...manualRefund, paymentMethod: "ZELLE" },
+    { ...manualRefund, taxEvidenceStatus: "UNVERIFIED" },
+    { ...manualRefund, originalTaxTransactionId: "tax_other" },
+    { ...manualRefund, manualRefundReference: undefined },
+    { ...manualRefund, providerRefundId: "re_stripe" },
+  ])
+    expect(() =>
+      prepareCashReceipt({
+        documentNumber: "DR" + "a".repeat(19),
+        sale: manualSale,
+        refund: altered,
+        mapping,
+      }),
+    ).toThrow();
+});

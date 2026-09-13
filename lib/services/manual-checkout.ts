@@ -368,6 +368,7 @@ export async function readManualCheckouts(actor: string) {
     canWrite,
     rows: rows.map((a) => ({
       id: a.id,
+      orderId: a.orderId,
       method: a.paymentMethod,
       state: a.state,
       order: a.order?.number ?? "Unreserved",

@@ -1,3 +1,7 @@
+import {
+  verifiedManualRefundReceipt,
+  verifiedManualRefundTax,
+} from "./manual-refund-evidence";
 import { verifiedManualSaleEvidence } from "./manual-sale-evidence";
 import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
@@ -303,7 +307,19 @@ export async function recordedRefundSource(
       };
     })
     .sort((a, b) => a.orderItemId.localeCompare(b.orderItemId));
+  const manualReceipt = sale.manualSettlementId
+    ? await verifiedManualRefundReceipt(tx, request.id)
+    : null;
   if (
+    manualReceipt &&
+    (kind !== "SETTLEMENT" ||
+      a.providerRefundId ||
+      a.balanceTransactionId ||
+      a.failureBalanceTransactionId)
+  )
+    throw new AccountError("Manual refund accounting evidence requires review.", 409);
+  if (
+    !manualReceipt &&
     kind !== "REWARD_ONLY" &&
     (!a.providerRefundId ||
       a.providerRefundId !== request.providerRefundId ||
@@ -357,8 +373,10 @@ export async function recordedRefundSource(
     )
       throw new AccountError("Refund reward ledger evidence is incomplete.", 409);
   }
+  const manualTax = manualReceipt ? await verifiedManualRefundTax(tx, request.id) : null;
   const evidence = a.taxEvidence;
   const matched =
+    !manualReceipt &&
     kind === "SETTLEMENT" &&
     evidence &&
     evidence.providerAccountId === sale.providerAccountId &&
@@ -372,7 +390,13 @@ export async function recordedRefundSource(
     requestId: request.id,
     customerId: sale.customerId,
     number: sale.number,
-    date: businessDate(a.createdAt),
+    date: businessDate(manualReceipt ? new Date(manualReceipt.returnedAt) : a.createdAt),
+    ...(manualReceipt
+      ? {
+          paymentMethod: manualReceipt.method,
+          manualRefundReference: manualReceipt.reference,
+        }
+      : {}),
     currency: "USD" as const,
     cashCents: a.cashCents,
     netCents: a.netCents,
@@ -383,12 +407,16 @@ export async function recordedRefundSource(
     taxEvidenceStatus:
       kind === "REWARD_ONLY"
         ? ("NOT_APPLICABLE" as const)
-        : matched
+        : matched || manualTax
           ? ("MATCHED" as const)
           : ("UNVERIFIED" as const),
-    taxEvidenceId: matched ? evidence.id : null,
-    originalTaxTransactionId: matched ? evidence.originalTaxTransactionId : null,
-    refundTaxTransactionId: matched ? evidence.refundTaxTransactionId : null,
+    taxEvidenceId: manualTax?.id ?? (matched ? evidence.id : null),
+    originalTaxTransactionId:
+      manualTax?.originalTaxTransactionId ??
+      (matched ? evidence.originalTaxTransactionId : null),
+    refundTaxTransactionId:
+      manualTax?.refundTaxTransactionId ??
+      (matched ? evidence.refundTaxTransactionId : null),
     requiresCashReceipt: kind !== "REWARD_ONLY" && a.cashCents !== 0,
   };
 }

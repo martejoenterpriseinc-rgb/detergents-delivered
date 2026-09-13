@@ -1,3 +1,5 @@
+import { prepareManualRefund, recordManualRefund } from "@/lib/services/manual-refunds";
+import { recordedRefundSource } from "@/lib/services/sales-refund-source";
 import { readCpaLedger } from "@/lib/services/cpa-ledger";
 import { recordedSaleSource } from "@/lib/services/sales-refund-source";
 import { recordedOrderCost } from "@/lib/services/quickbooks-cost-source";
@@ -906,6 +908,108 @@ it("settles approved manual funds once through shared stock, rewards, route and 
   });
   expect(ledger).toMatchObject({ count: 1, attention: 0 });
   expect(ledger.rows[0]).toMatchObject({ date: receiptDay, cashCents: q.totalCents });
+  vi.stubEnv("DD_MANUAL_REFUNDS_ENABLED", "true");
+  const refundInput = {
+    requestKey: randomUUID(),
+    orderId: sale.orderId,
+    paymentId: sale.paymentId,
+    reason: "Synthetic manual return of merchandise",
+    lines: sale.lines.map((l) => ({ orderItemId: l.orderItemId, quantity: l.quantity })),
+  };
+  await expect(prepareManualRefund(f.one.id, refundInput)).rejects.toMatchObject({
+    status: 403,
+  });
+  const [draft, draftReplay] = await Promise.all([
+    prepareManualRefund(f.admin.id, refundInput),
+    prepareManualRefund(f.admin.id, refundInput),
+  ]);
+  expect(draft.id).toBe(draftReplay.id);
+  await expect(
+    prepareManualRefund(f.admin.id, { ...refundInput, requestKey: randomUUID() }),
+  ).rejects.toMatchObject({ status: 409 });
+  const returned = {
+    orderId: sale.orderId,
+    requestId: draft.id,
+    method: "CASH",
+    amountCents: draft.amountCents,
+    reference: "synthetic-return-" + randomUUID(),
+    reason: "Synthetic returned cash receipt evidence",
+    returnedAt: new Date().toISOString(),
+    confirmed: true,
+  };
+  await expect(recordManualRefund(f.one.id, returned)).rejects.toMatchObject({
+    status: 403,
+  });
+  await expect(
+    recordManualRefund(f.admin.id, {
+      ...returned,
+      amountCents: returned.amountCents + 1,
+    }),
+  ).rejects.toMatchObject({ status: 409 });
+  await expect(
+    recordManualRefund(f.admin.id, { ...returned, method: "ZELLE" }),
+  ).rejects.toMatchObject({ status: 409 });
+  await expect(
+    recordManualRefund(f.admin.id, {
+      ...returned,
+      returnedAt: new Date(Date.now() + 86400000).toISOString(),
+    }),
+  ).rejects.toMatchObject({ status: 409 });
+  const originalLines = await prisma.refundRequestLine.findMany({
+    where: { refundRequestId: draft.id },
+  });
+  await prisma.refundRequestLine.update({
+    where: { id: originalLines[0].id },
+    data: { netCents: { decrement: 1 }, taxCents: { increment: 1 } },
+  });
+  await expect(recordManualRefund(f.admin.id, returned)).rejects.toMatchObject({
+    status: 409,
+  });
+  await prisma.refundRequestLine.update({
+    where: { id: originalLines[0].id },
+    data: { netCents: originalLines[0].netCents, taxCents: originalLines[0].taxCents },
+  });
+  const [completed, replayed] = await Promise.all([
+    recordManualRefund(f.admin.id, returned),
+    recordManualRefund(f.admin.id, returned),
+  ]);
+  expect(completed).toEqual(replayed);
+  await expect(
+    recordManualRefund(f.admin.id, { ...returned, reference: "changed receipt" }),
+  ).rejects.toMatchObject({ status: 409 });
+  expect(await prisma.refund.count({ where: { requestId: draft.id } })).toBe(1);
+  expect(
+    await prisma.auditLog.count({
+      where: { entityId: draft.id, action: "manual-refund.returned" },
+    }),
+  ).toBe(1);
+  expect(
+    (await prisma.payment.findUniqueOrThrow({ where: { id: sale.paymentId } })).status,
+  ).toBe("REFUNDED");
+  expect(await prisma.$transaction((tx) => recordedSaleSource(tx, sale.orderId))).toEqual(
+    sale,
+  );
+  expect((await customerReceipt(f.one.id, q.id)).totalCents).toBe(q.totalCents);
+  const adjustment = await prisma.refundAdjustment.findFirstOrThrow({
+    where: { requestId: draft.id },
+  });
+  expect(
+    await prisma.$transaction((tx) =>
+      recordedRefundSource(tx, sale.orderId, adjustment.id),
+    ),
+  ).toMatchObject({
+    cashCents: returned.amountCents,
+    taxEvidenceStatus: "UNVERIFIED",
+    paymentMethod: "CASH",
+    providerRefundId: null,
+  });
+  const afterRefund = await readCpaLedger(f.admin.id, {
+    orderId: sale.orderId,
+    from: receiptDay,
+    to: receiptDay,
+  });
+  expect(afterRefund.count).toBe(2);
+  expect(afterRefund.rows.reduce((n, r) => n + (r.cashCents ?? 0), 0)).toBe(0);
   await prisma.manualCheckoutSettlement.update({
     where: { id: r1.id },
     data: { taxEvidence: { invalid: true } },

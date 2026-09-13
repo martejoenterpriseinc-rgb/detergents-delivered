@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { readManualCheckouts } from "@/lib/services/manual-checkout";
@@ -132,6 +133,11 @@ export function ManualSettlementRow({ row, canWrite }: { row: Row; canWrite: boo
         </form>
       )}
       {message && <p role="status">{message}</p>}
+      {row.orderId && row.settlement?.state === "SETTLED" && (
+        <Link className="ops-button" href={`/admin/payments/manual/${row.orderId}`}>
+          Refunds / return receipts
+        </Link>
+      )}
       {row.settlement?.lastError && (
         <p role="alert">
           Tax or delivery reconciliation is required. Do not collect again.
