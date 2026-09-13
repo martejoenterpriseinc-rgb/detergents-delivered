@@ -179,3 +179,130 @@ export async function matchTipRefundTax(actor: string, raw: unknown) {
     return { matched: true, id };
   });
 }
+
+/** Confirm a positive tax adjustment after a previously settled tip refund fails. */
+export async function matchTipRefundTaxCorrection(actor: string, raw: unknown) {
+  const d = z
+    .object({
+      tipId: z.string().min(1).max(100),
+      providerRefundId: z
+        .string()
+        .regex(/^re_[A-Za-z0-9]+$/)
+        .max(100),
+      correctionTaxTransactionId: z
+        .string()
+        .regex(/^tax_[A-Za-z0-9]+$/)
+        .max(100),
+      confirmed: z.literal(true),
+    })
+    .strict()
+    .parse(raw);
+  await financeAccess(prisma, actor, true);
+  const before = await tipAccountingSource(prisma, d.tipId),
+    observed = await observeTipRefunds(before.tip),
+    r = observed.refunds.find((v) => v.id === d.providerRefundId),
+    allocations = await tipRefundTaxAllocations(prisma, before.tip),
+    a = allocations.find((v) => v.providerRefundId === d.providerRefundId);
+  if (
+    !r ||
+    !a ||
+    !["failed", "canceled"].includes(r.status) ||
+    !r.failureBalanceTransactionId ||
+    observed.disputed ||
+    a.cashCents !== r.amountCents
+  )
+    throw fail();
+  const { readTaxCorrection } = await import("@/lib/commerce/refund-tax-correction");
+  const binding = {
+    compensationId: before.tip.id + ":" + r.id,
+    accountId: before.tip.stripeAccountId,
+    live: before.tip.livemode,
+    originalTaxTransactionId: a.originalTaxTransactionId,
+    refundTaxTransactionId: a.refundTaxTransactionId,
+    cashCents: a.cashCents,
+    taxCents: a.taxCents,
+  };
+  const correction = await readTaxCorrection(binding, d.correctionTaxTransactionId);
+  return prisma.$transaction(async (tx) => {
+    await financeAccess(tx, actor, true);
+    await tx.$queryRaw`SELECT id FROM "DeliveryTip" WHERE id=${d.tipId} FOR UPDATE`;
+    if (
+      canonicalJson(await tipAccountingSource(tx, d.tipId)) !== canonicalJson(before) ||
+      canonicalJson(await tipRefundTaxAllocations(tx, before.tip)) !==
+        canonicalJson(allocations)
+    )
+      throw fail();
+    const id =
+        "tip_tax_correction_" +
+        createHash("sha256").update(binding.compensationId).digest("hex"),
+      value = { binding, ...correction };
+    const previous = await tx.auditLog.findUnique({ where: { id } });
+    if (previous) {
+      if (canonicalJson(previous.afterJson) !== canonicalJson(value)) throw fail();
+      return { matched: true, id };
+    }
+    await tx.auditLog.create({
+      data: {
+        id,
+        actorUserId: actor,
+        entityType: "DeliveryTip",
+        entityId: d.tipId,
+        action: "delivery.tip.refund-tax-correction.verified",
+        afterJson: value,
+      },
+    });
+    return { matched: true, id };
+  });
+}
+export async function assertTipTaxCorrections(
+  tx: Prisma.TransactionClient,
+  tip: DeliveryTip,
+  refunds: Awaited<ReturnType<typeof observeTipRefunds>>["refunds"],
+  allocations: Awaited<ReturnType<typeof tipRefundTaxAllocations>>,
+) {
+  for (const r of refunds) {
+    const a = allocations.find((v) => v.providerRefundId === r.id);
+    if (!a || !["failed", "canceled"].includes(r.status)) continue;
+    const id =
+        "tip_tax_correction_" +
+        createHash("sha256")
+          .update(tip.id + ":" + r.id)
+          .digest("hex"),
+      row = await tx.auditLog.findUnique({ where: { id } });
+    const binding = {
+      compensationId: tip.id + ":" + r.id,
+      accountId: tip.stripeAccountId,
+      live: tip.livemode,
+      originalTaxTransactionId: a.originalTaxTransactionId,
+      refundTaxTransactionId: a.refundTaxTransactionId,
+      cashCents: a.cashCents,
+      taxCents: a.taxCents,
+    };
+    const proof = z
+      .object({
+        binding: z.unknown(),
+        correctionTaxTransactionId: z.string().regex(/^tax_[A-Za-z0-9]+$/),
+        cashCents: z.number(),
+        taxCents: z.number(),
+        refundTaxTransactionId: z.string(),
+        originalTaxTransactionId: z.string(),
+      })
+      .safeParse(row?.afterJson);
+    if (
+      !r.failureBalanceTransactionId ||
+      !row?.actorUserId ||
+      row.entityId !== tip.id ||
+      row.action !== "delivery.tip.refund-tax-correction.verified" ||
+      !proof.success ||
+      canonicalJson(proof.data.binding) !== canonicalJson(binding) ||
+      proof.data.cashCents !== a.cashCents ||
+      proof.data.taxCents !== a.taxCents ||
+      proof.data.refundTaxTransactionId !== a.refundTaxTransactionId ||
+      proof.data.originalTaxTransactionId !== a.originalTaxTransactionId
+    )
+      throw new AccountError(
+        "Verify the failed tip refund's tax correction before posting its accounting adjustment.",
+        409,
+      );
+  }
+}

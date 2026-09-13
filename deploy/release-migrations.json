@@ -1,0 +1,167 @@
+{
+  "baselineCommit": "a2495c4afa459a9c258804841fa37b038ecdd828",
+  "candidateCommit": "9e8be88cbb3796aa8b2a91aaf4168152accb4f23",
+  "baselineMigrationCount": 15,
+  "migrations": [
+    {
+      "name": "20260907120000_init",
+      "checksum": "b4c1c5c91bde06af5c049760bf86af34483fdd5d6e20864f610df7e8f1c188ce"
+    },
+    {
+      "name": "20260907180000_phase2_catalog_inventory",
+      "checksum": "7085ee3b830e16ee684410658f620f6d342f1c9afbbcacd7e8b8b2dd124480d0"
+    },
+    {
+      "name": "20260907193000_site_builder",
+      "checksum": "df6a08a09d49fb9c3cf083b62cc50acbc4513b5a7f573d463da6fe735cfab6b4"
+    },
+    {
+      "name": "20260907210000_user_must_change_credentials",
+      "checksum": "ddc425532ccef97b8c55ade3ea5c683eb70e43d997986c4261713e079a0929ac"
+    },
+    {
+      "name": "20260909120000_customer_account_support",
+      "checksum": "2158ce72430ca0a1b602214a1f4070eab019b88edc9cd09887346e378329a99a"
+    },
+    {
+      "name": "20260909140000_loyalty_rewards",
+      "checksum": "d5f9e589ad5456e9feee6a1a2a9b818a6ca8ffbcdb05973b46589e3b3f70297a"
+    },
+    {
+      "name": "20260909200000_delivery_operations",
+      "checksum": "abc19ff6977a237fd21672314b404d2b173a790e3f3cc9ee72cf63f1be9f9214"
+    },
+    {
+      "name": "20260909210000_launch_offers",
+      "checksum": "9ebb515a05c8021d3b3c7e1184a3bae4dd6b1848fc1cc539adb67410f659007d"
+    },
+    {
+      "name": "20260910100000_connected_checkout",
+      "checksum": "f540c719a77221df10a8a120639a826bb4afba13b1ea22eead1b2597baba184c"
+    },
+    {
+      "name": "20260910120000_business_setup",
+      "checksum": "5708bbabcec4df0ede263ddc012bfd71d48dffdea4d1c68e936923323bcc53a0"
+    },
+    {
+      "name": "20260912100000_customer_access",
+      "checksum": "b576ee025538584024e2fcfee7b03f6f97d8bfcdfb0874b46a89e142497e6e23"
+    },
+    {
+      "name": "20260913100000_storefront_builder",
+      "checksum": "39df44de596f9f7882025f52fb069c70e8e40cd811f6543d6da96432adeb2027"
+    },
+    {
+      "name": "20260914100000_operational_media_jobs",
+      "checksum": "38229043aef45e3c21d5f8a62c9a7e2f7c6026efcf831648b257a2bed205d866"
+    },
+    {
+      "name": "20260915100000_refund_return_lifecycle",
+      "checksum": "9370b518dfea99e0c1e110464bdd435f22b2e419056584f3167ecde5a74781e8"
+    },
+    {
+      "name": "20260915101000_return_cost_evidence",
+      "checksum": "d0530af4e14e95f8137a6a3818875de02038161c107404f2fd580645f7ee5417"
+    },
+    {
+      "name": "20260916100000_refund_accounting",
+      "checksum": "c9d990efe97c938b300e37376e3959f623c985215faa8eab5ff09bedc2e0fe4c"
+    },
+    {
+      "name": "20260916110000_reward_only_refunds",
+      "checksum": "cc5db776b7a5facacfeb9be939006898ebc901c45e618800cdffd62d0473bb24"
+    },
+    {
+      "name": "20260916120000_quarterly_subscription_controls",
+      "checksum": "d83445a6b77b463cbd6ef7e1f8379c83e17b6582a6f2c8bb4a6e0fa377ebf2ac"
+    },
+    {
+      "name": "20260916130000_subscription_cycles",
+      "checksum": "3797e91934ed616f49d9b8cec3c70631b41e706d3855aca707c1d12c20aceaad"
+    },
+    {
+      "name": "20260916140000_refund_recovery_schedule",
+      "checksum": "13a4d33158726c1fa30029c1aae6c4cbffd3bee45b8c3a96d1e328dd023b920d"
+    },
+    {
+      "name": "20260916150000_refund_tax_evidence",
+      "checksum": "73d21f656fc5808fe3aae67f9795ca63486b92471bc322fa3f20a7b722a756e0"
+    },
+    {
+      "name": "20260916160000_commerce_grants",
+      "checksum": "de7e67e8c870d5fd32e7f1d6ce4f57554a1b11ad5a949c67538c868b3016cdc4"
+    },
+    {
+      "name": "20260916170000_quickbooks_expense_exports",
+      "checksum": "f5aeaecda3fce2d14084e3e3a2d3a1995de795fc2b30e9d16ad7141256708e87"
+    },
+    {
+      "name": "20260916180000_quickbooks_reconciliation_schedule",
+      "checksum": "9f09ff3f024f6157eaea4d3bcfb4acda3958d7a53f77b88548b070dcfd1bcc35"
+    },
+    {
+      "name": "20260916190000_delivery_sms_consent",
+      "checksum": "4d8454908782d9a8be3e2ba21bf322dc121f0ff5ab105d6cbdd21576970646d8"
+    },
+    {
+      "name": "20260916200000_delivery_sms_outbox",
+      "checksum": "5b92e549bf80e10783a1649383b028dc58a9f6ab9388be9e466ab58d2e3934a5"
+    },
+    {
+      "name": "20260916210000_quickbooks_cost_journals",
+      "checksum": "14f6f7e557baa737caa05f41e9a1e17743ba473357c2287ac7ec7a29d508133e"
+    },
+    {
+      "name": "20260916220000_quickbooks_receipt_exports",
+      "checksum": "f5f16ba864f928ab6afc34dd42be32b20f411b068159b39b1852fe794cc6d08e"
+    },
+    {
+      "name": "20260916230000_route_mileage_records",
+      "checksum": "cee24880233ff9f8b78807a9eb720df307eea0cddaf192507984b43f978032ca"
+    },
+    {
+      "name": "20260916233000_manual_payment_approvals",
+      "checksum": "1d39697f97d581fcb5590cb60466250f4cee81d5bf1e48fc8c90d0fa2aee2d7a"
+    },
+    {
+      "name": "20260917000000_delivery_tips",
+      "checksum": "84a0a1efc408e1bf6f0f65c570c180d4f251a6a7724c525a9832506e04119017"
+    },
+    {
+      "name": "20260917010000_tip_payout_accounting",
+      "checksum": "9d9242819a7ab4c81738f9112c515c637a965bd94958463bc314319a83bb35e7"
+    },
+    {
+      "name": "20260917020000_manual_checkout_settlement",
+      "checksum": "9388dadc0dc7c402f202319cc010d2b4fd292f3328b5786cb8023148d488da51"
+    },
+    {
+      "name": "20260917030000_tip_refund_requests",
+      "checksum": "245437262f47281493d4d6d0eb756318a901ede76309b8edf0503f01730356e8"
+    },
+    {
+      "name": "20260917040000_manual_refund_receipts",
+      "checksum": "0e97a73007b8067e0b27f9493b731c8c8d3bc70e8305633939938b43414d6a38"
+    },
+    {
+      "name": "20260917050000_manual_refund_tax_evidence",
+      "checksum": "c6aa4565ca1726c9ec124dbbeecc53493452407b0cca8136f98ea699e5c33474"
+    },
+    {
+      "name": "20260917060000_manual_received_funds_return",
+      "checksum": "935bb129bc98a1105800be03475f62931766c59a4157cebd39fed14efd1b59ef"
+    },
+    {
+      "name": "20260917070000_tip_accounting_journals",
+      "checksum": "3e5361864dcfc3b482b38b58f1882a05dac3ad8183aea8f1ed4ec46b60b7dac9"
+    },
+    {
+      "name": "20260917080000_refund_correction_receipts",
+      "checksum": "cd6da6ba65e6c61d8f350e606b43b1eb20c62ce4ab8b94fcd90c751f93927997"
+    },
+    {
+      "name": "20260917090000_financial_claim_reviews",
+      "checksum": "3afdf27160dabb31ac8fe87e3012bc7ead7bce41f23fc9efe5cd4c28d34414dc"
+    }
+  ]
+}

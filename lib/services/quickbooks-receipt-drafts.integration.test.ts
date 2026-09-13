@@ -1,3 +1,5 @@
+import * as taxCorrectionProvider from "@/lib/commerce/refund-tax-correction";
+import { matchRefundTaxCorrection } from "./refund-tax-corrections";
 import "@/tests/integration-guard";
 import { randomUUID } from "node:crypto";
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from "vitest";
@@ -295,7 +297,7 @@ async function evidence(
     [prepared.entity]: {
       ...prepared.payload,
       Id: remoteId,
-      TotalAmt: prepared.entity === "SalesReceipt" ? 22.68 : 7.56,
+      TotalAmt: prepared.cashCents / 100,
     },
   };
 }
@@ -523,8 +525,8 @@ it("blocks a refund that failed before posting and keeps a later refund failure 
       providerRefundId,
       taxEvidenceStatus: "MATCHED",
       taxEvidenceId: "synthetic",
-      originalTaxTransactionId: "tax_original",
-      refundTaxTransactionId: "tax_refund",
+      originalTaxTransactionId: "tax_" + request.id,
+      refundTaxTransactionId: "tax_" + a.id,
       requiresCashReceipt: true,
       lines: [
         {
@@ -583,6 +585,138 @@ it("blocks a refund that failed before posting and keeps a later refund failure 
       .reconciliationIssue,
   ).toBe("REFUND_COMPENSATION_REVIEW");
   expect(create).toHaveBeenCalledTimes(2);
+  const settled = await prisma.refundAdjustment.findFirstOrThrow({
+      where: { requestId: second.request.id, kind: "SETTLEMENT" },
+    }),
+    originalSource = refunds.get(settled.id)!;
+  const compensation = await prisma.refundAdjustment.create({
+    data: {
+      requestId: second.request.id,
+      kind: "COMPENSATION",
+      cashCents: -756,
+      netCents: -700,
+      taxCents: -56,
+      rewardCents: -200,
+      currency: "USD",
+      providerRefundId: settled.providerRefundId,
+      failureBalanceTransactionId: "txn_returned",
+    },
+  });
+  await prisma.refundRequestEvent.create({
+    data: {
+      refundRequestId: second.request.id,
+      type: "refund.failed",
+      status: "FAILED",
+      verifiedAt: new Date(),
+      evidenceJson: { source: "synthetic" },
+    },
+  });
+  await prisma.refundTaxEvidence.create({
+    data: {
+      adjustmentId: settled.id,
+      providerAccountId: second.request.providerAccountId,
+      livemode: false,
+      reportRunId: "frr_synthetic",
+      fileId: "file_synthetic",
+      reportHash: "a".repeat(64),
+      originalTaxTransactionId: originalSource.originalTaxTransactionId!,
+      refundTaxTransactionId: originalSource.refundTaxTransactionId!,
+      taxCents: 56,
+      currency: "USD",
+    },
+  });
+  const compensatingSource = {
+    ...originalSource,
+    kind: "COMPENSATION" as const,
+    sourceId: compensation.id,
+    cashCents: -756,
+    netCents: -700,
+    taxCents: -56,
+    rewardCents: -200,
+    taxEvidenceStatus: "UNVERIFIED" as const,
+    lines: originalSource.lines.map((l) => ({
+      ...l,
+      netCents: -l.netCents,
+      taxCents: -l.taxCents,
+      rewardCents: -l.rewardCents,
+    })),
+  };
+  refunds.set(compensation.id, compensatingSource);
+  const correctionInput = { ...input(), adjustmentId: compensation.id };
+  await expect(
+    prepareQuickbooksReceiptDraft(admin, correctionInput),
+  ).rejects.toMatchObject({ status: 409 });
+  const taxId = "tax_" + compensation.id;
+  const read = vi.spyOn(taxCorrectionProvider, "readTaxCorrection").mockResolvedValue({
+    correctionTaxTransactionId: taxId,
+    refundTaxTransactionId: originalSource.refundTaxTransactionId!,
+    originalTaxTransactionId: originalSource.originalTaxTransactionId!,
+    cashCents: 756,
+    taxCents: 56,
+    postedAt: 1780000000,
+  });
+  await expect(
+    matchRefundTaxCorrection(cpa, {
+      adjustmentId: compensation.id,
+      correctionTaxTransactionId: taxId,
+      confirmed: true,
+    }),
+  ).rejects.toMatchObject({ status: 403 });
+  expect(read).not.toHaveBeenCalled();
+  const [taxA, taxB] = await Promise.all([
+    matchRefundTaxCorrection(admin, {
+      adjustmentId: compensation.id,
+      correctionTaxTransactionId: taxId,
+      confirmed: true,
+    }),
+    matchRefundTaxCorrection(admin, {
+      adjustmentId: compensation.id,
+      correctionTaxTransactionId: taxId,
+      confirmed: true,
+    }),
+  ]);
+  expect(taxA.id).toBe(taxB.id);
+  refunds.set(compensation.id, {
+    ...compensatingSource,
+    taxEvidenceStatus: "MATCHED",
+    taxEvidenceId: taxA.id,
+    refundTaxTransactionId: taxId,
+  });
+  const [ca, cb] = await Promise.all([
+    prepareQuickbooksReceiptDraft(admin, correctionInput),
+    prepareQuickbooksReceiptDraft(admin, correctionInput),
+  ]);
+  expect(ca.id).toBe(cb.id);
+  expect(ca).toMatchObject({
+    isCorrection: true,
+    entity: "SalesReceipt",
+    cashCents: 756,
+  });
+  const originalReceipt = await prisma.qboReceiptExport.findUniqueOrThrow({
+    where: { id: second.draft.id },
+  });
+  create.mockRejectedValueOnce(Error("Synthetic correction lost response"));
+  await expect(submitQuickbooksReceipt(admin, ca.id)).rejects.toMatchObject({
+    status: 503,
+  });
+  expect((await submitQuickbooksReceipt(admin, ca.id)).status).toBe("UNKNOWN");
+  vi.mocked(provider.findQuickbooksCashReceipt).mockResolvedValue([
+    await evidence(ca.id),
+  ]);
+  expect((await reconcileQuickbooksReceipt(admin, ca.id)).status).toBe("POSTED");
+  const unchanged = await prisma.qboReceiptExport.findUniqueOrThrow({
+    where: { id: second.draft.id },
+  });
+  expect(unchanged.payload).toEqual(originalReceipt.payload);
+  expect(unchanged.externalId).toBe(originalReceipt.externalId);
+  expect(unchanged.reconciliationIssue).toBeNull();
+  expect(create).toHaveBeenCalledTimes(3);
+  await expect(
+    prepareQuickbooksReceiptDraft(admin, {
+      ...correctionInput,
+      requestKey: randomUUID(),
+    }),
+  ).rejects.toMatchObject({ status: 409 });
 });
 it("prepares one immutable receipt across retries, keeps cancellation history and prevents duplicate active sources", async () => {
   const raw = input(),

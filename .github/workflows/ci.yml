@@ -68,6 +68,7 @@ jobs:
         run: |
           npm run check:runtime
           npm run db:preflight
+          npm run db:release-check
           node --import tsx scripts/check-record-preservation.ts capture /tmp/dd-release-records.json
           npm run db:migrate
           npm run db:preflight
@@ -143,4 +144,8 @@ jobs:
             test-results/**/delivery-tips.png
             test-results/**/payment-overview.png
             test-results/**/manual-refunds.png
+            test-results/**/manual-exceptions.png
+            test-results/**/claim-review.png
+            test-results/**/error-context.md
+            test-results/**/test-failed-1.png
           retention-days: 14

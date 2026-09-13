@@ -1,3 +1,5 @@
+import { correctionReceiptParent } from "./quickbooks-refund-correction";
+import { prepareCompensationReceipt } from "@/lib/domain/quickbooks-receipt";
 import { isDeepStrictEqual } from "node:util";
 import { Prisma, type QboReceiptExport } from "@prisma/client";
 import { z } from "zod";
@@ -64,6 +66,17 @@ async function sourceEvidence(tx: Prisma.TransactionClient, e: QboReceiptExport)
   if (!isDeepStrictEqual({ sale, refund }, e.source))
     throw new AccountError("Original receipt evidence changed. Review this export.", 409);
   receiptCompilerMapping(e.mapping, sale, e.mode, e.realm);
+  if (e.sourceKey.startsWith("correction:")) {
+    const original = await correctionReceiptParent(tx, e.adjustmentId!, e.mode, e.realm);
+    if (
+      !isDeepStrictEqual(original.mapping, e.mapping) ||
+      !isDeepStrictEqual(
+        prepareCompensationReceipt(original.payload, refund, e.docNumber),
+        e.payload,
+      )
+    )
+      throw new AccountError("Correction differs from the original refund receipt.", 409);
+  }
   return sale;
 }
 async function refundCompensated(tx: Prisma.TransactionClient, e: QboReceiptExport) {
@@ -71,6 +84,7 @@ async function refundCompensated(tx: Prisma.TransactionClient, e: QboReceiptExpo
   const a = await tx.refundAdjustment.findUniqueOrThrow({
     where: { id: e.adjustmentId },
     select: {
+      kind: true,
       request: {
         select: {
           status: true,
@@ -79,6 +93,18 @@ async function refundCompensated(tx: Prisma.TransactionClient, e: QboReceiptExpo
       },
     },
   });
+  if (a.kind === "COMPENSATION") return false;
+  const correction = await tx.qboReceiptExport.findFirst({
+    where: {
+      adjustmentId: a.request.adjustments[0]?.id ?? "",
+      mode: e.mode,
+      realm: e.realm,
+      status: "POSTED",
+      entity: "SalesReceipt",
+      reconciliationIssue: null,
+    },
+  });
+  if (correction && correction.externalId) return false;
   return (
     ["FAILED", "CANCELED"].includes(a.request.status) || a.request.adjustments.length > 0
   );
@@ -185,6 +211,28 @@ async function confirm(
         recoveryCheckedAt: new Date(),
       },
     });
+    if (current.sourceKey.startsWith("correction:")) {
+      const original = await correctionReceiptParent(
+        tx,
+        current.adjustmentId!,
+        current.mode,
+        current.realm,
+      );
+      await tx.qboReceiptExport.update({
+        where: { id: original.id },
+        data: { reconciliationIssue: null },
+      });
+      if (current.status !== "POSTED")
+        await tx.auditLog.create({
+          data: {
+            actorUserId: quickbooksAuditActor(actor),
+            entityType: "QboReceiptExport",
+            entityId: original.id,
+            action: "quickbooks.refund-correction.completed",
+            afterJson: { correctionId: current.id, externalId },
+          },
+        });
+    }
     if (current.status !== "POSTED")
       await tx.auditLog.create({
         data: {

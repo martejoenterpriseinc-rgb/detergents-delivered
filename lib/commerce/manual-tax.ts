@@ -7,6 +7,7 @@ export async function confirmManualTax(
   a: CheckoutAttempt,
   receipt: ManualCheckoutSettlement,
   recoveredId?: string,
+  authorizeReviewedRetry?: () => Promise<void>,
 ) {
   const c = await readCommerce(true),
     s = a.snapshot as unknown as CheckoutSnapshot;
@@ -22,11 +23,14 @@ export async function confirmManualTax(
   if (
     !id &&
     (!receipt.submittedAt || Date.now() - receipt.submittedAt.getTime() > 23 * 3600000)
-  )
-    throw new AccountError(
-      "Find the existing tax transaction before retrying. Its safe creation retry period ended.",
-      409,
-    );
+  ) {
+    if (!authorizeReviewedRetry)
+      throw new AccountError(
+        "Find the existing tax transaction or complete independent non-creation review before retrying.",
+        409,
+      );
+    await authorizeReviewedRetry();
+  }
   const reference = `dd-manual:${receipt.id}`;
   const options = { timeout: 8000, maxNetworkRetries: 0 };
   const transaction = id

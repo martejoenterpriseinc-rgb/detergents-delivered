@@ -1,4 +1,4 @@
-# New isolated production resources only. No seeded accounts or copied sandbox records.
+# Existing isolated production resources. Never re-run initial provisioning on deployment.
 services:
   - type: web
     name: detergents-delivered-production
@@ -8,6 +8,9 @@ services:
     repo: https://github.com/martejoenterpriseinc-rgb/detergents-delivered
     branch: feature/production-operations
     autoDeployTrigger: "off"
+    domains:
+      - detergentsdelivered.com
+      - www.detergentsdelivered.com
     buildCommand: npm ci && npx prisma generate && npm run build
     startCommand: npm start
     envVars:
@@ -67,7 +70,7 @@ services:
         sync: false
       - key: DD_BUSINESS_DOCUMENT_KEYS
         sync: false
-    preDeployCommand: node --import tsx scripts/provision-production.ts
+    preDeployCommand: npm run db:preflight
     healthCheckPath: /api/ready
   - type: worker
     name: detergents-delivered-production-jobs

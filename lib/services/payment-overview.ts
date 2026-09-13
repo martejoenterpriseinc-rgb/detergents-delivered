@@ -105,7 +105,7 @@ WITH scope AS MATERIALIZED (
  FROM scope c WHERE (c.state IN ('REVIEW','PROCESSING') OR (c.state='PREPARING' AND c."paymentMethod" IN ('CASH','ZELLE'))) AND NOT EXISTS (SELECT 1 FROM "Payment" p WHERE p."orderId"=c."orderId" AND p.status IN ('PENDING','AUTHORIZED','FAILED'))
  UNION ALL
  SELECT s.id,c."orderId",c.number,c."customerId",c.customer,c.email,s.method,s.state,s.reference,s."receivedAt",s."amountCents"::bigint,ARRAY['review'],NULL::text
- FROM "ManualCheckoutSettlement" s JOIN scope c ON c.id=s."checkoutId" WHERE s.state<>'SETTLED' AND c.state<>'REVIEW'
+ FROM "ManualCheckoutSettlement" s JOIN scope c ON c.id=s."checkoutId" WHERE s.state NOT IN ('SETTLED','RETURNED') AND c.state<>'REVIEW'
  UNION ALL
  SELECT r.id,c."orderId",c.number,c."customerId",c.customer,c.email,c."paymentMethod",r.status::text,r."providerRefundId",coalesce(r."reconciledAt",r."submittedAt",r."createdAt"),r."amountCents"::bigint,
  ARRAY[CASE WHEN r.status='SUCCEEDED' THEN 'refundCompleted' WHEN r.status IN ('FAILED','CANCELED') THEN 'refundFailed' ELSE 'refundPending' END],NULL::text

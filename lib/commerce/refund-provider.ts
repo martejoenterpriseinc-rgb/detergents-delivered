@@ -347,7 +347,7 @@ export async function submitClaimedStripeTipRefund(
 ): Promise<RefundObservation> {
   const input = submission.parse(raw);
   const age = Date.now() - new Date(input.submittedAt).getTime();
-  if (age < 0 || age > 600000) throw fail();
+  if (age < 0 || age > 23 * 3600000) throw fail();
   const observation = await inspectStripeTipRefunds(input.binding);
   const matches = observation.refunds.filter((r) => r.requestId === input.requestId);
   const valid = (r: RefundObservation) => {
@@ -384,6 +384,7 @@ export async function submitClaimedStripeTipRefund(
   if (config.accountId !== input.binding.accountId || config.live !== input.binding.live)
     throw fail();
   const stripe = await stripeClient(config);
+  if (Date.now() - new Date(input.submittedAt).getTime() > 23 * 3600000) throw fail();
   return valid(
     refundObservation(
       await stripe.refunds.create(

@@ -1,3 +1,4 @@
+import { verifiedRefundTaxCorrection } from "./refund-tax-corrections";
 import {
   verifiedManualRefundReceipt,
   verifiedManualRefundTax,
@@ -374,6 +375,8 @@ export async function recordedRefundSource(
       throw new AccountError("Refund reward ledger evidence is incomplete.", 409);
   }
   const manualTax = manualReceipt ? await verifiedManualRefundTax(tx, request.id) : null;
+  const correction =
+    kind === "COMPENSATION" ? await verifiedRefundTaxCorrection(tx, a.id) : null;
   const evidence = a.taxEvidence;
   const matched =
     !manualReceipt &&
@@ -407,14 +410,16 @@ export async function recordedRefundSource(
     taxEvidenceStatus:
       kind === "REWARD_ONLY"
         ? ("NOT_APPLICABLE" as const)
-        : matched || manualTax
+        : matched || manualTax || correction
           ? ("MATCHED" as const)
           : ("UNVERIFIED" as const),
-    taxEvidenceId: manualTax?.id ?? (matched ? evidence.id : null),
+    taxEvidenceId: correction?.id ?? manualTax?.id ?? (matched ? evidence.id : null),
     originalTaxTransactionId:
+      correction?.originalTaxTransactionId ??
       manualTax?.originalTaxTransactionId ??
       (matched ? evidence.originalTaxTransactionId : null),
     refundTaxTransactionId:
+      correction?.correctionTaxTransactionId ??
       manualTax?.refundTaxTransactionId ??
       (matched ? evidence.refundTaxTransactionId : null),
     requiresCashReceipt: kind !== "REWARD_ONLY" && a.cashCents !== 0,

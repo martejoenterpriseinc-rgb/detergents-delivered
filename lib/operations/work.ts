@@ -1,3 +1,4 @@
+import { reconcileScheduledQuickbooksTips } from "@/lib/services/quickbooks-tip-journals";
 import { recoverTipRefunds } from "@/lib/services/tip-refunds";
 import { runDeliveryTexts } from "@/lib/services/sms-delivery";
 import { recoverDeliveryTips } from "@/lib/services/delivery-tips";
@@ -203,10 +204,13 @@ export async function quickbooksRecoveryWork(
   const expenses = await reconcileScheduledQuickbooksExpenses(ownsLease);
   const journals = await reconcileScheduledQuickbooksCostJournals(ownsLease);
   const receipts = await reconcileScheduledQuickbooksReceipts(ownsLease);
+  const tips = await reconcileScheduledQuickbooksTips(ownsLease);
   const result = {
-    checked: expenses.checked + journals.checked + receipts.checked,
-    completed: expenses.completed + journals.completed + receipts.completed,
-    attention: expenses.attention + journals.attention + receipts.attention,
+    checked: expenses.checked + journals.checked + receipts.checked + tips.checked,
+    completed:
+      expenses.completed + journals.completed + receipts.completed + tips.completed,
+    attention:
+      expenses.attention + journals.attention + receipts.attention + tips.attention,
   };
   return {
     ...result,

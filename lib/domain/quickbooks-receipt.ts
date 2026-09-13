@@ -345,3 +345,58 @@ export function matchCashReceipt(raw: unknown, expectedRaw: unknown) {
   }
   return receipt.Id;
 }
+
+/** A failed refund restores the exact cash, item and tax amounts previously posted.
+ * This adjusting SalesReceipt does not mutate the sale or refund receipt. */
+export function prepareCompensationReceipt(
+  originalRaw: unknown,
+  compensationRaw: unknown,
+  documentNumber: string,
+) {
+  const original = z
+    .object({
+      entity: z.literal("RefundReceipt"),
+      payload: cashReceiptPayload,
+      cashCents: cents.positive(),
+      sourceId: id,
+    })
+    .strict()
+    .parse(originalRaw);
+  const c = z
+    .object({
+      kind: z.literal("COMPENSATION"),
+      sourceId: id,
+      date,
+      cashCents: z.number().int().negative(),
+      netCents: z.number().int().nonpositive(),
+      taxCents: z.number().int().nonpositive(),
+      taxEvidenceStatus: z.literal("MATCHED"),
+      taxEvidenceId: id,
+      originalTaxTransactionId: id,
+      refundTaxTransactionId: id,
+    })
+    .parse(compensationRaw);
+  if (
+    !documentNumber.startsWith("DS") ||
+    original.cashCents !== -c.cashCents ||
+    qboAmountCents(original.payload.TxnTaxDetail.TotalTax) !== -c.taxCents ||
+    original.payload.Line.reduce((n, l) => n + qboAmountCents(l.Amount)!, 0) !==
+      -c.netCents
+  )
+    throw Error("Compensation differs from the posted refund.");
+  const payload = cashReceiptPayload.parse({
+    ...original.payload,
+    DocNumber: documentNumber,
+    TxnDate: c.date,
+    Line: original.payload.Line.map((l) => ({
+      ...l,
+      Description: `Correction of ${original.payload.DocNumber}; ${l.Description}`,
+    })),
+  });
+  return {
+    entity: "SalesReceipt" as const,
+    payload,
+    cashCents: -c.cashCents,
+    sourceId: c.sourceId,
+  };
+}

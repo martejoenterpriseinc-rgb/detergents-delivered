@@ -5,7 +5,11 @@ import {
   accountFailure,
   readAccountJson,
 } from "@/lib/account-api";
-import { submitTipRefund, reconcileTipRefund } from "@/lib/services/tip-refunds";
+import {
+  submitTipRefund,
+  reconcileTipRefund,
+  retryUncertainTipRefund,
+} from "@/lib/services/tip-refunds";
 export async function POST(request: Request) {
   try {
     return accountJson(
@@ -28,5 +32,18 @@ export async function PATCH(request: Request) {
     return accountJson(await reconcileTipRefund(actor, input.id));
   } catch (error) {
     return accountFailure(error);
+  }
+}
+
+export async function PUT(request: Request) {
+  try {
+    return accountJson(
+      await retryUncertainTipRefund(
+        await accountRequest(request),
+        await readAccountJson(request),
+      ),
+    );
+  } catch (e) {
+    return accountFailure(e);
   }
 }

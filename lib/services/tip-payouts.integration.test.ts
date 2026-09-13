@@ -9,15 +9,30 @@ const m = vi.hoisted(() => ({
   report: vi.fn(),
   submit: vi.fn(),
   commerce: vi.fn(),
+  taxCorrection: vi.fn(),
+  verifyBalance: vi.fn(),
+  qboCreate: vi.fn(),
+  qboFind: vi.fn(),
+  qboAccount: vi.fn(),
 }));
 vi.mock("@/lib/commerce/refund-provider", () => ({
   inspectStripeTipRefunds: m.inspect,
+  verifyRefundBalanceEvidence: m.verifyBalance,
   submitClaimedStripeTipRefund: m.submit,
 }));
 vi.mock("@/lib/commerce/tax-report", () => ({ readRefundTaxEvidence: m.report }));
 vi.mock("@/lib/commerce/runtime", () => ({ readCommerce: m.commerce }));
-import { submitTipRefund, reconcileTipRefund } from "./tip-refunds";
-import { matchTipRefundTax } from "./tip-refund-tax";
+import {
+  submitTipRefund,
+  reconcileTipRefund,
+  reconcileTipRefundEvent,
+  retryUncertainTipRefund,
+} from "./tip-refunds";
+import type Stripe from "stripe";
+vi.mock("@/lib/commerce/refund-tax-correction", () => ({
+  readTaxCorrection: m.taxCorrection,
+}));
+import { matchTipRefundTax, matchTipRefundTaxCorrection } from "./tip-refund-tax";
 import { recordTipPayout, readTipAccounting } from "./tip-payouts";
 beforeEach(() => {
   vi.resetAllMocks();
@@ -421,7 +436,42 @@ it("holds unknown refund capacity and recovers by provider lookup without a seco
         },
       ],
     });
-    expect((await reconcileTipRefund(f.userId, result.id)).state).toBe("SUCCEEDED");
+    const webhookRefund = {
+      object: "refund",
+      id: "re_" + saved.id.replaceAll("_", ""),
+      payment_intent: saved.paymentIntentId,
+      status: "pending", // Delayed event must not regress current provider state.
+      metadata: {
+        project: "detergents-delivered",
+        tipId: saved.tipId,
+        refundRequestId: saved.id,
+        requestHash: saved.requestHash,
+      },
+    } satisfies Pick<
+      Stripe.Refund,
+      "id" | "object" | "metadata" | "payment_intent" | "status"
+    >;
+    const binding = { accountId: saved.accountId, live: saved.livemode };
+    await reconcileTipRefundEvent(webhookRefund, binding);
+    await reconcileTipRefundEvent(webhookRefund, binding);
+    expect(
+      (await prisma.tipRefundRequest.findUniqueOrThrow({ where: { id: saved.id } }))
+        .state,
+    ).toBe("SUCCEEDED");
+    expect(
+      await prisma.auditLog.count({
+        where: { entityId: saved.id, action: "delivery.tip.refund.reconciled" },
+      }),
+    ).toBe(1);
+    await expect(
+      reconcileTipRefundEvent({ ...webhookRefund, payment_intent: "pi_wrong" }, binding),
+    ).rejects.toMatchObject({ status: 409 });
+    await expect(
+      reconcileTipRefundEvent(webhookRefund, { ...binding, live: !binding.live }),
+    ).rejects.toMatchObject({ status: 409 });
+    await expect(
+      reconcileTipRefundEvent(webhookRefund, { ...binding, accountId: "acct_wrong" }),
+    ).rejects.toMatchObject({ status: 409 });
     expect(m.submit).toHaveBeenCalledTimes(1);
     expect((await readTipAccounting(f.userId, f.tip.id)).payableCents).toBe(0); // Partial tax still needs evidence.
   } finally {
@@ -527,5 +577,418 @@ it("does not let an older refund lookup overwrite a newer provider result", asyn
     ).toBe("SUCCEEDED");
   } finally {
     await f.cleanup();
+  }
+});
+
+vi.mock("@/lib/integrations/quickbooks-client", () => ({
+  quickbooksConfig: async () => ({
+    mode: "sandbox",
+    realm: "98765432",
+    fingerprint: "synthetic-tip",
+  }),
+  readQuickbooksAccount: m.qboAccount,
+  createQuickbooksCostJournal: m.qboCreate,
+  findQuickbooksCostJournal: m.qboFind,
+}));
+vi.mock("./quickbooks-connection", () => ({
+  authorizedQuickbooks: async () => ({
+    config: { mode: "sandbox", realm: "98765432", fingerprint: "synthetic-tip" },
+    accessToken: "synthetic",
+  }),
+  assertQuickbooksSnapshot: async (tx: typeof prisma, actor: string) => {
+    const { financeAccess } = await import("./finance");
+    await financeAccess(tx, actor, true);
+  },
+}));
+import {
+  prepareQuickbooksTipJournal,
+  actQuickbooksTipJournal,
+} from "./quickbooks-tip-journals";
+const tipMapping = {
+  collectionBank: "1",
+  payoutBank: "2",
+  tipLiability: "3",
+  taxLiability: "4",
+  driverReceivable: "5",
+};
+function qboSetup() {
+  vi.stubEnv("DD_QBO_TIP_POSTING_ENABLED", "true");
+  vi.stubEnv("DD_QBO_TIP_POSTING_COMPANY", "sandbox:98765432");
+  m.qboAccount.mockImplementation(async (_c, _t, id) => ({
+    Id: id,
+    Active: true,
+    CurrencyRef: { value: "USD" },
+    AccountType: ["1", "2"].includes(id)
+      ? "Bank"
+      : id === "5"
+        ? "Other Current Asset"
+        : "Other Current Liability",
+  }));
+  m.qboCreate.mockImplementation(async (_c, _t, p) => ({
+    ...p,
+    Id: Date.now().toString() + Math.floor(Math.random() * 100000).toString(),
+  }));
+}
+it("posts collection, driver payout and refunded-driver receivable as separate immutable adjusting journals", async () => {
+  const f = await fixture();
+  qboSetup();
+  const prepare = () =>
+    prepareQuickbooksTipJournal(f.userId, {
+      tipId: f.tip.id,
+      requestKey: randomUUID(),
+      mapping: tipMapping,
+      confirmed: true,
+    });
+  try {
+    const first = await prepare();
+    await actQuickbooksTipJournal(f.userId, { id: first.id, action: "SUBMIT" });
+    await recordTipPayout(f.userId, f.input);
+    const second = await prepare();
+    expect(second.balances).toMatchObject({
+      collectionBank: 108,
+      payoutBank: -100,
+      tipLiability: 0,
+      taxLiability: 8,
+    });
+    await actQuickbooksTipJournal(f.userId, { id: second.id, action: "SUBMIT" });
+    m.inspect.mockResolvedValue({
+      disputed: false,
+      refunds: [
+        {
+          id: "re_journal",
+          amountCents: 108,
+          currency: "USD",
+          status: "succeeded",
+          balanceTransactionId: "txn_journal",
+        },
+      ],
+    });
+    await expect(prepare()).rejects.toMatchObject({ status: 409 });
+    m.report.mockResolvedValue({
+      originalTaxTransactionId: "tax_original",
+      refundTaxTransactionId: "tax_journal",
+      taxCents: 8,
+      reportRunId: "frr_journal",
+      fileId: "file_journal",
+      reportHash: "a".repeat(64),
+    });
+    await matchTipRefundTax(f.userId, {
+      tipId: f.tip.id,
+      providerRefundId: "re_journal",
+      reportRunId: "frr_journal",
+      taxCents: 8,
+      confirmed: true,
+    });
+    const third = await prepare();
+    expect(third.balances).toMatchObject({
+      collectionBank: 0,
+      payoutBank: -100,
+      tipLiability: 0,
+      taxLiability: 0,
+      driverReceivable: 100,
+    });
+    await actQuickbooksTipJournal(f.userId, { id: third.id, action: "SUBMIT" });
+    m.inspect.mockResolvedValue({
+      disputed: false,
+      refunds: [
+        {
+          id: "re_journal",
+          amountCents: 108,
+          currency: "USD",
+          status: "failed",
+          balanceTransactionId: "txn_journal",
+          failureBalanceTransactionId: "txn_returned",
+        },
+      ],
+    });
+    await expect(prepare()).rejects.toMatchObject({ status: 409 });
+    m.taxCorrection.mockResolvedValue({
+      correctionTaxTransactionId: "tax_correcttip",
+      originalTaxTransactionId: "tax_original",
+      refundTaxTransactionId: "tax_journal",
+      cashCents: 108,
+      taxCents: 8,
+      postedAt: 1780000000,
+    });
+    await matchTipRefundTaxCorrection(f.userId, {
+      tipId: f.tip.id,
+      providerRefundId: "re_journal",
+      correctionTaxTransactionId: "tax_correcttip",
+      confirmed: true,
+    });
+    const fourth = await prepare();
+    expect(fourth.balances).toMatchObject({
+      collectionBank: 108,
+      payoutBank: -100,
+      tipLiability: 0,
+      taxLiability: 8,
+      driverReceivable: 0,
+    });
+    await actQuickbooksTipJournal(f.userId, { id: fourth.id, action: "SUBMIT" });
+    expect(m.qboCreate).toHaveBeenCalledTimes(4);
+    await expect(
+      prisma.qboTipJournal.update({
+        where: { id: first.id },
+        data: { payload: { tampered: true } },
+      }),
+    ).rejects.toThrow();
+    await expect(prepare()).rejects.toMatchObject({ status: 409 });
+  } finally {
+    await f.cleanup();
+  }
+});
+it("claims a tip journal once under concurrency and recovers lost responses by GET only", async () => {
+  const f = await fixture();
+  qboSetup();
+  try {
+    const d = {
+      tipId: f.tip.id,
+      requestKey: randomUUID(),
+      mapping: tipMapping,
+      confirmed: true,
+    };
+    await expect(prepareQuickbooksTipJournal(f.driver.id, d)).rejects.toMatchObject({
+      status: 403,
+    });
+    const [a, b] = await Promise.all([
+      prepareQuickbooksTipJournal(f.userId, d),
+      prepareQuickbooksTipJournal(f.userId, d),
+    ]);
+    expect(a.id).toBe(b.id);
+    m.qboCreate.mockRejectedValue(Error("synthetic lost response"));
+    await prisma.deliveryTip.update({
+      where: { id: f.tip.id },
+      data: { recoveryCheckedAt: new Date() },
+    });
+    await Promise.allSettled([
+      actQuickbooksTipJournal(f.userId, { id: a.id, action: "SUBMIT" }),
+      actQuickbooksTipJournal(f.userId, { id: a.id, action: "SUBMIT" }),
+    ]);
+    expect(m.qboCreate).toHaveBeenCalledTimes(1);
+    expect(
+      (await prisma.qboTipJournal.findUniqueOrThrow({ where: { id: a.id } })).status,
+    ).toBe("UNKNOWN");
+    await expect(
+      prepareQuickbooksTipJournal(f.userId, { ...d, requestKey: randomUUID() }),
+    ).rejects.toMatchObject({ status: 409 });
+    m.qboFind.mockResolvedValue([
+      { ...(a.payload as object), Id: Date.now().toString() },
+    ]);
+    expect(
+      await actQuickbooksTipJournal(f.userId, { id: a.id, action: "RECONCILE" }),
+    ).toMatchObject({ status: "POSTED" });
+    expect(m.qboCreate).toHaveBeenCalledTimes(1);
+  } finally {
+    await f.cleanup();
+  }
+});
+it("retries only the original tip refund key and rejects expired retry windows", async () => {
+  const f = await fixture();
+  try {
+    m.submit.mockRejectedValue(Error("synthetic disconnected response"));
+    const r = await submitTipRefund(f.userId, {
+      tipId: f.tip.id,
+      requestKey: randomUUID(),
+      amountCents: 50,
+      reason: "Synthetic failed response",
+      confirmed: true,
+    });
+    await expect(
+      retryUncertainTipRefund(f.userId, { id: r.id, confirmed: true }),
+    ).rejects.toMatchObject({ status: 503 });
+    expect(m.submit).toHaveBeenCalledTimes(2);
+    expect(m.submit.mock.calls[1][0]).toEqual(m.submit.mock.calls[0][0]);
+    vi.spyOn(Date, "now").mockReturnValue(Date.now() + 24 * 3600000);
+    await expect(
+      retryUncertainTipRefund(f.userId, { id: r.id, confirmed: true }),
+    ).rejects.toMatchObject({ status: 409 });
+    expect(m.submit).toHaveBeenCalledTimes(2);
+  } finally {
+    vi.restoreAllMocks();
+    await f.cleanup();
+  }
+});
+
+it("requires independent non-creation review, preserves the claim and recovers a contradictory late refund", async () => {
+  const f = await fixture(),
+    reviewer = await fixture();
+  try {
+    m.submit.mockRejectedValue(new Error("synthetic lost refund response"));
+    const input = {
+      tipId: f.tip.id,
+      requestKey: randomUUID(),
+      amountCents: 108,
+      reason: "Synthetic refund request",
+      confirmed: true,
+    };
+    const r = await submitTipRefund(f.userId, input);
+    await prisma.tipRefundRequest.update({
+      where: { id: r.id },
+      data: { submittedAt: new Date(Date.now() - 49 * 3600000) },
+    });
+    const { proposeClaimReview, decideClaimReview } =
+      await import("./financial-claim-reviews");
+    const evidence = {
+      kind: "TIP_REFUND",
+      claimId: r.id,
+      requestKey: randomUUID(),
+      providerCase: "case-synthetic-123",
+      evidenceReference: "retained/synthetic/provider-confirmation.pdf",
+      evidenceSha256: "a".repeat(64),
+      statement:
+        "Synthetic provider confirms this exact claim never created a transaction and all requests ended.",
+      reviewedThrough: new Date(Date.now() - 1000).toISOString(),
+      confirmed: true,
+    };
+    await expect(proposeClaimReview(f.driver.id, evidence)).rejects.toMatchObject({
+      status: 403,
+    });
+    const [a, b] = await Promise.all([
+      proposeClaimReview(f.userId, evidence),
+      proposeClaimReview(f.userId, evidence),
+    ]);
+    expect(a.id).toBe(b.id);
+    await expect(
+      proposeClaimReview(f.userId, { ...evidence, evidenceSha256: "b".repeat(64) }),
+    ).rejects.toMatchObject({ status: 409 });
+    const approve = {
+      id: a.id,
+      decision: "APPROVED",
+      reason:
+        "Independently checked the retained provider confirmation and completed requests",
+      confirmed: true,
+    };
+    await expect(decideClaimReview(f.userId, approve)).rejects.toMatchObject({
+      status: 403,
+    });
+    expect((await readTipAccounting(f.userId, f.tip.id)).payableCents).toBe(0);
+    await Promise.all([
+      decideClaimReview(reviewer.userId, approve),
+      decideClaimReview(reviewer.userId, approve),
+    ]);
+    expect(
+      await prisma.auditLog.count({
+        where: { entityId: a.id, action: "financial-claim.review.decided" },
+      }),
+    ).toBe(1);
+    expect(await reconcileTipRefund(f.userId, r.id)).toMatchObject({
+      state: "NOT_CREATED",
+    });
+    expect((await readTipAccounting(f.userId, f.tip.id)).payableCents).toBe(100);
+    expect(m.submit).toHaveBeenCalledTimes(1);
+    const saved = await prisma.tipRefundRequest.findUniqueOrThrow({
+      where: { id: r.id },
+    });
+    await expect(
+      prisma.financialClaimReview.update({
+        where: { id: a.id },
+        data: { statement: "replacement evidence" },
+      }),
+    ).rejects.toThrow();
+    await expect(
+      prisma.financialClaimReview.delete({ where: { id: a.id } }),
+    ).rejects.toThrow();
+    await recordTipPayout(f.userId, f.input);
+    m.inspect.mockResolvedValue({
+      disputed: false,
+      refunds: [
+        {
+          id: "re_late" + randomUUID().replaceAll("-", ""),
+          amountCents: 108,
+          currency: "USD",
+          status: "succeeded",
+          balanceTransactionId: "txn_late",
+          requestId: r.id,
+          requestHash: saved.requestHash,
+          project: "detergents-delivered",
+        },
+      ],
+    });
+    expect((await readTipAccounting(f.userId, f.tip.id)).review).toBe(true);
+    expect(await reconcileTipRefund(f.userId, r.id)).toMatchObject({
+      state: "SUCCEEDED",
+    });
+    expect((await readTipAccounting(f.userId, f.tip.id)).recoverableCents).toBe(100);
+    expect(
+      await prisma.auditLog.count({
+        where: {
+          entityId: r.id,
+          action: "delivery.tip.refund.non-creation-contradicted",
+        },
+      }),
+    ).toBe(1);
+    expect(m.submit).toHaveBeenCalledTimes(1);
+    expect(
+      await prisma.financialClaimReview.count({
+        where: { id: a.id, decision: "APPROVED" },
+      }),
+    ).toBe(1);
+  } finally {
+    await f.cleanup();
+    await reviewer.cleanup();
+  }
+});
+
+it("rejects changed provider evidence before approval and permits a corrected proposal after rejection", async () => {
+  const f = await fixture(),
+    reviewer = await fixture();
+  try {
+    m.submit.mockRejectedValue(new Error("synthetic unknown"));
+    const r = await submitTipRefund(f.userId, {
+      tipId: f.tip.id,
+      requestKey: randomUUID(),
+      amountCents: 108,
+      reason: "Synthetic uncertain refund",
+      confirmed: true,
+    });
+    await prisma.tipRefundRequest.update({
+      where: { id: r.id },
+      data: { submittedAt: new Date(Date.now() - 49 * 3600000) },
+    });
+    const { proposeClaimReview, decideClaimReview } =
+      await import("./financial-claim-reviews");
+    const d = {
+      kind: "TIP_REFUND",
+      claimId: r.id,
+      requestKey: randomUUID(),
+      providerCase: "case-synthetic-review",
+      evidenceReference: "retained/provider-confirmation",
+      evidenceSha256: "c".repeat(64),
+      statement: "Synthetic provider non-creation confirmation after all attempts ended.",
+      reviewedThrough: new Date(Date.now() - 1000).toISOString(),
+      confirmed: true,
+    };
+    const p = await proposeClaimReview(f.userId, d);
+    m.inspect.mockResolvedValue({ disputed: true, refunds: [] });
+    await expect(
+      decideClaimReview(reviewer.userId, {
+        id: p.id,
+        decision: "APPROVED",
+        reason: "Independent evidence check",
+        confirmed: true,
+      }),
+    ).rejects.toMatchObject({ status: 409 });
+    await decideClaimReview(f.userId, {
+      id: p.id,
+      decision: "REJECTED",
+      reason: "Withdraw incorrect provider evidence",
+      confirmed: true,
+    });
+    m.inspect.mockResolvedValue({ disputed: false, refunds: [] });
+    const next = await proposeClaimReview(f.userId, {
+      ...d,
+      requestKey: randomUUID(),
+      providerCase: "case-corrected",
+    });
+    expect(next.id).not.toBe(p.id);
+    expect(
+      await prisma.financialClaimReview.count({
+        where: { kind: "TIP_REFUND", claimId: r.id },
+      }),
+    ).toBe(2);
+    expect((await readTipAccounting(f.userId, f.tip.id)).payableCents).toBe(0);
+  } finally {
+    await f.cleanup();
+    await reviewer.cleanup();
   }
 });

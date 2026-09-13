@@ -1,3 +1,4 @@
+import { requireReviewedTaxRetry } from "./financial-claim-review-proof";
 import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -23,6 +24,8 @@ const input = z
       .regex(/^tax_[A-Za-z0-9]+$/)
       .max(100)
       .optional(),
+    retrySameRequest: z.boolean().optional(),
+    retryReviewed: z.boolean().optional(),
     confirmed: z.literal(true),
   })
   .strict();
@@ -110,7 +113,11 @@ export async function reconcileManualRefundTax(actor: string, raw: unknown) {
           "Original refund records changed after the tax claim.",
           409,
         );
-      if (!d.taxTransactionId)
+      if (
+        !d.taxTransactionId &&
+        !d.retryReviewed &&
+        (!d.retrySameRequest || Date.now() - previous.createdAt.getTime() > 23 * 3600000)
+      )
         throw new AccountError(
           "Tax submission was already claimed. Supply the existing reversal transaction ID for read-only recovery; do not create another reversal.",
           409,
@@ -142,6 +149,26 @@ export async function reconcileManualRefundTax(actor: string, raw: unknown) {
         },
       });
     }
+    if ((d.retrySameRequest || d.retryReviewed) && !d.taxTransactionId) {
+      const reviewedId = d.retryReviewed
+        ? await requireReviewedTaxRetry(tx, "MANUAL_REFUND_TAX", d.requestId)
+        : null;
+      if (
+        !previous ||
+        process.env.DD_MANUAL_REFUND_TAX_ENABLED !== "true" ||
+        (s.binding.live && process.env.DD_LIVE_MANUAL_REFUND_TAX_ACCEPTED !== "true")
+      )
+        throw new AccountError("Safe retry is unavailable.", 409);
+      await tx.auditLog.create({
+        data: {
+          actorUserId: actor,
+          entityType: "RefundRequest",
+          entityId: d.requestId,
+          action: "manual-refund.tax.same-key-retry",
+          afterJson: { sourceHash: manualRefundDigest(s), reviewedId },
+        },
+      });
+    }
     return { s, verified: null };
   });
   if (before.verified) return { matched: true, id: before.verified.id };
@@ -154,6 +181,14 @@ export async function reconcileManualRefundTax(actor: string, raw: unknown) {
       await prisma.$transaction(async (tx) => {
         await tx.$queryRaw`SELECT id FROM "Order" WHERE id=${d.orderId} FOR UPDATE`;
         const current = await snapshot(tx, actor, d);
+        const claim = await tx.refundRequestEvent.findUniqueOrThrow({
+          where: { providerEventId: `dd:manual-tax:claim:${d.requestId}` },
+        });
+        if (Date.now() - claim.createdAt.getTime() > 23 * 3600000) {
+          if (!d.retryReviewed)
+            throw new AccountError("Safe tax retry window ended.", 409);
+          await requireReviewedTaxRetry(tx, "MANUAL_REFUND_TAX", d.requestId);
+        }
         if (
           manualRefundDigest(current) !== manualRefundDigest(before.s) ||
           (await verifiedManualRefundTax(tx, d.requestId))

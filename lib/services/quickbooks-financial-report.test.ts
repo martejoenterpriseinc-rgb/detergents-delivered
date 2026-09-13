@@ -73,3 +73,23 @@ it("does not convert provider failures into zero-valued reports", async () => {
   m.report.mockRejectedValue(new Error("Unavailable"));
   await expect(quickbooksFinancialReport("cpa", {})).rejects.toThrow();
 });
+it("passes exact custom historical dates to the provider and validates before requesting", async () => {
+  await quickbooksFinancialReport("cpa", {
+    report: "BalanceSheet",
+    period: "custom",
+    from: "2024-01-01",
+    to: "2024-12-31",
+    basis: "Cash",
+  });
+  expect(m.report).toHaveBeenCalledWith(config, "never-return-token", {
+    name: "BalanceSheet",
+    from: "2024-01-01",
+    to: "2024-12-31",
+    basis: "Cash",
+  });
+  m.report.mockClear();
+  await expect(
+    quickbooksFinancialReport("cpa", { period: "custom", from: "2024-01-01" }),
+  ).rejects.toThrow();
+  expect(m.report).not.toHaveBeenCalled();
+});

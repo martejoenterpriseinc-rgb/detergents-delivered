@@ -5,7 +5,8 @@ CashFlow, AgedReceivables, AgedPayables, InventoryValuationSummary and TrialBala
 the authorized company. Report availability still depends on the company subscription and
 provider authorization. No credentials are connected or provider records written by this build.
 
-Day/week/month/year use Chicago business dates. Profit/loss and cash flow use the period
+Day/yesterday/week/month/previous-month/year and custom ranges use Chicago business dates.
+Custom ranges support historical dates, bounded to the existing one-year reporting limit. Profit/loss and cash flow use the period
 range. Balance, aging, inventory and trial balance reports are as-of the ending date;
 current period choices therefore share today's ending balance. Cash/accrual controls are
 provided for ProfitAndLoss, BalanceSheet and TrialBalance. The returned accounting basis,
@@ -35,7 +36,13 @@ https://github.com/intuit/QuickBooks-V3-PHP-SDK/tree/5bb480b505726d9f7b89ff0747b
 The provider documentation describes report limits and accounting basis reconciliation:
 https://medium.com/intuitdev/quickbooks-online-reports-api-best-practices-and-troubleshooting-31edc9934b4c
 
+Historical custom dates and full-report/selected-section CSV downloads are now implemented.
+Downloads reauthorize and retrieve a fresh provider report, so they may differ if the books
+changed after page load. Exports retain company, realm, environment, dates, basis, currency,
+check time and row hierarchy; formulas are escaped, blank cells remain blank, and no-data
+reports carry an explicit NO_REPORT_DATA marker. Missing/stale sections fail rather than
+exporting unrelated rows. Unavailable reports never download invented balances.
+
 Still open: dedicated tax liability/filing reports and payroll-specific reporting where
-applicable, longer historical/custom-date selections, CSV/download workflows and report
-pagination/chunking for larger companies. These screens do not certify books, tax returns,
+applicable, and report pagination/chunking for larger companies. These screens do not certify books, tax returns,
 provider posting completeness or production acceptance.

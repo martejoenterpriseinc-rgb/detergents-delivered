@@ -1,4 +1,5 @@
 "use client";
+import { FinancialClaimReview } from "./financial-claim-review";
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 export function ManualRefundTax({
@@ -15,7 +16,9 @@ export function ManualRefundTax({
   const router = useRouter(),
     pending = useRef<string | null>(null);
   const [busy, setBusy] = useState(false),
-    [message, setMessage] = useState("");
+    [message, setMessage] = useState(""),
+    [retry, setRetry] = useState(false),
+    [reviewed, setReviewed] = useState(false);
   if (status === "VERIFIED")
     return (
       <p>
@@ -29,6 +32,8 @@ export function ManualRefundTax({
       orderId,
       requestId,
       confirmed: true,
+      ...(retry ? { retrySameRequest: true } : {}),
+      ...(reviewed ? { retryReviewed: true } : {}),
       ...(form.get("taxTransactionId")
         ? { taxTransactionId: form.get("taxTransactionId") }
         : {}),
@@ -70,6 +75,17 @@ export function ManualRefundTax({
           className="space-y-3"
         >
           {status === "RECOVERY" && (
+            <label className="flex gap-2">
+              <input
+                type="checkbox"
+                checked={retry}
+                disabled={busy}
+                onChange={(e) => setRetry(e.target.checked)}
+              />
+              Retry the original tax request within its 23-hour safe window.
+            </label>
+          )}
+          {status === "RECOVERY" && !retry && !reviewed && (
             <label className="block">
               Existing Stripe Tax reversal ID
               <input
@@ -81,14 +97,31 @@ export function ManualRefundTax({
               />
             </label>
           )}
+          {status === "RECOVERY" && (
+            <label className="flex gap-2">
+              <input
+                type="checkbox"
+                checked={reviewed}
+                disabled={busy}
+                onChange={(e) => setReviewed(e.target.checked)}
+              />
+              Use independently approved non-creation review to retry the original tax
+              reference.
+            </label>
+          )}
           <button disabled={busy} className="ops-button">
             {busy
               ? "Checking…"
-              : status === "RECOVERY"
-                ? "Verify existing tax reversal"
-                : "Submit tax reversal"}
+              : retry || reviewed
+                ? "Retry original tax request"
+                : status === "RECOVERY"
+                  ? "Verify existing tax reversal"
+                  : "Submit tax reversal"}
           </button>
         </form>
+      )}
+      {canWrite && status === "RECOVERY" && (
+        <FinancialClaimReview kind="MANUAL_REFUND_TAX" claimId={requestId} />
       )}
       {message && <p role="status">{message}</p>}
     </div>

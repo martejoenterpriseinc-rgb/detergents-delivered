@@ -26,7 +26,11 @@ export async function readTipAccounting(actor: string, tipId: string) {
     orderBy: { createdAt: "desc" },
     take: 101,
   });
-  const refundHold = tipRefundRequestHold(refundRequests, observation.refunds);
+  const refundHold = await tipRefundRequestHold(
+    prisma,
+    refundRequests,
+    observation.refunds,
+  );
   const accounting = tipAccounting(
     tip.amountCents,
     tip.totalCents!,
@@ -123,10 +127,11 @@ export async function recordTipPayout(actor: string, raw: unknown) {
           409,
         );
     } else if (
-      tipRefundRequestHold(
+      (await tipRefundRequestHold(
+        tx,
         await tx.tipRefundRequest.findMany({ where: { tipId: data.tipId }, take: 101 }),
         observation.refunds,
-      ) ||
+      )) ||
       observation.disputed ||
       accounting.review ||
       data.amountCents > accounting.payableCents

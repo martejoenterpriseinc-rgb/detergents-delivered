@@ -1,5 +1,10 @@
 import { expect, it } from "vitest";
-import { parseFinancialReport, reportMoney } from "./quickbooks-financial-report";
+import {
+  parseFinancialReport,
+  reportMoney,
+  financialReportFilters,
+  financialReportRows,
+} from "./quickbooks-financial-report";
 const request = {
   name: "ProfitAndLoss" as const,
   from: "2026-09-01",
@@ -34,6 +39,29 @@ const report = () => ({
       },
     ],
   },
+});
+it("selects historical custom dates and rejects invalid or partial ranges", () => {
+  expect(
+    financialReportFilters({ period: "custom", from: "2024-02-01", to: "2024-02-29" })
+      .range,
+  ).toMatchObject({ from: "2024-02-01", to: "2024-02-29" });
+  for (const range of [
+    { from: "2024-02-01" },
+    { from: "2025-02-29", to: "2025-03-01" },
+    { from: "2025-02-02", to: "2025-02-01" },
+    { from: "2024-01-01", to: "2026-01-01" },
+  ])
+    expect(() => financialReportFilters({ period: "custom", ...range })).toThrow();
+  expect(() => financialReportFilters({ period: "typo" })).toThrow();
+});
+it("uses exact section ancestry for CSV rows and rejects missing sections", () => {
+  const parsed = parseFinancialReport(report(), request);
+  const unrelated = { ...parsed.rows[1], id: "01:data", section: "01" };
+  expect(
+    financialReportRows({ ...parsed, rows: [...parsed.rows, unrelated] }, "0"),
+  ).toEqual(parsed.rows);
+  expect(() => financialReportRows(parsed, "missing")).toThrow();
+  expect(financialReportRows(parsed)).toEqual(parsed.rows);
 });
 it("preserves provider totals and linked detail sections without summing parent and child rows", () => {
   const parsed = parseFinancialReport(report(), request);
