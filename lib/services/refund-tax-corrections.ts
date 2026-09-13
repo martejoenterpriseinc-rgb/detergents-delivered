@@ -130,7 +130,7 @@ export async function matchRefundTaxCorrection(actor: string, raw: unknown) {
       return { matched: true, id: previous.id };
     }
     // A provider correction may satisfy only one compensation in this account/mode.
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(613279108)`;
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(613279108)`;
     const used = await tx.auditLog.findFirst({
       where: {
         action: "refund.tax-correction.verified",

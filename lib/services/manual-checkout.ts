@@ -1,3 +1,4 @@
+import { integrationEnvironment } from "@/lib/integration-environment";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
@@ -344,7 +345,11 @@ export async function reconcileManualCheckout(
   } catch (error) {
     await prisma.manualCheckoutSettlement.updateMany({
       where: { id: receipt.id, state: "SUBMITTING", claimedAt: receipt.claimedAt },
-      data: { state: "UNKNOWN", lastError: "TAX_OR_DELIVERY_RECONCILIATION_REQUIRED" },
+      data: {
+        state: "UNKNOWN",
+        claimedAt: null,
+        lastError: "TAX_OR_DELIVERY_RECONCILIATION_REQUIRED",
+      },
     });
     throw error;
   }
@@ -420,12 +425,12 @@ export async function manualCheckoutChoices(actor: string, checkoutId: string) {
 }
 export async function readManualCheckouts(actor: string) {
   const canWrite = await financeAccess(prisma, actor);
-  const c = await readCommerce(true);
+  const environment = integrationEnvironment();
+  if (!environment) throw new AccountError("Payment environment is unavailable.", 503);
   const rows = await prisma.checkoutAttempt.findMany({
     where: {
       paymentMethod: { in: ["CASH", "ZELLE"] },
-      stripeAccountId: c.accountId,
-      livemode: c.live,
+      livemode: environment === "live",
     },
     include: {
       order: { select: { number: true, totalCents: true } },
@@ -528,7 +533,7 @@ export async function resolveManualSettlement(actor: string, raw: unknown) {
             "Return requires a bank/cash reference and no pending or created tax transaction. Reconcile tax first.",
             409,
           );
-        await tx.$queryRaw`SELECT pg_advisory_xact_lock(613279109)`;
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(613279109)`;
         const duplicate = await tx.auditLog.findFirst({
           where: {
             action: "manual-payment.review.RETURN",

@@ -1,6 +1,6 @@
 {
   "baselineCommit": "a2495c4afa459a9c258804841fa37b038ecdd828",
-  "candidateCommit": "f2ea1db5d62fa7d0e9f3d0c6eb2c79f2dba3d9e6",
+  "candidateCommit": "aa6eeffb1071e6d0bbc4ff8ea10e87714c37f6a9",
   "baselineMigrationCount": 15,
   "migrations": [
     {

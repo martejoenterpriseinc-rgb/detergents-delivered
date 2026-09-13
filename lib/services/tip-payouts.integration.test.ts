@@ -9,12 +9,15 @@ const m = vi.hoisted(() => ({
   report: vi.fn(),
   submit: vi.fn(),
   commerce: vi.fn(),
+  taxCorrection: vi.fn(),
+  verifyBalance: vi.fn(),
   qboCreate: vi.fn(),
   qboFind: vi.fn(),
   qboAccount: vi.fn(),
 }));
 vi.mock("@/lib/commerce/refund-provider", () => ({
   inspectStripeTipRefunds: m.inspect,
+  verifyRefundBalanceEvidence: m.verifyBalance,
   submitClaimedStripeTipRefund: m.submit,
 }));
 vi.mock("@/lib/commerce/tax-report", () => ({ readRefundTaxEvidence: m.report }));
@@ -26,7 +29,10 @@ import {
   retryUncertainTipRefund,
 } from "./tip-refunds";
 import type Stripe from "stripe";
-import { matchTipRefundTax } from "./tip-refund-tax";
+vi.mock("@/lib/commerce/refund-tax-correction", () => ({
+  readTaxCorrection: m.taxCorrection,
+}));
+import { matchTipRefundTax, matchTipRefundTaxCorrection } from "./tip-refund-tax";
 import { recordTipPayout, readTipAccounting } from "./tip-payouts";
 beforeEach(() => {
   vi.resetAllMocks();
@@ -682,7 +688,44 @@ it("posts collection, driver payout and refunded-driver receivable as separate i
       driverReceivable: 100,
     });
     await actQuickbooksTipJournal(f.userId, { id: third.id, action: "SUBMIT" });
-    expect(m.qboCreate).toHaveBeenCalledTimes(3);
+    m.inspect.mockResolvedValue({
+      disputed: false,
+      refunds: [
+        {
+          id: "re_journal",
+          amountCents: 108,
+          currency: "USD",
+          status: "failed",
+          balanceTransactionId: "txn_journal",
+          failureBalanceTransactionId: "txn_returned",
+        },
+      ],
+    });
+    await expect(prepare()).rejects.toMatchObject({ status: 409 });
+    m.taxCorrection.mockResolvedValue({
+      correctionTaxTransactionId: "tax_correcttip",
+      originalTaxTransactionId: "tax_original",
+      refundTaxTransactionId: "tax_journal",
+      cashCents: 108,
+      taxCents: 8,
+      postedAt: 1780000000,
+    });
+    await matchTipRefundTaxCorrection(f.userId, {
+      tipId: f.tip.id,
+      providerRefundId: "re_journal",
+      correctionTaxTransactionId: "tax_correcttip",
+      confirmed: true,
+    });
+    const fourth = await prepare();
+    expect(fourth.balances).toMatchObject({
+      collectionBank: 108,
+      payoutBank: -100,
+      tipLiability: 0,
+      taxLiability: 8,
+      driverReceivable: 0,
+    });
+    await actQuickbooksTipJournal(f.userId, { id: fourth.id, action: "SUBMIT" });
+    expect(m.qboCreate).toHaveBeenCalledTimes(4);
     await expect(
       prisma.qboTipJournal.update({
         where: { id: first.id },

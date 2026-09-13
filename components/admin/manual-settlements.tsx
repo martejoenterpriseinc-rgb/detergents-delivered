@@ -6,7 +6,8 @@ import type { readManualCheckouts } from "@/lib/services/manual-checkout";
 type Row = Awaited<ReturnType<typeof readManualCheckouts>>["rows"][number];
 export function ManualSettlementRow({ row, canWrite }: { row: Row; canWrite: boolean }) {
   const router = useRouter(),
-    pending = useRef<string | null>(null);
+    pending = useRef<string | null>(null),
+    pendingMethod = useRef<string | null>(null);
   const [busy, setBusy] = useState(false),
     [operation, setOperation] = useState(
       row.settlement?.state === "REVIEW" ? "APPROVE" : "RECONCILE",
@@ -17,7 +18,12 @@ export function ManualSettlementRow({ row, canWrite }: { row: Row; canWrite: boo
     setBusy(true);
     setMessage("");
     try {
-      if (!pending.current)
+      if (!pending.current) {
+        pendingMethod.current = row.settlement
+          ? operation === "RECONCILE"
+            ? "PATCH"
+            : "PUT"
+          : "POST";
         pending.current = JSON.stringify(
           row.settlement
             ? operation !== "RECONCILE"
@@ -52,8 +58,9 @@ export function ManualSettlementRow({ row, canWrite }: { row: Row; canWrite: boo
                 confirmed: form.get("confirmed") === "on",
               },
         );
+      }
       const response = await fetch("/api/admin/manual-settlements", {
-        method: row.settlement ? (operation === "RECONCILE" ? "PATCH" : "PUT") : "POST",
+        method: pendingMethod.current!,
         headers: { "Content-Type": "application/json" },
         body: pending.current,
       });

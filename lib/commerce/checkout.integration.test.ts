@@ -1215,3 +1215,49 @@ it("requires renewed approval after revoked-payment receipts and reschedules wit
     resolveManualSettlement(f.admin.id, { ...move, requestKey: randomUUID() }),
   ).rejects.toMatchObject({ status: 409 });
 });
+
+it("retains verified tax through a missed route and settles the rescheduled payment without creating tax again", async () => {
+  const { q, receipt } = await manualReservation(),
+    r = await recordManualReceipt(f.admin.id, receipt);
+  const yesterday = new Date(businessDate());
+  yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+  await prisma.checkoutAttempt.update({
+    where: { id: q.id },
+    data: { serviceDate: yesterday.toISOString().slice(0, 10) },
+  });
+  const taxId = "tax_" + randomUUID().replaceAll("-", "");
+  manualTaxMock.mockReset();
+  manualTaxMock.mockResolvedValue({
+    taxTransactionId: taxId,
+    reference: `dd-manual:${r.id}`,
+    postedAt: Math.floor(new Date(receipt.receivedAt).getTime() / 1000),
+    taxLines: [
+      {
+        variantId: f.variant.id,
+        netCents: q.totalCents - q.taxCents,
+        taxCents: q.taxCents,
+      },
+    ],
+    accountId: "acct_synthetic",
+    livemode: false,
+  });
+  await expect(reconcileManualCheckout(f.admin.id, r.id)).rejects.toMatchObject({
+    status: 409,
+  });
+  expect(
+    await prisma.manualCheckoutSettlement.findUniqueOrThrow({ where: { id: r.id } }),
+  ).toMatchObject({ state: "UNKNOWN", taxTransactionId: taxId });
+  const next = new Date(businessDate());
+  next.setUTCDate(next.getUTCDate() + 7);
+  await resolveManualSettlement(f.admin.id, {
+    id: r.id,
+    requestKey: randomUUID(),
+    action: "RESCHEDULE",
+    serviceDate: next.toISOString().slice(0, 10),
+    reason: "Customer agreed after missed route",
+    confirmed: true,
+  });
+  await reconcileManualCheckout(f.admin.id, r.id);
+  expect(manualTaxMock.mock.calls[1][1].taxTransactionId).toBe(taxId);
+  expect((await ownedCheckout(f.one.id, q.id)).state).toBe("PAID");
+});

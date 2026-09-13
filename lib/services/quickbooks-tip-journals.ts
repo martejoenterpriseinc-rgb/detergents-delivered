@@ -235,7 +235,7 @@ export async function prepareQuickbooksTipJournal(actor: string, raw: unknown) {
         "Keep this tip in its original accounting company and accounts.",
         409,
       );
-    if (parent) await preparedProof(tx,parent);
+    if (parent) await preparedProof(tx, parent);
     const payload = compileTipJournal(
       parent?.balances ?? emptyTipBalances,
       checked.balances,
@@ -294,7 +294,9 @@ async function preparedProof(tx: Prisma.TransactionClient, current: QboTipJourna
     proofs.length !== 1 ||
     proof?.sourceHash !== digest(current.source) ||
     proof.payloadHash !== digest(current.payload) ||
-    proof.mappingHash !== digest(current.mapping)
+    proof.mappingHash !== digest(current.mapping) ||
+    digest((current.source as { balances: unknown }).balances) !==
+      digest(current.balances)
   )
     throw fail();
 }
