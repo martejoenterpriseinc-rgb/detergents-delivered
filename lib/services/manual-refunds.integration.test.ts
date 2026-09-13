@@ -217,12 +217,10 @@ it("retries aged manual refund tax only after independent review and preserves t
       reconcileManualRefundTax(f.userId, { ...d, retryReviewed: true }),
     ).rejects.toMatchObject({ status: 409 });
     const runtime = await import("@/lib/commerce/runtime");
-    const config = vi
-      .spyOn(runtime, "readCommerce")
-      .mockResolvedValue({
-        accountId: originalBinding.accountId,
-        live: originalBinding.live,
-      } as Awaited<ReturnType<typeof runtime.readCommerce>>);
+    const config = vi.spyOn(runtime, "readCommerce").mockResolvedValue({
+      accountId: originalBinding.accountId,
+      live: originalBinding.live,
+    } as Awaited<ReturnType<typeof runtime.readCommerce>>);
     const { proposeClaimReview, decideClaimReview } =
       await import("./financial-claim-reviews");
     const review = await proposeClaimReview(f.userId, {
@@ -253,7 +251,9 @@ it("retries aged manual refund tax only after independent review and preserves t
         postedAt: Math.floor(Date.now() / 1000),
         taxLines: b.refundLines.map(
           (l: { orderItemId: string; netCents: number; taxCents: number }) => ({
-            ...l,
+            orderItemId: l.orderItemId,
+            netCents: l.netCents,
+            taxCents: l.taxCents,
             originalLineItemId: "tax_li_synthetic",
           }),
         ),
