@@ -22,6 +22,13 @@ export function FinancialClaimReview({
   const router = useRouter(),
     pending = useRef<{ method: "POST" | "PATCH"; body: string } | null>(null);
   const [rows, setRows] = useState<Row[] | null>(null),
+    [source, setSource] = useState<{
+      accountId: string;
+      live: boolean;
+      submittedAt: string;
+      requestHash: string;
+      paymentIntentId?: string;
+    } | null>(null),
     [busy, setBusy] = useState(false),
     [uncertain, setUncertain] = useState(false),
     [message, setMessage] = useState("");
@@ -32,6 +39,7 @@ export function FinancialClaimReview({
       d = await r.json();
     if (!r.ok) throw Error(d.error ?? "Could not load reviews.");
     setRows(d.rows);
+    setSource(d.source);
   }
   async function send(method: "POST" | "PATCH", body: Record<string, unknown>) {
     pending.current ??= { method, body: JSON.stringify(body) };
@@ -92,6 +100,24 @@ export function FinancialClaimReview({
   return (
     <section className="space-y-3 rounded border p-3 break-words">
       <h3 className="font-semibold">Provider non-creation review</h3>
+      <p>Original claim: {claimId}</p>
+      {source && (
+        <div className="space-y-1 rounded bg-slate-50 p-3">
+          <p>
+            Provider account: {source.accountId} · {source.live ? "Live" : "Sandbox"}
+          </p>
+          <p>Original submission: {source.submittedAt}</p>
+          {source.paymentIntentId && <p>Original payment: {source.paymentIntentId}</p>}
+          <p>
+            Original provider reference:{" "}
+            {kind === "TIP_REFUND"
+              ? `dd:tip-refund:${claimId}:${source.requestHash}:v1`
+              : kind === "MANUAL_REFUND_TAX"
+                ? `dd-manual-refund:${claimId}`
+                : `dd-manual:${claimId}`}
+          </p>
+        </div>
+      )}
       <p>
         Use only for a claim older than 24 hours. A provider confirmation must identify
         the original account and request and confirm no transaction was created. Empty

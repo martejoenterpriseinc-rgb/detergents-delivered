@@ -104,6 +104,7 @@ export async function readClaimReviews(actor: string, raw: unknown) {
     take: 20,
   });
   return {
+    source: rows[0]?.sourceJson ?? (await claimReviewSource(prisma, d.kind, d.claimId)),
     rows: rows.map((r) => ({
       ...r,
       canApprove: r.proposedById !== actor && r.decision === "PENDING",
