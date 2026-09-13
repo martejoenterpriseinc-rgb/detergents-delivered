@@ -297,7 +297,7 @@ async function evidence(
     [prepared.entity]: {
       ...prepared.payload,
       Id: remoteId,
-      TotalAmt: prepared.entity === "SalesReceipt" ? 22.68 : 7.56,
+      TotalAmt: prepared.cashCents / 100,
     },
   };
 }
