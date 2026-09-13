@@ -231,6 +231,7 @@ export function PaymentDashboard({
         <label>
           Payment method
           <select
+            aria-label="Payment method"
             name="method"
             defaultValue={f.method}
             className="mt-1 block w-full rounded-lg border p-3"
@@ -243,6 +244,7 @@ export function PaymentDashboard({
         <label>
           Trend interval
           <select
+            aria-label="Trend interval"
             name="interval"
             defaultValue={f.interval}
             className="mt-1 block w-full rounded-lg border p-3"
@@ -265,6 +267,7 @@ export function PaymentDashboard({
         <label>
           Sort records
           <select
+            aria-label="Sort records"
             name="sort"
             defaultValue={f.sort}
             className="mt-1 block w-full rounded-lg border p-3"
