@@ -178,8 +178,9 @@ export function PaymentDashboard({
         balances={category === "balance" || category === "pendingBalance"}
       />
       <p className="text-sm">
-        Records updated {date(data.checkedAt)}. Internal records refresh with the
-        dashboard; provider metrics remain unavailable until connected and verified.
+        Records updated {date(data.checkedAt)}. {data.accountScope}. Internal records
+        refresh with the dashboard; provider metrics remain unavailable until connected
+        and verified.
       </p>
       <nav className="flex flex-wrap gap-2" aria-label="Payment date range">
         {Object.entries({

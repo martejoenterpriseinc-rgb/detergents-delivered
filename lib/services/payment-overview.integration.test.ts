@@ -193,3 +193,22 @@ it("uses receipt dates for cash and Zelle, and isolates manual records by enviro
     expect(d.metrics.newCustomers.count).toBe(1);
   }
 });
+it("surfaces captured records with missing paid evidence as review, not collected money", async () => {
+  const f = await receiptFixture(prisma, { unverified: true });
+  fixtures.push(f);
+  config.accountId = "acct_" + randomUUID().replaceAll("-", "");
+  await prisma.checkoutAttempt.update({
+    where: { id: f.checkoutId },
+    data: { stripeAccountId: config.accountId },
+  });
+  const role = await prisma.role.upsert({
+    where: { code: "ADMIN" },
+    update: {},
+    create: { code: "ADMIN", name: "Admin" },
+  });
+  await prisma.userRole.create({ data: { userId: f.userId, roleId: role.id } });
+  const d = await readPaymentOverview(f.userId, { period: "year" }, "review");
+  expect(d.metrics.gross.cents).toBe(0);
+  expect(d.rows).toHaveLength(1);
+  expect(d.rows[0]).toMatchObject({ status: "PAYMENT EVIDENCE REVIEW", cents: null });
+});

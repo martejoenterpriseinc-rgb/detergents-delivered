@@ -86,6 +86,10 @@ WITH scope AS MATERIALIZED (
 ), ledger AS MATERIALIZED (
  SELECT * FROM sales
  UNION ALL
+ SELECT p.id,c."orderId",c.number,c."customerId",c.customer,c.email,c."paymentMethod",'PAYMENT EVIDENCE REVIEW',p."externalId",p."createdAt",NULL::bigint,ARRAY['review'],NULL::text
+ FROM "Payment" p JOIN scope c ON c."orderId"=p."orderId" WHERE p.currency='USD' AND p.status IN ('CAPTURED','PARTIALLY_REFUNDED','REFUNDED')
+ AND NOT EXISTS (SELECT 1 FROM sales s WHERE s.id=p.id)
+ UNION ALL
  SELECT a.id,c."orderId",c.number,c."customerId",c.customer,c.email,c."paymentMethod",a.kind,
  coalesce(a."providerRefundId",(SELECT e."evidenceJson"->>'reference' FROM "RefundRequestEvent" e WHERE e."refundRequestId"=r.id AND e.type='manual-refund.returned' LIMIT 1)),
  a."createdAt",a."cashCents"::bigint,ARRAY['refunded','net','customers'],NULL::text
@@ -198,6 +202,9 @@ SELECT jsonb_build_object(
     live: mode === "live",
     enabled: config.enabled,
     checkedAt: new Date().toISOString(),
+    accountScope: account
+      ? "Configured provider account"
+      : "All recorded accounts in this environment",
     stripeUrl: `https://dashboard.stripe.com/${/^acct_[A-Za-z0-9]+$/.test(account) ? account + "/" : ""}${mode === "live" ? "" : "test/"}payments`,
   };
 }
