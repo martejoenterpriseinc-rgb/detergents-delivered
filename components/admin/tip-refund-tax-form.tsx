@@ -105,3 +105,68 @@ export function TipRefundTaxForm({
     </form>
   );
 }
+
+export function TipTaxCorrectionForm({
+  tipId,
+  refundId,
+}: {
+  tipId: string;
+  refundId: string;
+}) {
+  const [busy, setBusy] = useState(false),
+    [message, setMessage] = useState("");
+  const router = useRouter();
+  return (
+    <form
+      className="space-y-3 rounded border p-4"
+      onSubmit={async (e) => {
+        e.preventDefault();
+        const f = new FormData(e.currentTarget);
+        setBusy(true);
+        try {
+          const r = await fetch("/api/admin/tips/refund-tax", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              tipId,
+              providerRefundId: refundId,
+              correctionTaxTransactionId: f.get("id"),
+              confirmed: f.get("confirmed") === "on",
+            }),
+          });
+          const v = await r.json();
+          if (!r.ok) throw Error(v.error ?? "Tax correction requires review.");
+          setMessage("Tax correction verified.");
+          router.refresh();
+        } catch (e) {
+          setMessage(e instanceof Error ? e.message : "Tax correction needs review.");
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      <p>
+        Failed tip refund {refundId}: verify its existing positive tax adjustment before
+        restoring the accounting tax balance.
+      </p>
+      <fieldset disabled={busy} className="space-y-3">
+        <label className="block">
+          Correction tax transaction ID
+          <input
+            name="id"
+            required
+            pattern="tax_[A-Za-z0-9]+"
+            maxLength={100}
+            className="mt-1 block w-full rounded border p-3"
+          />
+        </label>
+        <label className="flex gap-2">
+          <input type="checkbox" name="confirmed" required />I reviewed this failed refund
+          and tax correction.
+        </label>
+        <button className="ops-button">Verify tip tax correction</button>
+      </fieldset>
+      {message && <p role="status">{message}</p>}
+    </form>
+  );
+}

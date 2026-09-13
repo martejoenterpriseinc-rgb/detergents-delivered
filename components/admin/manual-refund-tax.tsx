@@ -15,7 +15,8 @@ export function ManualRefundTax({
   const router = useRouter(),
     pending = useRef<string | null>(null);
   const [busy, setBusy] = useState(false),
-    [message, setMessage] = useState("");
+    [message, setMessage] = useState(""),
+    [retry, setRetry] = useState(false);
   if (status === "VERIFIED")
     return (
       <p>
@@ -29,6 +30,7 @@ export function ManualRefundTax({
       orderId,
       requestId,
       confirmed: true,
+      ...(retry ? { retrySameRequest: true } : {}),
       ...(form.get("taxTransactionId")
         ? { taxTransactionId: form.get("taxTransactionId") }
         : {}),
@@ -70,6 +72,17 @@ export function ManualRefundTax({
           className="space-y-3"
         >
           {status === "RECOVERY" && (
+            <label className="flex gap-2">
+              <input
+                type="checkbox"
+                checked={retry}
+                disabled={busy}
+                onChange={(e) => setRetry(e.target.checked)}
+              />
+              Retry the original tax request within its 23-hour safe window.
+            </label>
+          )}
+          {status === "RECOVERY" && !retry && (
             <label className="block">
               Existing Stripe Tax reversal ID
               <input
@@ -84,9 +97,11 @@ export function ManualRefundTax({
           <button disabled={busy} className="ops-button">
             {busy
               ? "Checking…"
-              : status === "RECOVERY"
-                ? "Verify existing tax reversal"
-                : "Submit tax reversal"}
+              : retry
+                ? "Retry original tax request"
+                : status === "RECOVERY"
+                  ? "Verify existing tax reversal"
+                  : "Submit tax reversal"}
           </button>
         </form>
       )}

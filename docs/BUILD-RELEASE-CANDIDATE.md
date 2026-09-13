@@ -1,5 +1,7 @@
 # Build and release candidate — September 12, 2026
 
+Current application continuation: see [APPLICATION-FINANCIAL-COMPLETION.md](APPLICATION-FINANCIAL-COMPLETION.md) for manual exceptions, tax correction matching, correcting receipts, tip journals and safe retries. Earlier checkpoints below retain their historical scope; final CI and hosted/provider acceptance are distinct.
+
 Status: build advances are committed; hosted deployment and Go Live acceptance remain incomplete. All external API setup and connections are explicitly deferred by the owner until application construction is complete. No provider configuration, transaction, or live activation is asserted by this checkpoint.
 
 ## Verified application increments

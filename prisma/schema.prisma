@@ -1902,6 +1902,7 @@ model QboReceiptExport {
 
 /// Optional post-delivery payment, wholly separate from the original sale.
 model DeliveryTip {
+  accountingJournals QboTipJournal[]
   refundRequests TipRefundRequest[]
   payoutEntries TipPayoutEntry[]
   id String @id @default(cuid())
@@ -2006,4 +2007,30 @@ model TipRefundRequest {
   updatedAt DateTime @updatedAt
   @@index([tipId, state])
   @@index([state, recoveryCheckedAt])
+}
+
+model QboTipJournal {
+  id String @id
+  tipId String
+  tip DeliveryTip @relation(fields:[tipId], references:[id], onDelete:Restrict)
+  sequence Int
+  mode String
+  realm String
+  status String @default("DRAFT")
+  requestHash String
+  docNumber String
+  source Json
+  balances Json
+  mapping Json
+  payload Json
+  externalId String?
+  submittedAt DateTime?
+  confirmedAt DateTime?
+  reconciliationIssue String?
+  recoveryCheckedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([tipId, sequence])
+  @@unique([mode, realm, docNumber])
+  @@unique([mode, realm, externalId])
 }

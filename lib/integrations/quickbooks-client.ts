@@ -169,7 +169,7 @@ export async function findQuickbooksCostJournal(
   accessToken: string,
   docNumber: string,
 ) {
-  if (!/^DC[a-f0-9]{19}$/.test(docNumber))
+  if (!/^D[CT][a-f0-9]{19}$/.test(docNumber))
     throw new AccountError("Invalid export reference.");
   const host =
     config.mode === "sandbox"

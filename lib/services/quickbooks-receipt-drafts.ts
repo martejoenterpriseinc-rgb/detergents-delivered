@@ -1,10 +1,15 @@
+import { correctionReceiptParent } from "./quickbooks-refund-correction";
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { Prisma, type QboReceiptExport } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { AccountError } from "@/lib/domain/account";
-import { prepareCashReceipt, cashReceiptPayload } from "@/lib/domain/quickbooks-receipt";
+import {
+  prepareCashReceipt,
+  prepareCompensationReceipt,
+  cashReceiptPayload,
+} from "@/lib/domain/quickbooks-receipt";
 import { financeAccess } from "./finance";
 import { quickbooksConfig } from "@/lib/integrations/quickbooks-client";
 import { authorizedQuickbooks, assertQuickbooksSnapshot } from "./quickbooks-connection";
@@ -37,6 +42,7 @@ export function receiptExportView(e: QboReceiptExport) {
     id: e.id,
     orderId: e.orderId,
     adjustmentId: e.adjustmentId,
+    isCorrection: e.sourceKey.startsWith("correction:"),
     parentSaleId: e.parentSaleId,
     entity: e.entity,
     status: e.status,
@@ -187,8 +193,12 @@ export async function prepareQuickbooksReceiptDraft(actor: string, raw: unknown)
     await receiptOrderLock(tx, input.orderId);
     const prior = await tx.qboReceiptExport.findUnique({ where: { id } });
     if (prior) return replay(prior);
+    const adjustment = input.adjustmentId
+      ? await tx.refundAdjustment.findUnique({ where: { id: input.adjustmentId } })
+      : null;
+    const correcting = adjustment?.kind === "COMPENSATION";
     const sourceKey = input.adjustmentId
-      ? "refund:" + input.adjustmentId
+      ? (correcting ? "correction:" : "refund:") + input.adjustmentId
       : "sale:" + input.orderId;
     if (
       await tx.qboReceiptExport.findFirst({
@@ -205,14 +215,18 @@ export async function prepareQuickbooksReceiptDraft(actor: string, raw: unknown)
         : null;
     if (
       refund &&
-      (refund.kind !== "SETTLEMENT" ||
-        refund.cashCents <= 0 ||
+      (!["SETTLEMENT", "COMPENSATION"].includes(refund.kind) ||
+        (correcting ? refund.cashCents >= 0 : refund.cashCents <= 0) ||
         refund.taxEvidenceStatus !== "MATCHED")
     )
       throw new AccountError(
         "Only cash settlements with matched tax evidence can prepare a refund receipt.",
         409,
       );
+    const correctionOf =
+      correcting && refund
+        ? await correctionReceiptParent(tx, refund.sourceId, config.mode, config.realm)
+        : null;
     const parent = refund
       ? await tx.qboReceiptExport.findFirst({
           where: {
@@ -247,12 +261,18 @@ export async function prepareQuickbooksReceiptDraft(actor: string, raw: unknown)
     );
     let payload: ReturnType<typeof prepareCashReceipt>;
     try {
-      payload = prepareCashReceipt({
-        documentNumber: (refund ? "DR" : "DS") + digest(id).slice(0, 19),
-        sale,
-        ...(refund ? { refund } : {}),
-        mapping: compilerMapping,
-      });
+      payload = correctionOf
+        ? prepareCompensationReceipt(
+            correctionOf.payload,
+            refund,
+            "DS" + digest(id).slice(0, 19),
+          )
+        : prepareCashReceipt({
+            documentNumber: (refund ? "DR" : "DS") + digest(id).slice(0, 19),
+            sale,
+            ...(refund ? { refund } : {}),
+            mapping: compilerMapping,
+          });
     } catch {
       throw new AccountError(
         "Original receipt amounts, tax evidence or product treatment require review.",

@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { RefundTaxCorrectionForm } from "./refund-tax-correction";
 import { PrepareReceiptDraft } from "./quickbooks-receipts";
 import type {
   salesRefundChoices,
@@ -214,11 +215,20 @@ export function SalesRefundSource() {
               )}
             </>
           )}
+          {data?.canWrite &&
+            source.kind === "COMPENSATION" &&
+            source.taxEvidenceStatus !== "MATCHED" && (
+              <RefundTaxCorrectionForm
+                key={source.sourceId}
+                adjustmentId={source.sourceId}
+                onMatched={() => setSource(null)}
+              />
+            )}
           <p>Reviewing this evidence does not send money or post to QuickBooks.</p>
           {data?.canWrite &&
-            source.cashCents > 0 &&
+            source.cashCents !== 0 &&
             (source.kind === "SALE" ||
-              (source.kind === "SETTLEMENT" &&
+              (["SETTLEMENT", "COMPENSATION"].includes(source.kind) &&
                 source.taxEvidenceStatus === "MATCHED")) && (
               <PrepareReceiptDraft
                 key={order + ":" + adjustment}

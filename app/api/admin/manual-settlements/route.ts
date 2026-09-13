@@ -9,7 +9,20 @@ import {
   recordManualReceipt,
   reconcileManualCheckout,
   readManualCheckouts,
+  resolveManualSettlement,
 } from "@/lib/services/manual-checkout";
+export async function PUT(request: Request) {
+  try {
+    return accountJson(
+      await resolveManualSettlement(
+        await accountRequest(request),
+        await readAccountJson(request),
+      ),
+    );
+  } catch (e) {
+    return accountFailure(e);
+  }
+}
 export async function GET() {
   try {
     return accountJson(await readManualCheckouts(await accountRequest()));

@@ -4,7 +4,10 @@ import {
   accountFailure,
   readAccountJson,
 } from "@/lib/account-api";
-import { matchTipRefundTax } from "@/lib/services/tip-refund-tax";
+import {
+  matchTipRefundTax,
+  matchTipRefundTaxCorrection,
+} from "@/lib/services/tip-refund-tax";
 export async function POST(request: Request) {
   try {
     return accountJson(
@@ -15,5 +18,18 @@ export async function POST(request: Request) {
     );
   } catch (error) {
     return accountFailure(error);
+  }
+}
+
+export async function PUT(request: Request) {
+  try {
+    return accountJson(
+      await matchTipRefundTaxCorrection(
+        await accountRequest(request),
+        await readAccountJson(request),
+      ),
+    );
+  } catch (e) {
+    return accountFailure(e);
   }
 }

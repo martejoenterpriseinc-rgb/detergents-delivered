@@ -499,7 +499,7 @@ describe("dedicated tip refund submission", () => {
     await expect(
       submitClaimedStripeTipRefund({
         ...claim(),
-        submittedAt: new Date(Date.now() - 700000).toISOString(),
+        submittedAt: new Date(Date.now() - 24 * 3600000).toISOString(),
       }),
     ).rejects.toThrow();
     mocks.payment.mockResolvedValue(payment);

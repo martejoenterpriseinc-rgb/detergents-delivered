@@ -208,11 +208,8 @@ export async function submitTipRefund(actor: string, raw: unknown) {
     return dto(await prisma.tipRefundRequest.findUniqueOrThrow({ where: { id } }));
   }
 }
-async function reconcileAs(actor: string | null, id: string) {
-  if (actor) await financeAccess(prisma, actor, true);
-  const request = await prisma.tipRefundRequest.findUnique({ where: { id } });
-  if (!request) throw new AccountError("Tip refund not found.", 404);
-  const claims = await prisma.auditLog.findMany({
+async function verifiedClaim(tx: Prisma.TransactionClient, request: TipRefundRequest) {
+  const claims = await tx.auditLog.findMany({
     where: {
       entityType: "TipRefundRequest",
       entityId: request.id,
@@ -232,6 +229,12 @@ async function reconcileAs(actor: string | null, id: string) {
     proof.livemode !== request.livemode
   )
     throw fail();
+}
+async function reconcileAs(actor: string | null, id: string) {
+  if (actor) await financeAccess(prisma, actor, true);
+  const request = await prisma.tipRefundRequest.findUnique({ where: { id } });
+  if (!request) throw new AccountError("Tip refund not found.", 404);
+  await verifiedClaim(prisma, request);
   const before = await tipAccountingSource(prisma, request.tipId);
   if (
     before.tip.paymentIntentId !== request.paymentIntentId ||
@@ -348,4 +351,90 @@ export function tipRefundRequestHold(
       return true;
     }
   });
+}
+
+/** Explicit replay of the original Stripe idempotency key, within its retention window.
+ * No new refund claim or payload is created; old uncertain requests remain GET-only. */
+export async function retryUncertainTipRefund(actor: string, raw: unknown) {
+  const d = z
+    .object({ id: z.string().min(1).max(100), confirmed: z.literal(true) })
+    .strict()
+    .parse(raw);
+  await financeAccess(prisma, actor, true);
+  const r = await prisma.tipRefundRequest.findUniqueOrThrow({ where: { id: d.id } });
+  if (!["SUBMITTING", "UNKNOWN"].includes(r.state) || r.providerRefundId)
+    return reconcileAs(actor, r.id);
+  const c = await readCommerce(true);
+  const age = Date.now() - r.submittedAt.getTime();
+  if (
+    age < 0 ||
+    age > 23 * 3600000 ||
+    c.accountId !== r.accountId ||
+    c.live !== r.livemode ||
+    process.env.DD_TIP_REFUNDS_ENABLED !== "true" ||
+    (c.live && process.env.DD_LIVE_TIP_REFUNDS_ACCEPTED !== "true")
+  )
+    throw new AccountError(
+      "The safe retry window ended or refunds are disabled. Recover the existing provider transaction; do not create another request.",
+      409,
+    );
+  const before = await tipAccountingSource(prisma, r.tipId);
+  if (
+    before.tip.paymentIntentId !== r.paymentIntentId ||
+    before.tip.stripeAccountId !== r.accountId ||
+    before.tip.livemode !== r.livemode
+  )
+    throw fail();
+  await prisma.$transaction(async (tx) => {
+    await financeAccess(tx, actor, true);
+    await tx.$queryRaw`SELECT id FROM "DeliveryTip" WHERE id=${r.tipId} FOR UPDATE`;
+    const current = await tx.tipRefundRequest.findUniqueOrThrow({ where: { id: r.id } });
+    await verifiedClaim(tx, current);
+    if (
+      !["SUBMITTING", "UNKNOWN"].includes(current.state) ||
+      current.providerRefundId ||
+      current.requestHash !== r.requestHash ||
+      canonicalJson(await tipAccountingSource(tx, r.tipId)) !== canonicalJson(before)
+    )
+      throw fail();
+    await tx.auditLog.create({
+      data: {
+        actorUserId: actor,
+        entityType: "TipRefundRequest",
+        entityId: r.id,
+        action: "delivery.tip.refund.same-key-retry",
+        afterJson: {
+          requestHash: r.requestHash,
+          submittedAt: r.submittedAt.toISOString(),
+          source: "staff-confirmed",
+        },
+      },
+    });
+  });
+  try {
+    await submitClaimedStripeTipRefund({
+      requestId: r.id,
+      requestHash: r.requestHash,
+      amountCents: r.amountCents,
+      submittedAt: r.submittedAt.toISOString(),
+      binding: {
+        accountId: r.accountId,
+        live: r.livemode,
+        paymentIntentId: r.paymentIntentId,
+        checkoutId: r.tipId,
+        amountCents: before.tip.totalCents!,
+        currency: "USD",
+      },
+    });
+    return await reconcileAs(actor, r.id);
+  } catch {
+    await prisma.tipRefundRequest.updateMany({
+      where: { id: r.id, state: "SUBMITTING" },
+      data: { state: "UNKNOWN", lastError: "REFUND_LOOKUP_REQUIRED" },
+    });
+    throw new AccountError(
+      "The same refund request remains uncertain. Check its provider result before further action.",
+      503,
+    );
+  }
 }

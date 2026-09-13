@@ -21,7 +21,7 @@ export function TipRefundForm({
     [uncertain, setUncertain] = useState(false),
     [message, setMessage] = useState("");
   const pending = useRef<Record<string, unknown> | null>(null);
-  async function send(body: Record<string, unknown>, method: "POST" | "PATCH") {
+  async function send(body: Record<string, unknown>, method: "POST" | "PATCH" | "PUT") {
     setBusy(true);
     setMessage("");
     try {
@@ -133,6 +133,18 @@ export function TipRefundForm({
           </p>
           <p>{r.providerRefundId ?? "Provider confirmation pending"}</p>
           {r.lastError && <p>Reconciliation required</p>}
+          {enabled &&
+            !r.providerRefundId &&
+            ["SUBMITTING", "UNKNOWN"].includes(r.state) && (
+              <button
+                type="button"
+                className="ops-button"
+                disabled={busy}
+                onClick={() => send({ id: r.id, confirmed: true }, "PUT")}
+              >
+                Retry original provider request within 23 hours
+              </button>
+            )}
           <button
             type="button"
             className="ops-button"

@@ -146,6 +146,18 @@
     {
       "name": "20260917050000_manual_refund_tax_evidence",
       "checksum": "c6aa4565ca1726c9ec124dbbeecc53493452407b0cca8136f98ea699e5c33474"
+    },
+    {
+      "name": "20260917060000_manual_received_funds_return",
+      "checksum": "935bb129bc98a1105800be03475f62931766c59a4157cebd39fed14efd1b59ef"
+    },
+    {
+      "name": "20260917070000_tip_accounting_journals",
+      "checksum": "3e5361864dcfc3b482b38b58f1882a05dac3ad8183aea8f1ed4ec46b60b7dac9"
+    },
+    {
+      "name": "20260917080000_refund_correction_receipts",
+      "checksum": "cd6da6ba65e6c61d8f350e606b43b1eb20c62ce4ab8b94fcd90c751f93927997"
     }
   ]
 }

@@ -89,10 +89,6 @@ export async function reserveCheckout(
           "Finish or cancel your existing checkout before starting another.",
           409,
         );
-      await tx.$queryRaw`SELECT id FROM "Vehicle" WHERE id = ${saved.vehicleId} FOR UPDATE`;
-      const vehicle = await tx.vehicle.findUnique({ where: { id: saved.vehicleId } });
-      if (!vehicle?.isActive)
-        throw new AccountError("Delivery vehicle is unavailable.", 409);
       const load = loadForItems(
         saved.lines.map((l) => ({
           quantity: l.quantity,
@@ -100,87 +96,7 @@ export async function reserveCheckout(
           kind: l.loadKind,
         })),
       );
-      let serviceDate: string | null = null;
-      for (const date of saved.dates) {
-        let used = emptyLoad();
-        const reserved = await tx.checkoutAttempt.findMany({
-          where: {
-            vehicleId: vehicle.id,
-            serviceDate: date,
-            state: { in: capacityStates },
-          },
-        });
-        for (const r of reserved)
-          used = addLoad(used, {
-            stops: 1,
-            units: r.spaceUnits,
-            detergent: r.detergentBuckets,
-            scentBeads: r.scentBeadBuckets,
-          });
-        // Include legacy routes exactly once; new checkout orders are already counted above.
-        const routes = await tx.route.findMany({
-          where: {
-            vehicleId: vehicle.id,
-            serviceDate: new Date(date),
-            status: { not: "CANCELLED" },
-          },
-          include: {
-            stops: {
-              include: {
-                order: {
-                  include: {
-                    checkoutAttempt: true,
-                    items: {
-                      include: { productVariant: { include: { product: true } } },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        });
-        if (routes.some((r) => r.status === "IN_PROGRESS" || r.status === "COMPLETED"))
-          continue;
-        for (const route of routes)
-          for (const stop of route.stops) {
-            if (stop.order?.checkoutAttempt) continue;
-            if (!stop.order || !stop.order.items.length) {
-              used.stops = vehicle.capacityStops + 1;
-              continue;
-            }
-            used = addLoad(
-              used,
-              loadForItems(
-                stop.order.items.map((i) => ({
-                  quantity: i.quantity,
-                  units:
-                    i.productVariant.deliveryCapacityUnits ??
-                    i.productVariant.product.deliveryCapacityUnits,
-                  kind: i.productVariant.product.loadKind,
-                })),
-              ),
-            );
-          }
-        if (
-          fitsVehicle(
-            {
-              capacityStops: vehicle.capacityStops,
-              capacityUnits: vehicle.capacityUnits,
-              detergentBucketLimit: vehicle.detergentBucketLimit,
-              scentBeadBucketLimit: vehicle.scentBeadBucketLimit,
-            },
-            addLoad(used, load),
-          )
-        ) {
-          serviceDate = date;
-          break;
-        }
-      }
-      if (!serviceDate)
-        throw new AccountError(
-          "This delivery window is full. No payment was started.",
-          409,
-        );
+      const serviceDate = await reserveDeliveryDate(tx, saved, saved.dates, load);
       const order = await tx.order.create({
         data: {
           number: `DD-${a.id.toUpperCase()}`,
@@ -276,7 +192,7 @@ export async function reserveCheckout(
           paymentMethod: method,
           orderId: order.id,
           sessionExpiresAt: new Date(Date.now() + 45 * 60000),
-          vehicleId: vehicle.id,
+          vehicleId: saved.vehicleId,
           zoneId: saved.zoneId,
           serviceDate,
           spaceUnits: load.units,
@@ -304,4 +220,97 @@ export async function reserveCheckout(
     },
     { timeout: 15000, maxWait: 10000 },
   );
+}
+
+/** Caller holds checkoutLock; reuses the exact capacity accounting for rescheduling. */
+export async function reserveDeliveryDate(
+  tx: Prisma.TransactionClient,
+  saved: Pick<CheckoutSnapshot, "vehicleId">,
+  dates: string[],
+  load: ReturnType<typeof loadForItems>,
+  excludeId?: string,
+) {
+  await tx.$queryRaw`SELECT id FROM "Vehicle" WHERE id = ${saved.vehicleId} FOR UPDATE`;
+  const vehicle = await tx.vehicle.findUnique({ where: { id: saved.vehicleId } });
+  if (!vehicle?.isActive) throw new AccountError("Delivery vehicle is unavailable.", 409);
+  let serviceDate: string | null = null;
+  for (const date of dates) {
+    let used = emptyLoad();
+    const reserved = await tx.checkoutAttempt.findMany({
+      where: {
+        vehicleId: vehicle.id,
+        serviceDate: date,
+        state: { in: capacityStates },
+        ...(excludeId ? { id: { not: excludeId } } : {}),
+      },
+    });
+    for (const r of reserved)
+      used = addLoad(used, {
+        stops: 1,
+        units: r.spaceUnits,
+        detergent: r.detergentBuckets,
+        scentBeads: r.scentBeadBuckets,
+      });
+    // Include legacy routes exactly once; new checkout orders are already counted above.
+    const routes = await tx.route.findMany({
+      where: {
+        vehicleId: vehicle.id,
+        serviceDate: new Date(date),
+        status: { not: "CANCELLED" },
+      },
+      include: {
+        stops: {
+          include: {
+            order: {
+              include: {
+                checkoutAttempt: true,
+                items: {
+                  include: { productVariant: { include: { product: true } } },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+    if (routes.some((r) => r.status === "IN_PROGRESS" || r.status === "COMPLETED"))
+      continue;
+    for (const route of routes)
+      for (const stop of route.stops) {
+        if (stop.order?.checkoutAttempt) continue;
+        if (!stop.order || !stop.order.items.length) {
+          used.stops = vehicle.capacityStops + 1;
+          continue;
+        }
+        used = addLoad(
+          used,
+          loadForItems(
+            stop.order.items.map((i) => ({
+              quantity: i.quantity,
+              units:
+                i.productVariant.deliveryCapacityUnits ??
+                i.productVariant.product.deliveryCapacityUnits,
+              kind: i.productVariant.product.loadKind,
+            })),
+          ),
+        );
+      }
+    if (
+      fitsVehicle(
+        {
+          capacityStops: vehicle.capacityStops,
+          capacityUnits: vehicle.capacityUnits,
+          detergentBucketLimit: vehicle.detergentBucketLimit,
+          scentBeadBucketLimit: vehicle.scentBeadBucketLimit,
+        },
+        addLoad(used, load),
+      )
+    ) {
+      serviceDate = date;
+      break;
+    }
+  }
+  if (!serviceDate)
+    throw new AccountError("This delivery window is full. No payment was started.", 409);
+  return serviceDate;
 }

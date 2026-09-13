@@ -45,6 +45,7 @@ import {
   recordManualReceipt,
   reconcileManualCheckout,
   cancelManualCheckout,
+  resolveManualSettlement,
 } from "@/lib/services/manual-checkout";
 import { customerReceipt } from "@/lib/services/customer-receipt";
 let prior: unknown;
@@ -1083,4 +1084,134 @@ it("retains money through uncertain tax posting and releases only unpaid manual 
   await expect(cancelManualCheckout(f.one.id, q2.id)).rejects.toMatchObject({
     status: 409,
   });
+});
+
+async function manualReservation() {
+  vi.stubEnv("DD_MANUAL_PAYMENTS_ENABLED", "true");
+  await prisma.manualPaymentApproval.create({
+    data: {
+      customerId: f.one.customer!.id,
+      method: "CASH",
+      enabled: true,
+      maxOrderCents: 100000,
+      expiresAt: new Date(Date.now() + 86400000),
+    },
+  });
+  const q = await createQuote(f.one.id, input());
+  await beginManualCheckout(f.one.id, {
+    checkoutId: q.id,
+    method: "CASH",
+    acceptedWindow: true,
+  });
+  return {
+    q,
+    receipt: {
+      checkoutId: q.id,
+      requestKey: randomUUID(),
+      amountCents: q.totalCents,
+      reference: "cash-" + randomUUID(),
+      reason: "Synthetic received funds review",
+      receivedAt: new Date().toISOString(),
+      confirmed: true,
+    },
+  };
+}
+it("records late or mismatched received funds for review and returns them exactly once without a sale", async () => {
+  const { q, receipt } = await manualReservation();
+  await cancelManualCheckout(f.one.id, q.id);
+  const before = await prisma.inventoryBalance.findUnique({
+    where: { productVariantId: f.variant.id },
+  });
+  const r = await recordManualReceipt(f.admin.id, {
+    ...receipt,
+    amountCents: receipt.amountCents + 100,
+  });
+  expect(r.state).toBe("REVIEW");
+  await expect(reconcileManualCheckout(f.admin.id, r.id)).rejects.toMatchObject({
+    status: 409,
+  });
+  const resolution = {
+    id: r.id,
+    requestKey: randomUUID(),
+    action: "RETURN",
+    reference: "return-" + randomUUID(),
+    reason: "Synthetic bank return confirmed",
+    confirmed: true,
+  };
+  await expect(resolveManualSettlement(f.one.id, resolution)).rejects.toMatchObject({
+    status: 403,
+  });
+  const [a, b] = await Promise.all([
+    resolveManualSettlement(f.admin.id, resolution),
+    resolveManualSettlement(f.admin.id, resolution),
+  ]);
+  expect(a).toEqual(b);
+  expect(a.state).toBe("RETURNED");
+  expect(
+    await prisma.inventoryBalance.findUnique({
+      where: { productVariantId: f.variant.id },
+    }),
+  ).toEqual(before);
+  const checkout = await prisma.checkoutAttempt.findUniqueOrThrow({
+    where: { id: q.id },
+  });
+  expect(await prisma.payment.count({ where: { orderId: checkout.orderId! } })).toBe(0);
+  expect(
+    (await prisma.manualCheckoutSettlement.findUniqueOrThrow({ where: { id: r.id } }))
+      .amountCents,
+  ).toBe(receipt.amountCents + 100);
+});
+it("requires renewed approval after revoked-payment receipts and reschedules without changing payment or inventory snapshots", async () => {
+  const { q, receipt } = await manualReservation();
+  await prisma.manualPaymentApproval.update({
+    where: { customerId_method: { customerId: f.one.customer!.id, method: "CASH" } },
+    data: { enabled: false },
+  });
+  const r = await recordManualReceipt(f.admin.id, receipt);
+  expect(r.state).toBe("REVIEW");
+  const d = {
+    id: r.id,
+    requestKey: randomUUID(),
+    action: "APPROVE",
+    reason: "Synthetic renewed approval",
+    confirmed: true,
+  };
+  await expect(resolveManualSettlement(f.admin.id, d)).rejects.toMatchObject({
+    status: 409,
+  });
+  await prisma.manualPaymentApproval.update({
+    where: { customerId_method: { customerId: f.one.customer!.id, method: "CASH" } },
+    data: { enabled: true },
+  });
+  expect(await resolveManualSettlement(f.admin.id, d)).toMatchObject({
+    state: "RECEIVED",
+  });
+  const old = await prisma.checkoutAttempt.findUniqueOrThrow({ where: { id: q.id } }),
+    inventory = await prisma.inventoryBalance.findUnique({
+      where: { productVariantId: f.variant.id },
+    });
+  const next = new Date(businessDate());
+  next.setUTCDate(next.getUTCDate() + 7);
+  const move = {
+    id: r.id,
+    requestKey: randomUUID(),
+    action: "RESCHEDULE",
+    serviceDate: next.toISOString().slice(0, 10),
+    reason: "Customer agreed to next available delivery",
+    confirmed: true,
+  };
+  await resolveManualSettlement(f.admin.id, move);
+  const current = await prisma.checkoutAttempt.findUniqueOrThrow({ where: { id: q.id } });
+  expect(current.serviceDate).toBe(move.serviceDate);
+  expect(current.snapshot).toEqual(old.snapshot);
+  expect(current.orderId).toBe(old.orderId);
+  expect(
+    await prisma.inventoryBalance.findUnique({
+      where: { productVariantId: f.variant.id },
+    }),
+  ).toEqual(inventory);
+  await prisma.vehicle.update({ where: { id: f.vehicle.id }, data: { isActive: false } });
+  await expect(
+    resolveManualSettlement(f.admin.id, { ...move, requestKey: randomUUID() }),
+  ).rejects.toMatchObject({ status: 409 });
 });

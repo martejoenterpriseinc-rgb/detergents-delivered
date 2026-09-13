@@ -1,5 +1,7 @@
 # Remaining Go Live work — September 12, 2026
 
+Current application continuation: see [APPLICATION-FINANCIAL-COMPLETION.md](APPLICATION-FINANCIAL-COMPLETION.md) for manual exceptions, tax correction matching, correcting receipts, tip journals and safe retries. Earlier checkpoints below retain their historical scope; final CI and hosted/provider acceptance are distinct.
+
 September 13 release/domain continuation: see `GO-LIVE-CUTOVER.md` for the current
 consolidated open-item list, verified PR84 evidence, domain association and ordered
 release procedure. Earlier checkpoints below are historical increments, not an assertion

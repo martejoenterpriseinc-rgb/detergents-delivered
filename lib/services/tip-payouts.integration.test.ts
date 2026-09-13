@@ -9,6 +9,9 @@ const m = vi.hoisted(() => ({
   report: vi.fn(),
   submit: vi.fn(),
   commerce: vi.fn(),
+  qboCreate: vi.fn(),
+  qboFind: vi.fn(),
+  qboAccount: vi.fn(),
 }));
 vi.mock("@/lib/commerce/refund-provider", () => ({
   inspectStripeTipRefunds: m.inspect,
@@ -20,6 +23,7 @@ import {
   submitTipRefund,
   reconcileTipRefund,
   reconcileTipRefundEvent,
+  retryUncertainTipRefund,
 } from "./tip-refunds";
 import type Stripe from "stripe";
 import { matchTipRefundTax } from "./tip-refund-tax";
@@ -566,6 +570,198 @@ it("does not let an older refund lookup overwrite a newer provider result", asyn
         .state,
     ).toBe("SUCCEEDED");
   } finally {
+    await f.cleanup();
+  }
+});
+
+vi.mock("@/lib/integrations/quickbooks-client", () => ({
+  quickbooksConfig: async () => ({
+    mode: "sandbox",
+    realm: "98765432",
+    fingerprint: "synthetic-tip",
+  }),
+  readQuickbooksAccount: m.qboAccount,
+  createQuickbooksCostJournal: m.qboCreate,
+  findQuickbooksCostJournal: m.qboFind,
+}));
+vi.mock("./quickbooks-connection", () => ({
+  authorizedQuickbooks: async () => ({
+    config: { mode: "sandbox", realm: "98765432", fingerprint: "synthetic-tip" },
+    accessToken: "synthetic",
+  }),
+  assertQuickbooksSnapshot: async (tx: typeof prisma, actor: string) => {
+    const { financeAccess } = await import("./finance");
+    await financeAccess(tx, actor, true);
+  },
+}));
+import {
+  prepareQuickbooksTipJournal,
+  actQuickbooksTipJournal,
+} from "./quickbooks-tip-journals";
+const tipMapping = {
+  collectionBank: "1",
+  payoutBank: "2",
+  tipLiability: "3",
+  taxLiability: "4",
+  driverReceivable: "5",
+};
+function qboSetup() {
+  vi.stubEnv("DD_QBO_TIP_POSTING_ENABLED", "true");
+  vi.stubEnv("DD_QBO_TIP_POSTING_COMPANY", "sandbox:98765432");
+  m.qboAccount.mockImplementation(async (_c, _t, id) => ({
+    Id: id,
+    Active: true,
+    CurrencyRef: { value: "USD" },
+    AccountType: ["1", "2"].includes(id)
+      ? "Bank"
+      : id === "5"
+        ? "Other Current Asset"
+        : "Other Current Liability",
+  }));
+  m.qboCreate.mockImplementation(async (_c, _t, p) => ({
+    ...p,
+    Id: Date.now().toString() + Math.floor(Math.random() * 100000).toString(),
+  }));
+}
+it("posts collection, driver payout and refunded-driver receivable as separate immutable adjusting journals", async () => {
+  const f = await fixture();
+  qboSetup();
+  const prepare = () =>
+    prepareQuickbooksTipJournal(f.userId, {
+      tipId: f.tip.id,
+      requestKey: randomUUID(),
+      mapping: tipMapping,
+      confirmed: true,
+    });
+  try {
+    const first = await prepare();
+    await actQuickbooksTipJournal(f.userId, { id: first.id, action: "SUBMIT" });
+    await recordTipPayout(f.userId, f.input);
+    const second = await prepare();
+    expect(second.balances).toMatchObject({
+      collectionBank: 108,
+      payoutBank: -100,
+      tipLiability: 0,
+      taxLiability: 8,
+    });
+    await actQuickbooksTipJournal(f.userId, { id: second.id, action: "SUBMIT" });
+    m.inspect.mockResolvedValue({
+      disputed: false,
+      refunds: [
+        {
+          id: "re_journal",
+          amountCents: 108,
+          currency: "USD",
+          status: "succeeded",
+          balanceTransactionId: "txn_journal",
+        },
+      ],
+    });
+    await expect(prepare()).rejects.toMatchObject({ status: 409 });
+    m.report.mockResolvedValue({
+      originalTaxTransactionId: "tax_original",
+      refundTaxTransactionId: "tax_journal",
+      taxCents: 8,
+      reportRunId: "frr_journal",
+      fileId: "file_journal",
+      reportHash: "a".repeat(64),
+    });
+    await matchTipRefundTax(f.userId, {
+      tipId: f.tip.id,
+      providerRefundId: "re_journal",
+      reportRunId: "frr_journal",
+      taxCents: 8,
+      confirmed: true,
+    });
+    const third = await prepare();
+    expect(third.balances).toMatchObject({
+      collectionBank: 0,
+      payoutBank: -100,
+      tipLiability: 0,
+      taxLiability: 0,
+      driverReceivable: 100,
+    });
+    await actQuickbooksTipJournal(f.userId, { id: third.id, action: "SUBMIT" });
+    expect(m.qboCreate).toHaveBeenCalledTimes(3);
+    await expect(
+      prisma.qboTipJournal.update({
+        where: { id: first.id },
+        data: { payload: { tampered: true } },
+      }),
+    ).rejects.toThrow();
+    await expect(prepare()).rejects.toMatchObject({ status: 409 });
+  } finally {
+    await f.cleanup();
+  }
+});
+it("claims a tip journal once under concurrency and recovers lost responses by GET only", async () => {
+  const f = await fixture();
+  qboSetup();
+  try {
+    const d = {
+      tipId: f.tip.id,
+      requestKey: randomUUID(),
+      mapping: tipMapping,
+      confirmed: true,
+    };
+    await expect(prepareQuickbooksTipJournal(f.driver.id, d)).rejects.toMatchObject({
+      status: 403,
+    });
+    const [a, b] = await Promise.all([
+      prepareQuickbooksTipJournal(f.userId, d),
+      prepareQuickbooksTipJournal(f.userId, d),
+    ]);
+    expect(a.id).toBe(b.id);
+    m.qboCreate.mockRejectedValue(Error("synthetic lost response"));
+    await prisma.deliveryTip.update({
+      where: { id: f.tip.id },
+      data: { recoveryCheckedAt: new Date() },
+    });
+    await Promise.allSettled([
+      actQuickbooksTipJournal(f.userId, { id: a.id, action: "SUBMIT" }),
+      actQuickbooksTipJournal(f.userId, { id: a.id, action: "SUBMIT" }),
+    ]);
+    expect(m.qboCreate).toHaveBeenCalledTimes(1);
+    expect(
+      (await prisma.qboTipJournal.findUniqueOrThrow({ where: { id: a.id } })).status,
+    ).toBe("UNKNOWN");
+    await expect(
+      prepareQuickbooksTipJournal(f.userId, { ...d, requestKey: randomUUID() }),
+    ).rejects.toMatchObject({ status: 409 });
+    m.qboFind.mockResolvedValue([
+      { ...(a.payload as object), Id: Date.now().toString() },
+    ]);
+    expect(
+      await actQuickbooksTipJournal(f.userId, { id: a.id, action: "RECONCILE" }),
+    ).toMatchObject({ status: "POSTED" });
+    expect(m.qboCreate).toHaveBeenCalledTimes(1);
+  } finally {
+    await f.cleanup();
+  }
+});
+it("retries only the original tip refund key and rejects expired retry windows", async () => {
+  const f = await fixture();
+  try {
+    m.submit.mockRejectedValue(Error("synthetic disconnected response"));
+    const r = await submitTipRefund(f.userId, {
+      tipId: f.tip.id,
+      requestKey: randomUUID(),
+      amountCents: 50,
+      reason: "Synthetic failed response",
+      confirmed: true,
+    });
+    await expect(
+      retryUncertainTipRefund(f.userId, { id: r.id, confirmed: true }),
+    ).rejects.toMatchObject({ status: 503 });
+    expect(m.submit).toHaveBeenCalledTimes(2);
+    expect(m.submit.mock.calls[1][0]).toEqual(m.submit.mock.calls[0][0]);
+    vi.spyOn(Date, "now").mockReturnValue(Date.now() + 24 * 3600000);
+    await expect(
+      retryUncertainTipRefund(f.userId, { id: r.id, confirmed: true }),
+    ).rejects.toMatchObject({ status: 409 });
+    expect(m.submit).toHaveBeenCalledTimes(2);
+  } finally {
+    vi.restoreAllMocks();
     await f.cleanup();
   }
 });

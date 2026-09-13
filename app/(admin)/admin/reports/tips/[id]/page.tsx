@@ -1,5 +1,9 @@
+import { QuickbooksTipJournals } from "@/components/admin/quickbooks-tip-journals";
 import { TipRefundForm } from "@/components/admin/tip-refund-form";
-import { TipRefundTaxForm } from "@/components/admin/tip-refund-tax-form";
+import {
+  TipRefundTaxForm,
+  TipTaxCorrectionForm,
+} from "@/components/admin/tip-refund-tax-form";
 import Link from "next/link";
 import { requireRole } from "@/lib/authz";
 import { prisma } from "@/lib/prisma";
@@ -59,6 +63,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
         tax correction acceptance. Partial refunds require a verified tip/tax allocation
         before further payout.
       </p>
+      <QuickbooksTipJournals tipId={id} />
       <h2 className="text-xl font-semibold">Provider refunds</h2>
       {!data.refunds.length && <p>No provider refunds found.</p>}
       {data.refunds.map((r) => (
@@ -84,6 +89,10 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
           requests={data.refundRequests}
         />
       )}
+      {canWrite &&
+        data.refunds
+          .filter((r) => ["failed", "canceled"].includes(r.state))
+          .map((r) => <TipTaxCorrectionForm key={r.id} tipId={id} refundId={r.id} />)}
       {canWrite && <TipRefundTaxForm tipId={id} refunds={data.refunds} />}
       {canWrite && <TipPayoutForm tipId={id} transfers={reversible} />}
     </div>

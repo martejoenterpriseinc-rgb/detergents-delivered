@@ -139,7 +139,11 @@ export function QuickbooksReceipts() {
             <article key={r.id} className="space-y-3 rounded border p-4">
               <h3 className="font-semibold">
                 {r.number} ·{" "}
-                {r.entity === "SalesReceipt" ? "Sale receipt" : "Refund receipt"}
+                {r.isCorrection
+                  ? "Failed-refund correction"
+                  : r.entity === "SalesReceipt"
+                    ? "Sale receipt"
+                    : "Refund receipt"}
               </h3>
               <p>
                 {r.date} · {money(r.cashCents)} · {r.status.toLowerCase()}
