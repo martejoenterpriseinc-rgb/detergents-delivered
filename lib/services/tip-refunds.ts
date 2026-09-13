@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import type Stripe from "stripe";
 import type { Prisma, TipRefundRequest } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
@@ -256,6 +257,46 @@ async function reconcileAs(actor: string | null, id: string) {
 export async function reconcileTipRefund(actor: string, rawId: unknown) {
   await financeAccess(prisma, actor, true);
   return reconcileAs(actor, z.string().min(1).max(100).parse(rawId));
+}
+
+/** Only called after webhook signature and environment verification. The event
+ * is a lookup hint; current account-bound provider evidence determines state. */
+export async function reconcileTipRefundEvent(
+  refund: Pick<Stripe.Refund, "id" | "object" | "metadata" | "payment_intent">,
+  binding: { accountId: string; live: boolean },
+) {
+  if (refund.object !== "refund" || !/^re_[A-Za-z0-9]+$/.test(refund.id ?? ""))
+    throw fail();
+  const requestId = refund.metadata?.refundRequestId;
+  const rows = await prisma.tipRefundRequest.findMany({
+    where: {
+      accountId: binding.accountId,
+      livemode: binding.live,
+      OR: [{ providerRefundId: refund.id }, ...(requestId ? [{ id: requestId }] : [])],
+    },
+    take: 2,
+  });
+  if (!rows.length) {
+    // App-created tip refunds must have a durable claim before creation. Retry
+    // instead of acknowledging a missing claim; unrelated refunds are ignored.
+    if (refund.metadata?.project === "detergents-delivered" && refund.metadata?.tipId)
+      throw fail();
+    return;
+  }
+  const request = rows[0];
+  const paymentIntentId =
+    typeof refund.payment_intent === "string"
+      ? refund.payment_intent
+      : refund.payment_intent?.id;
+  if (
+    rows.length !== 1 ||
+    request.paymentIntentId !== paymentIntentId ||
+    refund.metadata?.tipId !== request.tipId ||
+    (request.providerRefundId && request.providerRefundId !== refund.id)
+  )
+    throw fail();
+  // Never pass the event's potentially stale status into saveObservation.
+  await reconcileAs(null, request.id);
 }
 export async function recoverTipRefunds(ownsLease: () => Promise<boolean>) {
   const config = await readCommerce(true);

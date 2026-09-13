@@ -3,6 +3,7 @@ import { readCommerce } from "@/lib/commerce/runtime";
 import { reconcileCheckout } from "@/lib/commerce/checkout";
 import { prisma } from "@/lib/prisma";
 import { reconcileDeliveryTip } from "@/lib/services/delivery-tips";
+import { reconcileTipRefundEvent } from "@/lib/services/tip-refunds";
 import type Stripe from "stripe";
 export const runtime = "nodejs";
 export async function POST(request: Request) {
@@ -39,6 +40,14 @@ export async function POST(request: Request) {
     (event.account && event.account !== config.accountId)
   )
     return new Response("Environment mismatch", { status: 400 });
+  if (["refund.created", "refund.updated", "refund.failed"].includes(event.type)) {
+    try {
+      await reconcileTipRefundEvent(event.data.object as Stripe.Refund, config);
+      return Response.json({ received: true });
+    } catch {
+      return new Response("Reconciliation pending", { status: 503 });
+    }
+  }
   if (
     ![
       "checkout.session.completed",

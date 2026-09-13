@@ -16,7 +16,12 @@ vi.mock("@/lib/commerce/refund-provider", () => ({
 }));
 vi.mock("@/lib/commerce/tax-report", () => ({ readRefundTaxEvidence: m.report }));
 vi.mock("@/lib/commerce/runtime", () => ({ readCommerce: m.commerce }));
-import { submitTipRefund, reconcileTipRefund } from "./tip-refunds";
+import {
+  submitTipRefund,
+  reconcileTipRefund,
+  reconcileTipRefundEvent,
+} from "./tip-refunds";
+import type Stripe from "stripe";
 import { matchTipRefundTax } from "./tip-refund-tax";
 import { recordTipPayout, readTipAccounting } from "./tip-payouts";
 beforeEach(() => {
@@ -421,7 +426,42 @@ it("holds unknown refund capacity and recovers by provider lookup without a seco
         },
       ],
     });
-    expect((await reconcileTipRefund(f.userId, result.id)).state).toBe("SUCCEEDED");
+    const webhookRefund = {
+      object: "refund",
+      id: "re_" + saved.id.replaceAll("_", ""),
+      payment_intent: saved.paymentIntentId,
+      status: "pending", // Delayed event must not regress current provider state.
+      metadata: {
+        project: "detergents-delivered",
+        tipId: saved.tipId,
+        refundRequestId: saved.id,
+        requestHash: saved.requestHash,
+      },
+    } satisfies Pick<
+      Stripe.Refund,
+      "id" | "object" | "metadata" | "payment_intent" | "status"
+    >;
+    const binding = { accountId: saved.accountId, live: saved.livemode };
+    await reconcileTipRefundEvent(webhookRefund, binding);
+    await reconcileTipRefundEvent(webhookRefund, binding);
+    expect(
+      (await prisma.tipRefundRequest.findUniqueOrThrow({ where: { id: saved.id } }))
+        .state,
+    ).toBe("SUCCEEDED");
+    expect(
+      await prisma.auditLog.count({
+        where: { entityId: saved.id, action: "delivery.tip.refund.reconciled" },
+      }),
+    ).toBe(1);
+    await expect(
+      reconcileTipRefundEvent({ ...webhookRefund, payment_intent: "pi_wrong" }, binding),
+    ).rejects.toMatchObject({ status: 409 });
+    await expect(
+      reconcileTipRefundEvent(webhookRefund, { ...binding, live: !binding.live }),
+    ).rejects.toMatchObject({ status: 409 });
+    await expect(
+      reconcileTipRefundEvent(webhookRefund, { ...binding, accountId: "acct_wrong" }),
+    ).rejects.toMatchObject({ status: 409 });
     expect(m.submit).toHaveBeenCalledTimes(1);
     expect((await readTipAccounting(f.userId, f.tip.id)).payableCents).toBe(0); // Partial tax still needs evidence.
   } finally {

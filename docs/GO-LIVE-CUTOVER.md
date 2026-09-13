@@ -125,10 +125,36 @@ https://render.com/docs/custom-domains (reviewed September 13).
 | Area                | Remaining completion                                                                                                                                                                                                                                           |
 | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Failed card refunds | Provider-compatible tax compensation evidence and correcting QuickBooks transactions; intended Checkout behavior must be verified before implementing a tax-writing correction.                                                                                |
-| Tip accounting      | Dedicated QuickBooks liability/refund/driver-payout posting; tip webhook routing and reviewed resolution of uncertain claims with no provider creation. Existing refund initiation, partial allocations, transfer records and scheduled reads are implemented. |
+| Tip accounting      | Dedicated QuickBooks liability/refund/driver-payout posting and reviewed resolution of uncertain claims with no provider creation. Refund webhook routing is now implemented; connected provider acceptance remains open. Existing refund initiation, partial allocations, transfer records and scheduled reads are implemented. |
 | Manual cash/Zelle   | Received-funds exceptions for expired/revoked approvals, late receipts and delivery rescheduling; reviewed never-created tax-claim resolution. Normal settlement, manual refunds and standalone tax reversals are implemented.                                 |
 | Provider reports    | Complete remaining scale/export and tax-report acceptance in QUICKBOOKS-FINANCIAL-REPORTS.md. Unsupported payment provider metrics remain explicitly unavailable until ingestion/acceptance.                                                                   |
 | Final acceptance    | Real owner/business setup, catalog/stock/photos, ZIP/calendar/capacity, durable media, restore, worker and end-to-end checks on the deployed revision.                                                                                                         |
 
 The domain association and migration-review tool do not close these items. APIs remain
 unconnected and activation flags remain unchanged. Launch is not declared ready.
+
+## September 13 continuation: refund webhook routing and release blockers
+
+The existing signature-verified Stripe endpoint now routes `refund.created`,
+`refund.updated`, and `refund.failed` to the dedicated tip refund reconciler.
+Account, mode, tip and original PaymentIntent bindings are checked. Events are lookup
+hints only: reconciliation reads current provider evidence and uses the existing
+claim audit, tip lock and concurrency check. Duplicate or delayed delivery cannot
+apply event-supplied financial values. Missing app claims and unavailable evidence
+return a retryable failure. No refund is submitted by this path, and no migration
+or provider activation is introduced. Subscribe to these events during deferred API
+setup and verify delivery/retries in the connected sandbox before live acceptance.
+Reference: https://docs.stripe.com/api/events/types and https://docs.stripe.com/webhooks.
+
+Read-only migration queries against both staging and production again failed with
+EOF/TLS-required connection errors. Production database metadata confirms it is
+available with an empty public IP allowlist. An SSH connectivity check to the
+existing production service failed DNS resolution before authentication. No network
+access rules or TLS settings were changed. These checks provide no current backup,
+restore, hosted migration-history or encryption-key recovery proof. Existing September
+9 staging restore evidence does not certify current production recovery.
+
+Hosted migration and release remain blocked until a supported authenticated private
+operator connection and current recovery evidence are available. Do not trigger web
+or worker deployments independently or bypass the release order above. Other open
+application items remain open; this continuation is not a complete release.
