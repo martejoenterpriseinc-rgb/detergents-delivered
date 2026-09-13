@@ -6,6 +6,7 @@ import { manualPaymentFixture } from "../tests/manual-payment-fixture";
 test("payment overview links every KPI and retains large period controls and connection failures", async ({
   page,
 }, info) => {
+  test.setTimeout(120000);
   const db = new PrismaClient({ log: [] }),
     password = "Synthetic-Payments-Overview-123";
   const f = await manualPaymentFixture(db, await bcrypt.hash(password, 4));
@@ -28,23 +29,46 @@ test("payment overview links every KPI and retains large period controls and con
     await expect(
       page.getByRole("region", { name: "Stripe API connection" }),
     ).toContainText("Not connected");
-    for (const period of ["Day", "Week", "Month", "Year"]) {
+    for (const [period, value] of [
+      ["Today", "day"],
+      ["Yesterday", "yesterday"],
+      ["Week", "week"],
+      ["Month to date", "month"],
+      ["Previous month", "previousMonth"],
+      ["Year", "year"],
+    ]) {
       const button = page.getByRole("link", { name: period, exact: true });
       expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(48);
       await button.click();
-      await expect(page).toHaveURL(new RegExp("period=" + period.toLowerCase()));
+      await expect(page).toHaveURL(new RegExp("period=" + value));
     }
     const overview = page.getByRole("region", { name: "Payment overview" });
+    await expect(overview.getByRole("link")).toHaveCount(30);
     const links = await overview
       .getByRole("link")
       .evaluateAll((nodes) => nodes.map((n) => n.getAttribute("href")!));
-    expect(links).toHaveLength(10);
+    expect(links).toHaveLength(30);
     for (const link of links) {
       await page.goto(link);
       await expect(page.getByRole("link", { name: "Payments overview" })).toBeVisible();
       await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+      const exportUrl = await page
+        .getByRole("link", { name: "Export CSV", exact: true })
+        .getAttribute("href");
+      const csv = await page.request.get(exportUrl!);
+      expect(csv.status()).toBe(200);
+      expect(csv.headers()["cache-control"]).toContain("no-store");
+      expect(await csv.text()).toContain("Amount USD");
     }
     await page.goto("/admin/payments?period=month");
+    await page.getByLabel("Payment method", { exact: true }).selectOption("ZELLE");
+    await page.getByLabel("Sort records", { exact: true }).selectOption("amountDesc");
+    await page.getByLabel("Trend interval", { exact: true }).selectOption("week");
+    await page.getByRole("button", { name: "Apply filters", exact: true }).click();
+    await expect(page).toHaveURL(/method=ZELLE/);
+    await expect(page.getByLabel("Sort records", { exact: true })).toHaveValue(
+      "amountDesc",
+    );
     await page.route("**/api/admin/payments/connection", (r) =>
       r.fulfill({ status: 503, body: "{}" }),
     );

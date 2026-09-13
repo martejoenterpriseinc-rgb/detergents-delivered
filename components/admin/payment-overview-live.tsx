@@ -20,10 +20,12 @@ export function PaymentOverviewLive({
   const router = useRouter();
   const [health, setHealth] = useState<Health | null>(null);
   const [busy, setBusy] = useState(false);
+  const [stale, setStale] = useState(false);
   const [revision, setRevision] = useState(0);
   useEffect(() => {
     let stopped = false,
       pending = false;
+    let lastSuccess = Date.now();
     let controller: AbortController | undefined;
     async function check() {
       if (pending || document.visibilityState === "hidden") return;
@@ -43,8 +45,13 @@ export function PaymentOverviewLive({
         );
         if (!r.ok) throw Error();
         const next: Health = await r.json();
-        if (!stopped) setHealth(next);
+        if (!stopped) {
+          lastSuccess = Date.now();
+          setHealth(next);
+          setStale(false);
+        }
       } catch {
+        if (!stopped) setStale(true);
         if (!stopped)
           setHealth({
             connected: false,
@@ -61,11 +68,15 @@ export function PaymentOverviewLive({
       if (!stopped) router.refresh();
     }
     void check();
+    const staleTimer = setInterval(() => {
+      if (Date.now() - lastSuccess > 90000) setStale(true);
+    }, 15000);
     const timer = setInterval(() => void check(), 60000);
     document.addEventListener("visibilitychange", check);
     return () => {
       stopped = true;
       clearInterval(timer);
+      clearInterval(staleTimer);
       controller?.abort();
       document.removeEventListener("visibilitychange", check);
     };
@@ -106,6 +117,11 @@ export function PaymentOverviewLive({
           {busy ? "Checking…" : "Refresh payments"}
         </button>
       </div>
+      {stale && (
+        <p role="alert">
+          Displayed records may be stale. Refresh before relying on these totals.
+        </p>
+      )}
       {balances && (
         <div className="grid gap-4 sm:grid-cols-2">
           <p>
