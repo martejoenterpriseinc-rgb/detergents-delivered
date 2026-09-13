@@ -1,5 +1,10 @@
 # Remaining Go Live work — September 12, 2026
 
+September 13 release/domain continuation: see `GO-LIVE-CUTOVER.md` for the current
+consolidated open-item list, verified PR84 evidence, domain association and ordered
+release procedure. Earlier checkpoints below are historical increments, not an assertion
+that already-completed manual refunds or tip refund initiation remain absent.
+
 Latest owner direction: finish application construction first; connect APIs and perform production acceptance at the end. Use the intended accounts and real provider evidence; missing credentials do not block independent application work. Do not enable checkout or claim acceptance until the documented release gates pass. Outbound acceptance messages still require authorized recipients.
 
 The latest combined source in PR 73 / CI 170 passed 716 tests, including the four finance workflow increments described below. PR 66 / CI 152 passed 674 tests, including private original customer receipts, browser printing/PDF and original-address/item/tax/reward checks. The release audit in PR 67 also passed CI 153. PR 68 / CI 156 passed 687 tests with the source-verified CPA financial ledger, private CSV and desktop/tablet/mobile acceptance. A published PR alone is not acceptance. Recent work remains ahead of the deployed revision recorded in `BUILD-RELEASE-CANDIDATE.md`.
@@ -45,7 +50,6 @@ Still outstanding: manual cash/Zelle order settlement and related tax/refund int
 ## Manual settlement construction increment
 
 `MANUAL-CHECKOUT-SETTLEMENT.md` describes approved manual reservations, staff received-money recording, recoverable Stripe Tax posting, shared order finalization and customer receipts. Both manual-payment activation flags stay off. Exception handling, manual refunds/tax reversals, CPA/QuickBooks export support and provider/browser acceptance are still required before activating the method. The original card settlement remains covered by the full existing checkout suite.
-
 
 ## Manual accounting source checkpoint
 

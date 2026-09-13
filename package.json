@@ -27,7 +27,8 @@
     "prestart": "npm run check:runtime && npm run db:preflight",
     "test:e2e": "playwright test",
     "auth:deliver": "node --import tsx scripts/deliver-recovery-emails.ts",
-    "operations:work": "node --import tsx scripts/run-operations.ts"
+    "operations:work": "node --import tsx scripts/run-operations.ts",
+    "db:release-check": "node --import tsx scripts/check-release-migrations.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

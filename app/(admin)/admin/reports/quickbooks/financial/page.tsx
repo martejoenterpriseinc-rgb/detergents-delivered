@@ -1,14 +1,13 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { ZodError } from "zod";
 import { requireRole } from "@/lib/authz";
 import { AccountError } from "@/lib/domain/account";
 import {
   financialReports,
-  financialReportName,
+  financialReportFilters,
   reportUsesRange,
   reportUsesBasis,
 } from "@/lib/domain/quickbooks-financial-report";
-import { paymentPeriod } from "@/lib/domain/payment-overview";
 import { quickbooksFinancialReport } from "@/lib/services/quickbooks-financial-report";
 import { PaymentOverviewLive } from "@/components/admin/payment-overview-live";
 export default async function Page({
@@ -19,26 +18,46 @@ export default async function Page({
     period?: string;
     basis?: string;
     section?: string;
+    from?: string;
+    to?: string;
   }>;
 }) {
   const session = await requireRole("ADMIN", "SUPER_ADMIN", "CPA");
   const params = await searchParams;
-  const parsed = financialReportName.safeParse(params.report ?? "ProfitAndLoss");
-  if (!parsed.success) notFound();
-  const report = parsed.data,
-    period = paymentPeriod(params.period),
-    basis = params.basis === "Cash" ? "Cash" : "Accrual";
+  let filter;
+  try {
+    filter = financialReportFilters({
+      report: params.report,
+      period: params.period,
+      basis: params.basis,
+      from: params.from,
+      to: params.to,
+    });
+  } catch (e) {
+    if (!(e instanceof AccountError) && !(e instanceof ZodError)) throw e;
+    return (
+      <div role="alert">
+        Choose a valid report and date range of at most one year.{" "}
+        <Link href="/admin/reports/quickbooks/financial">Reset report filters</Link>
+      </div>
+    );
+  }
+  const { report, range: period, basis } = filter;
+  const query = {
+    report,
+    period: period.period,
+    basis,
+    ...(period.period === "custom" ? { from: period.from, to: period.to } : {}),
+  };
   const href = (changes: Record<string, string>) => ({
     pathname: "/admin/reports/quickbooks/financial",
-    query: { report, period: period.period, basis, ...changes },
+    query: { ...query, ...changes },
   });
   let data,
     error = "";
   try {
     data = await quickbooksFinancialReport(session.user.id, {
-      report,
-      period: period.period,
-      basis,
+      ...query,
     });
   } catch (e) {
     if (!(e instanceof AccountError)) throw e;
@@ -75,17 +94,55 @@ export default async function Page({
         ))}
       </nav>
       <nav aria-label="Financial reporting period" className="flex flex-wrap gap-3">
-        {["day", "week", "month", "year"].map((p) => (
+        {["day", "yesterday", "week", "month", "previousMonth", "year"].map((p) => (
           <Link
             key={p}
             href={href({ period: p })}
             aria-current={p === period.period ? "page" : undefined}
             className={`inline-flex min-h-14 min-w-24 items-center justify-center rounded-xl border px-6 text-lg font-semibold ${p === period.period ? "bg-teal-700 text-white" : "bg-white"}`}
           >
-            {p[0].toUpperCase() + p.slice(1)}
+            {p === "previousMonth" ? "Previous month" : p[0].toUpperCase() + p.slice(1)}
           </Link>
         ))}
       </nav>
+      <form
+        key={`${report}:${basis}:${period.from}:${period.to}`}
+        action="/admin/reports/quickbooks/financial"
+        method="get"
+        className="flex flex-wrap items-end gap-3"
+      >
+        <input type="hidden" name="report" value={report} />
+        <input type="hidden" name="basis" value={basis} />
+        <input type="hidden" name="period" value="custom" />
+        <label className="grid gap-1">
+          From date
+          <input
+            aria-label="Report from date"
+            type="date"
+            name="from"
+            required
+            defaultValue={period.from}
+            className="rounded-lg border p-3"
+          />
+        </label>
+        <label className="grid gap-1">
+          Through date
+          <input
+            aria-label="Report through date"
+            type="date"
+            name="to"
+            required
+            defaultValue={period.to}
+            className="rounded-lg border p-3"
+          />
+        </label>
+        <button className="ops-button" type="submit">
+          Apply report dates
+        </button>
+        <p className="w-full text-sm">
+          Chicago business dates. Choose up to one year per report, including prior years.
+        </p>
+      </form>
       {reportUsesBasis(report) && (
         <nav aria-label="Accounting basis" className="flex gap-3">
           {["Accrual", "Cash"].map((b) => (
@@ -104,7 +161,7 @@ export default async function Page({
       <p>
         {reportUsesRange(report)
           ? `${period.from} through ${period.to}`
-          : `Balances as of ${period.to}. Day/week/month/year select the current period ending today; balance reports show that ending position.`}
+          : `Balances as of ${period.to}. Balance reports show the selected ending position.`}
       </p>
       {error && (
         <p role="alert" className="rounded-xl border p-5">
@@ -122,6 +179,18 @@ export default async function Page({
           <p>
             These figures cover the connected QuickBooks company. Unposted Detergents
             Delivered activity is not included.
+          </p>
+          {(!params.section || selected) && (
+            <a
+              className="ops-button inline-flex"
+              href={`/api/admin/quickbooks/financial-report?${new URLSearchParams({ ...query, format: "csv", ...(params.section && selected ? { section: params.section, sectionLabel: selected.label } : {}) }).toString()}`}
+            >
+              Download {params.section ? "section" : "report"} CSV
+            </a>
+          )}
+          <p className="text-sm">
+            Downloads retrieve a fresh verified report; amounts may change if the books
+            change.
           </p>
           {data.noData ? (
             <p>No report data was returned for this selection.</p>

@@ -1,4 +1,3 @@
-import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { financeAccess } from "./finance";
 import { authorizedQuickbooks, assertQuickbooksSnapshot } from "./quickbooks-connection";
@@ -8,19 +7,22 @@ import {
   readQuickbooksFinancialReportData,
 } from "@/lib/integrations/quickbooks-client";
 import {
-  financialReportName,
+  financialReportFilters,
   parseFinancialReport,
 } from "@/lib/domain/quickbooks-financial-report";
-import { paymentPeriod } from "@/lib/domain/payment-overview";
 import { AccountError } from "@/lib/domain/account";
 export async function quickbooksFinancialReport(
   actor: string,
-  raw: { report?: unknown; period?: unknown; basis?: unknown },
+  raw: {
+    report?: unknown;
+    period?: unknown;
+    basis?: unknown;
+    from?: unknown;
+    to?: unknown;
+  },
 ) {
   await financeAccess(prisma, actor);
-  const name = financialReportName.parse(raw.report ?? "ProfitAndLoss"),
-    period = paymentPeriod(raw.period),
-    basis = z.enum(["Cash", "Accrual"]).parse(raw.basis ?? "Accrual");
+  const { report: name, range: period, basis } = financialReportFilters(raw);
   const snapshot = await authorizedQuickbooks(actor);
   const request = { name, from: period.from, to: period.to, basis };
   const company = await verifyQuickbooksCompany(snapshot.config, snapshot.accessToken);

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { AccountError } from "./account";
+import { paymentPeriod } from "./payment-overview";
 export const financialReports = {
   ProfitAndLoss: "Profit and loss",
   BalanceSheet: "Balance sheet",
@@ -19,6 +20,38 @@ export const financialReportName = z.enum([
   "TrialBalance",
 ]);
 export type FinancialReportName = z.infer<typeof financialReportName>;
+export function financialReportFilters(raw: unknown) {
+  const input = z
+    .object({
+      report: financialReportName.default("ProfitAndLoss"),
+      period: z
+        .enum(["day", "yesterday", "week", "month", "previousMonth", "year", "custom"])
+        .default("month"),
+      basis: z.enum(["Cash", "Accrual"]).default("Accrual"),
+      from: z.string().optional(),
+      to: z.string().optional(),
+    })
+    .strict()
+    .parse(raw);
+  if (input.period === "custom" && (!input.from || !input.to))
+    throw new AccountError("Choose both dates for a custom report.", 400);
+  return { ...input, range: paymentPeriod(input.period, undefined, input) };
+}
+
+export function financialReportRows(
+  report: ReturnType<typeof parseFinancialReport>,
+  section?: string,
+) {
+  if (section === undefined || section === "") return report.rows;
+  if (!report.metrics.some((metric) => metric.section === section))
+    throw new AccountError(
+      "This report section is no longer available. Refresh the report.",
+      409,
+    );
+  return report.rows.filter(
+    (row) => row.section === section || row.section.startsWith(section + "."),
+  );
+}
 export const reportUsesRange = (name: FinancialReportName) =>
   name === "ProfitAndLoss" || name === "CashFlow";
 export const reportUsesBasis = (name: FinancialReportName) =>

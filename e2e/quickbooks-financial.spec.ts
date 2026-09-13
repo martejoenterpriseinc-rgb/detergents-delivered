@@ -54,6 +54,18 @@ test("financial report navigation keeps unavailable provider amounts distinct fr
     await expect(page.getByText(/Balances as of/)).toBeVisible();
     await page.getByRole("link", { name: "Cash basis", exact: true }).click();
     await expect(page).toHaveURL(/basis=Cash/);
+    await page.getByLabel("Report from date", { exact: true }).fill("2024-01-01");
+    await page.getByLabel("Report through date", { exact: true }).fill("2024-12-31");
+    await page.getByRole("button", { name: "Apply report dates", exact: true }).click();
+    await expect(page).toHaveURL(/period=custom/);
+    await expect(page).toHaveURL(/from=2024-01-01/);
+    await expect(page.getByText(/Balances as of 2024-12-31/)).toBeVisible();
+    await expect(page.getByRole("link", { name: "Download report CSV" })).toHaveCount(0);
+    const unavailableExport = await page.request.get(
+      "/api/admin/quickbooks/financial-report?format=csv&period=custom&from=2024-01-01&to=2024-12-31",
+    );
+    expect(unavailableExport.ok()).toBe(false);
+    expect(unavailableExport.headers()["content-type"]).not.toContain("text/csv");
     expect(
       await page.evaluate(
         () => document.documentElement.scrollWidth <= window.innerWidth,

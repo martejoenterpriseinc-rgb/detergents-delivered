@@ -68,6 +68,7 @@ jobs:
         run: |
           npm run check:runtime
           npm run db:preflight
+          npm run db:release-check
           node --import tsx scripts/check-record-preservation.ts capture /tmp/dd-release-records.json
           npm run db:migrate
           npm run db:preflight
